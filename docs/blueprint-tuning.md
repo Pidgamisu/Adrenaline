@@ -74,5 +74,10 @@ that table, not only in the Blueprint - a Blueprint-only value is invisible to a
 
 ## Not verified yet
 
-- Nobody has played a round with `BP_Character` as the pawn. It adds no logic, so the run should be
-  identical, but the replicated two-player test in `docs/multiplayer.md` has not been re-run since.
+- **Single player: played 2026-10-26 and fine.** `BP_GetawayGameMode_C` spawning `BP_Character_C`
+  was confirmed in the log, and the run played normally.
+- **The two-player test has not been re-run** since the pawn became a Blueprint. Steps are in
+  `docs/multiplayer.md`. It adds no logic and the host path is unchanged, so nothing is expected to
+  move, but it is the one gap left.
+- **Changing a value in `BP_Character` and feeling it has not been done.** The wiring is proved; the
+  round trip through the Details panel is not.
