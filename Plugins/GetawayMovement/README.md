@@ -28,7 +28,9 @@ What's in it:
 6. Check *Project Settings > Input > Default Classes*: Default Player Input Class should be `EnhancedPlayerInput` and Default Input Component Class `EnhancedInputComponent`. These are the defaults in new UE5 projects.
 7. Open a level, then in *World Settings* set **GameMode Override** to `GetawayGameMode`. Press Play.
 
-To tweak values in the editor, make a Blueprint child of `GetawayCharacter` (right-click the class in the Content Browser's C++ Classes folder > *Create Blueprint class based on GetawayCharacter*), set it as the game mode's Default Pawn Class, and edit the **Getaway** categories in the Details panel. Movement values are on the *CharacterMovement* component.
+To tweak values in the editor, make a Blueprint child of `GetawayCharacter` (right-click the class in the Content Browser's C++ Classes folder > *Create Blueprint class based on GetawayCharacter*) and edit the **Getaway** categories in the Details panel. Movement values are on the *CharacterMovement* component.
+
+To make the game spawn it you also need a Blueprint child of `GetawayGameMode`, with its **Default Pawn Class** set to your character Blueprint. A Blueprint game mode is not optional here: the editor greys out Default Pawn Class whenever the selected game mode is a C++ class. Set that Blueprint as the GameMode Override in World Settings.
 
 ## Controls
 

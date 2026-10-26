@@ -28,6 +28,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 | `docs/round-loop.md` | phases, scoring, shared placement, syncing breakables, bridge, C4 and pickups |
 | `docs/spikes-and-death.md` | spikes, surface-mounted pieces, dying, breakables |
 | `docs/falling-slopes-cleanup.md` | fall deaths, the "everything touches something" rule, pieces on slopes, between-round cleanup |
+| `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named |
 | `Plugins/GetawayMovement/README.md` | setup, controls and the full tuning table |
 | `Reference/getaway-lab.html` | the browser prototype: the reference for how movement should **feel** |
 
