@@ -130,5 +130,4 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 2. The party box deals from the whole catalog. A per-round deck is still to do.
 3. The placement ghost is drawn with debug lines, which don't exist in Shipping builds. It needs a real translucent material before release.
 4. Settle whether the wall and breakable panel should be rotated to match the lab (see *Still unverified* in `docs/placement.md`). It's a feel question for me.
-5. Clean up the leftover probe maps in `Content/Maps` (`__RampMantleProbe` 1-4, `__SlopeLiftCheck`): delete them in the editor or move them to `Content/Dev/`.
-6. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.
+5. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.
