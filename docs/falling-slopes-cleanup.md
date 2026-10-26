@@ -1,0 +1,185 @@
+# Falling deaths, grounding, slopes and round cleanup
+
+> Moved out of CLAUDE.md on 2026-10-26. These are dated notes; if they disagree with the code or with CLAUDE.md, the code and CLAUDE.md win.
+
+## Falling off kills you (2026-10-23)
+
+Two things from the same play-test.
+
+### The C4 readout said 2 when you held 1
+
+Reported as *"one charge c4 works but says that you have 2 in your inventory"*. Nothing was wrong
+with the count - the grant, the clamp and `ChargesHeld` were all correct, and one charge is what you
+could throw. The HUD drew it as `C4  1 / 2`, held over the carry cap, and the cap is what got read.
+
+It now draws **only what you are holding** - `C4  none`, `C4  x1`, `C4  x2  full` - so there is no
+second number to misread, and the cap turns up as the one word that is worth knowing at a glance.
+Dim at zero, amber once you have something. The pickup's own toast said `(1 / 2)` for the same
+reason and now says `(carrying 1)`.
+
+### Falling below the course ends your run
+
+Asked for straight out: *"if you fall below the course you die."* It had never been handled at all -
+the engine's own answer to a character under `KillZ` is `Destroy()`, which would have left the
+controller holding no pawn, no death and no score, just a stuck camera. A fall was the last hole in
+the round loop.
+
+- **`AGetawayCharacter::FallDeathZ` (-100) is the plane**, measured at your **feet** in world Z, so
+  it is one metre under a course whose floor is at zero. It is checked every frame in `Tick`, on the
+  machine that owns the character only - the same bargain as spikes and breaking, where the victim's
+  own eyes decide and the server decides what it means.
+- **It goes through `Die(nullptr)`**, so a fall is exactly a spike: your run ends where you fell, you
+  watch the rest from the fly camera after `DeathLingerTime`, and you score nothing. A null killer is
+  already what `RegisterTrapKill` treats as nobody to credit, so **nobody is paid for your fall** -
+  not even the player whose piece you were trying to clear.
+- **Only while you are running.** `IsRunning()` is checked first, so a player still standing around
+  during the finish banner is not told they have been killed.
+- **`FellOutOfWorld` is overridden as well**, on both pawns. On the character it is the backstop: if
+  something gets you past `FallDeathZ` it kills you properly instead of deleting you. On
+  `AGetawayPlacementPawn` it does **nothing at all** - the fly camera has no collision and flying
+  under the level to look up at what you are building is a normal thing to do, so the engine must not
+  destroy the camera out from under you at `KillZ`.
+
+**This changes the test course.** The catch floor at -300 and the 7-step staircases out of each pit
+were there so a miss cost you a few seconds rather than the run, back when nothing could kill you.
+At -100 you die on the way down and never touch them. **Asked for and confirmed 2026-10-23**, so
+the pits are meant to be fatal now - but it is still one number to undo: set `FallDeathZ` below
+-300 (or to a large negative) on the character and the forgiving course comes back. Nothing was deleted from the map.
+
+Built clean. **Not played.**
+
+## Everything has to touch something (2026-10-23)
+
+Asked for: *"make it so you can only place objects if its touching another object."* A level is now
+one connected structure you extend, not a scatter of blocks hanging in mid-air.
+
+`AGetawayPlacementPawn::IsTouchingSomething` is the whole rule, and it is the mirror image of the
+blocked test that was already there. `IsBlockedAt` takes the piece's world box, **shrinks** it by
+`FitTolerance` (3 cm) and refuses an overlap; this takes the same box, **grows** it by
+`ContactReach` (6 cm) and requires one. A piece sits flush against the face it was aimed at, so
+whatever it is resting on is inside that skin; a piece in clear air finds nothing. The reach has to
+stay above `FitTolerance` or the skin would sit inside the gap the other test leaves.
+
+- **Any face counts, not just the bottom.** Butting a floor onto the side of a wall, or hanging a
+  piece off a ceiling, is contact. Nothing has to be *under* it. This is a connectivity rule, not a
+  gravity one - it is a game about building silly routes, and a floor jutting out of a wall is one
+  of the good ones.
+- **It is checked on the server too**, in `ServerPlacePiece`, not only on the client. The aim point
+  is taken on trust, so this is the check that actually stops a piece being asked for in open sky;
+  the client runs the same test only so the ghost agrees with what the server will do.
+- **Surface-mounted pieces are exempt** - spikes, today. `IsFullySupported` already demands the
+  whole footprint be backed, which is strictly stronger than one corner of contact, so running both
+  would be the same question asked twice.
+- **The ghost reads it.** Red whenever the spot is refused rather than only when it is blocked, and
+  the HUD line under the crosshair says which it is: "Blocked - something is in the way" against
+  "Nothing to build off - it has to touch something".
+- The ground-plane fallback for aiming at nothing is still there and is now mostly moot: where
+  there is real floor the trace hits it anyway, and where there is not, the ghost comes out red.
+  Left in because a red ghost in the right place explains itself better than no ghost at all.
+
+Worth knowing if it ever feels too strict: `ContactReach` is on the placement pawn in the Details
+panel, and raising it lets you place with a small gap. Setting it to 0 does not turn the rule off -
+clamp is 0.1 - so to go back to free placement, delete the two `IsTouchingSomething` calls.
+
+Built clean. **Not played.**
+
+## Things lie down on slopes (2026-10-26)
+
+Asked for: *"can we make it so the ramp can have things placed on it slanted?"* Aim at a sloped
+face and the piece tips onto it instead of sitting square and burying one corner. A floor becomes a
+slanted platform, a wall leans, and a ramp carries on up the slope of the ramp under it.
+
+- **Only sloped faces.** `SlantTolerance` (5°) is the gap: a face within that of a world axis - so
+  every flat floor, wall and ceiling in the game - keeps exactly the old grid-pinned behaviour, and
+  a ramp face at 18.4° tips the piece. Nothing that worked before is touched, which is the point of
+  having a threshold rather than tilting onto everything.
+- **Yaw first, then tip.** The piece is yawed the way you are looking as usual, and that whole frame
+  is then rotated by the shortest turn from world up to the face normal. So **R** still means what
+  it meant, and a ramp placed on a ramp points the way you are facing rather than taking some
+  arbitrary spin about the normal.
+- **Snapping solves for the slope instead of fighting it.** The centre is still snapped to the 50 cm
+  grid on the two axes across the face, but the third is then *solved* so the centre sits exactly
+  half a thickness off the face's own plane. Snapping all three would bury the piece or float it by
+  whatever the slope rises across half a grid square - 8 cm on a ramp, which is more than
+  `FitTolerance`, so half of all placements would have come back blocked.
+- **Stacking compounds, on purpose.** A piece lying on a ramp presents its own sloped faces, so the
+  next piece lies on *that*. Slanted staircases fall out of this for free.
+
+### Oriented boxes, which this needed first
+
+The blocked test, the contact test and the ghost all used `FGetawayPlacement::Size` - the piece's
+**world-space** extent - with an identity rotation. That is exact while every piece is axis-aligned
+and wrong the moment one is not: a tilted piece would have been tested and drawn as the fat upright
+box that contains it. All three now take the piece's own `LocalSize` turned by its own rotation,
+which is the same region as before for every axis-aligned piece and the right one for a tilted
+piece. `DrawDebugBox` and `OverlapBlockingTestByChannel` both take a quaternion, so this cost
+nothing but the signatures.
+
+`WorldSizeFor` survives as the true axis-aligned bounds - each world axis summing a contribution
+from all three of the piece's own axes, rather than the old rotate-the-extent-and-take-the-absolute
+value, which is only correct for quarter turns. It feeds the free-standing grid pinning, where the
+rotation is always a quarter turn, so that path is unchanged to the bit. This also closes the rough
+edge logged under *Surface mounting* about spikes on the side of a ramp.
+
+### What the server does with a tilted rotation
+
+`ServerPlacePiece` used to snap every free-standing piece's rotation back to a quarter turn about Z
+rather than trust what arrived. It still does **when the piece arrives upright**. A tilted one is
+taken as sent, for the same reason a surface-mounted one always was: the server does not know which
+face the client was looking at, so it cannot re-derive the rotation to check it against.
+
+That is a real guard being narrowed, so, plainly: what it was protecting against is cosmetic. A
+rotation on its own cannot put a piece anywhere - the **aim point** decides that, and the aim point
+has been taken on trust since the spike. Everything that matters still holds on the server: the
+piece must come out of the hand that player was dealt, it must not overlap anything, and it must
+touch something.
+
+Built clean. **Not played.**
+
+## A bridge stays down, and C4 gets swept up (2026-10-26)
+
+Two things asked for together: *"the placed c4 should clear at the end of each round and falling
+bridges shouldnt reset mid round."* Both are about the same thing - what a round leaves behind.
+
+### A collapsing bridge stays collapsed
+
+`bRespawns` was on with a `RespawnDelay` of 6 s, so a bridge righted itself mid-run. That makes it
+a four-second inconvenience rather than an obstacle: the player who dropped it could watch it fall
+and then walk over it on the way past. It is **off by default now**, and the bridge stays down
+until the next round - `StartPlacement` already called `Restore()` on every bridge, so the round
+was always the right owner of that reset and nothing new was needed to bring it back.
+
+The knob stays, for a bridge standing in a level with no round behind it.
+
+**What this did need is a bridge that survives falling.** The old code read:
+
+```
+else if (CleanupDrop > 0.f && ...) { Destroy(); }
+```
+
+- that branch only ran for a non-respawning bridge, which until now was the unusual case. Make it
+every bridge and the deck deletes itself on the way down, and the next round has nothing to put
+back. It now **parks** instead: physics off, collision off, hidden, actor kept, and `StopFalling`
+un-parks it when the round rights it. `FellOutOfWorld` is overridden to park as well, because a
+deck that stays down for a whole round has plenty of time to reach `KillZ`, where the engine's
+default is also `Destroy()`.
+
+Parking is decided **per machine, above the authority check**, next to the rattle rather than in
+the server-only state machine. The deck is deliberately not movement-replicated, so every copy
+falls on its own and each one has to notice its own copy has gone far enough.
+
+### Thrown C4 is cleared between rounds
+
+`StartPlacement` now destroys every `AGetawayC4` in the level, alongside restoring the breakables
+and the bridges. A charge is spent the moment it leaves your hand, so a brick still stuck to a wall
+from last round is not a resource anyone can spend - it is a live bomb with no owner, and its blast
+would land in a round nobody threw it in.
+
+- **The charges you are carrying are untouched.** You went and collected those; they are yours
+  across rounds exactly as before. This only sweeps up what is already stuck to the level.
+- **`AGetawayC4Pickup` is a different class and is not swept** - a pickup is a placed piece, and
+  pieces anyone placed stay.
+- Server only, like everything else in `StartPlacement`, and `Destroy()` on a replicated actor
+  reaches the clients by itself.
+
+Built clean. **Not played.**

@@ -1,0 +1,21 @@
+# Unreal build output and caches (regenerated automatically)
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# Visual Studio / Rider project files (regenerated from the .uproject)
+.vs/
+.idea/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# OS clutter
+Thumbs.db
+.DS_Store

@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "Getaway Movement",
+	"Description": "Source-style first-person movement (air strafing, bunny hopping, slides, wallruns, mantles, double jump) plus throwable C4 and simple breakables. Port of the Getaway Movement Lab prototype.",
+	"Category": "Gameplay",
+	"CreatedBy": "",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "GetawayMovement",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{ "Name": "EnhancedInput", "Enabled": true },
+		{ "Name": "Niagara", "Enabled": true },
+		{ "Name": "ProceduralMeshComponent", "Enabled": true }
+	]
+}
