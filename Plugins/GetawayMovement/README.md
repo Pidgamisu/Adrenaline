@@ -41,7 +41,7 @@ To make the game spawn it you also need a Blueprint child of `GetawayGameMode`, 
 |---|---|
 | W A S D | Move |
 | Space / mouse wheel | Jump. Hold Space to auto-hop. Press again in the air to double jump |
-| C / Left Shift / Left Ctrl | Crouch. At speed it becomes a slide |
+| C / Left Shift / Left Ctrl | Crouch. At speed it becomes a slide, which can't start again for 1.5 s after the last one ends |
 | A/D + mouse in the air | Air-strafe to gain speed and curve |
 | Run along a wall beside you | Wallrun, Space to kick off |
 | W into a ledge mid-jump | Mantle |
@@ -78,6 +78,7 @@ Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, 
 | Slide entry boost | 100 u/s | SlideBoost | 250 |
 | Slide friction | 0.30 | SlideFriction | 0.3 |
 | Speed to start slide | 220 u/s | SlideMinSpeed | 550 |
+| Wait between slides | - | SlideCooldown | 1.5 s (0 = slide whenever you like) |
 | Wallrun gravity scale | 0.18 | WallRunGravityScale | 0.18 |
 | Wallrun max duration | 1.60 s | WallRunMaxTime | 1.6 |
 | Kick-off push | 220 u/s | WallKickSpeed | 550 |

@@ -219,8 +219,22 @@ void UGetawayMovementComponent::CalcVelocity(float DeltaTime, float Friction, bo
 
 /* ============================================================ per-tick state */
 
+/**
+ * The one way out of a slide. Starting the cooldown here rather than at each call site means it runs
+ * from the end of the slide whatever ended it - letting go of crouch, slowing down, jumping out of it,
+ * sliding off a ledge, a mantle or a vortex - and the early-out keeps the airborne case (which runs
+ * every falling frame) from pushing the cooldown out forever.
+ */
+void UGetawayMovementComponent::EndSlide()
+{
+	if (!bSliding) return;
+	bSliding = false;
+	SlideCooldownLeft = SlideCooldown;
+}
+
 void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 {
+	SlideBoostCooldownLeft -= DeltaSeconds;
 	SlideCooldownLeft -= DeltaSeconds;
 	WallCooldown -= DeltaSeconds;
 
@@ -251,7 +265,7 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 	if (IsMovingOnGround() && JumpPending())
 	{
 		Velocity.Z = JumpSpeed;
-		bSliding = false;
+		EndSlide();
 		JumpQueuedAt = -100.f;
 		SetMovementMode(MOVE_Falling);
 	}
@@ -284,23 +298,25 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 		const float Speed = Velocity.Size2D();
 		if (bSliding && (!bCrouchHeld || Speed < SlideStopSpeed))
 		{
-			bSliding = false;
+			EndSlide();
 		}
-		if (!bSliding && bCrouchHeld && Speed >= SlideMinSpeed)
+		// You have to have been off the slide for SlideCooldown seconds to get another one. Holding
+		// crouch through the cooldown doesn't queue a slide: let go and press again once it is ready.
+		if (!bSliding && bCrouchHeld && Speed >= SlideMinSpeed && SlideCooldownLeft <= 0.f)
 		{
 			bSliding = true;
-			if (SlideCooldownLeft <= 0.f && SlideBoost > 0.f && Speed > 1.f)
+			if (SlideBoostCooldownLeft <= 0.f && SlideBoost > 0.f && Speed > 1.f)
 			{
 				const float Scale = (Speed + SlideBoost) / Speed;
 				Velocity.X *= Scale;
 				Velocity.Y *= Scale;
-				SlideCooldownLeft = SlideBoostCooldown;
+				SlideBoostCooldownLeft = SlideBoostCooldown;
 			}
 		}
 	}
 	else
 	{
-		bSliding = false;
+		EndSlide();
 	}
 
 	/* ---- wallrun / mantle ---- */
@@ -401,7 +417,7 @@ void UGetawayMovementComponent::ApplyVortexLift(float DeltaSeconds)
 	// Standing in the bottom of a column: come off the floor so the climb can happen at all.
 	if (IsMovingOnGround() && Velocity.Z > 50.f)
 	{
-		bSliding = false;
+		EndSlide();
 		SetMovementMode(MOVE_Falling);
 	}
 
@@ -729,7 +745,7 @@ bool UGetawayMovementComponent::TryStartMantle()
 	MantleTopCenterZ = Top + CapsuleHalfHeight() + 2.f + SlopeLift;
 	MantleElapsed = 0.f;
 	LastMantleTime = World->GetTimeSeconds();
-	bSliding = false;
+	EndSlide();
 	Velocity = FVector::ZeroVector;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(EGetawayCustomMove::Mantle));
 	return true;

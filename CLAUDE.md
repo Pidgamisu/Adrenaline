@@ -67,6 +67,10 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Movement feel:** Source-style ground friction and air strafing, lossless bunny hops, auto-hop while holding jump, jump buffering, mouse-wheel jump.
 - **Double jump:** 1 air jump. It redirects your momentum toward the keys you're holding, without losing speed. It is not spent by a jump pressed just before landing (that press is kept for a bunny hop).
 - **Slide:** crouch at speed. Entry boost on a 1 s cooldown, very low friction, speeds up on slopes.
+  **Slides are on a cooldown** (decided 2026-10-31): once a slide ends, for whatever reason - crouch
+  released, slowed below `SlideStopSpeed`, jumped out of it, slid off a ledge - you can't start
+  another for `SlideCooldown` seconds (1.5 by default). Holding crouch through the cooldown does not
+  queue one up; let go and press again. `SlideCooldown = 0` restores the old tap-whenever behaviour.
 - **Wallrun:**
   - Only when the wall is **beside** you (within about 40 degrees of straight left or right of your view), never in front.
   - Forgiving attach: 60 cm reach, snaps onto the wall, works at low speed and while falling fast.

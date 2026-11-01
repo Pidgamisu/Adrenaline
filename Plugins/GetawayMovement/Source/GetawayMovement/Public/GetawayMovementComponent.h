@@ -17,7 +17,9 @@ enum class EGetawayCustomMove : uint8
  *
  * - Ground: Source friction (sv_friction / sv_stopspeed) and acceleration (sv_accelerate).
  * - Air: Source air acceleration with a tiny wish-speed cap, so air strafing gains speed and bunny hops keep it.
- * - Slide: crouch at speed for a boost (on a cooldown) and very low friction; slopes speed you up.
+ * - Slide: crouch at speed for a boost and very low friction; slopes speed you up. A slide can't
+ *   start again until SlideCooldown seconds after the last one ended, so it's a committed choice
+ *   rather than something you tap over and over.
  * - Wallrun: a wall beside you (not in front) catches you; reduced gravity that ramps up late; Space kicks off.
  * - Mantle: jump into a ledge holding forward; you keep most of your speed going over the top.
  * - Double jump, auto-hop, jump buffering, smashing through AGetawayBreakable at speed, pushing loose scraps.
@@ -103,6 +105,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Slide", meta = (ClampMin = "0"))
 	float SlideBoostCooldown = 1.f;
 
+	/**
+	 * Seconds after a slide ends before another one can start, however it ended: crouch released,
+	 * slowed below SlideStopSpeed, jumped out of it, or left the ground. 0 lets you slide whenever
+	 * you like, which is how it worked before this was added.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Slide", meta = (ClampMin = "0"))
+	float SlideCooldown = 1.5f;
+
 	/* ---------------- Wallrun ---------------- */
 
 	/** Gravity multiplier while wallrunning. It ramps up over the last 40% of the run. */
@@ -183,6 +193,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	bool IsSliding() const { return bSliding; }
 
+	/** Seconds left before a slide can start again. 0 means sliding is ready. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetSlideCooldownLeft() const { return FMath::Max(0.f, SlideCooldownLeft); }
+
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	bool IsWallRunning() const;
 
@@ -239,6 +253,9 @@ private:
 	bool TryStartMantle();
 	void PhysMantle(float DeltaTime, int32 Iterations);
 
+	// Slide. Always stop a slide through EndSlide, so the cooldown starts no matter what ended it.
+	void EndSlide();
+
 	// Breakables and loose scraps
 	void SmashAhead(float DeltaTime);
 	void PushScraps();
@@ -251,6 +268,7 @@ private:
 	bool bCrouchHeld = false;
 	bool bSliding = false;
 	float JumpQueuedAt = -100.f;
+	float SlideBoostCooldownLeft = 0.f;
 	float SlideCooldownLeft = 0.f;
 	int32 AirJumpsLeft = 0;
 	float LastDoubleJumpTime = -100.f;

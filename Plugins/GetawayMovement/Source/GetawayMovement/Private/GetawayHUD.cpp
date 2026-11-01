@@ -77,6 +77,13 @@ void AGetawayHUD::DrawHUD()
 	else if (State == TEXT("AIR")) StateColor = FLinearColor::White;
 
 	const float Bottom = Canvas->ClipY;
+	// Sliding is on a cooldown, so say when the next one is ready. Without this a crouch at speed
+	// that does nothing reads as a dropped input rather than as the rule.
+	const float SlideWait = Move->GetSlideCooldownLeft();
+	if (SlideWait > 0.f)
+	{
+		Centred(FString::Printf(TEXT("slide  %.1fs"), SlideWait), Small, 1.1f, CX, Bottom - 172.f, Dim);
+	}
 	Centred(State, Small, 1.4f, CX, Bottom - 150.f, StateColor);
 	Centred(FString::Printf(TEXT("%d u/s"), Ups), Big, 2.2f, CX, Bottom - 125.f, FLinearColor::White);
 	Centred(FString::Printf(TEXT("%.1f m/s"), Player->GetVelocity().Size2D() / 100.f), Small, 1.1f, CX, Bottom - 62.f, Dim);
