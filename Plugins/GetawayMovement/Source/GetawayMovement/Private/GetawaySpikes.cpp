@@ -13,9 +13,9 @@ namespace
 	/** Most points a plate can show along one side. The pool is this squared. */
 	constexpr int32 MaxPointsPerSide = 4;
 	/** Local half extent of the trigger, so the plate is 100 local units across before scaling. */
-	constexpr float PlateLocal = 100.f;
+	constexpr float SpikePlateLocal = 100.f;
 	/** Local Z of the top of the base plate; the points stand on it. */
-	constexpr float PlateTopLocal = -30.f;
+	constexpr float SpikePlateTopLocal = -30.f;
 }
 
 AGetawaySpikes::AGetawaySpikes()
@@ -87,8 +87,8 @@ void AGetawaySpikes::OnConstruction(const FTransform& Transform)
 void AGetawaySpikes::LayOutPoints()
 {
 	const FVector Scale = GetActorScale3D().GetAbs();
-	const float WorldX = PlateLocal * Scale.X;
-	const float WorldY = PlateLocal * Scale.Y;
+	const float WorldX = SpikePlateLocal * Scale.X;
+	const float WorldY = SpikePlateLocal * Scale.Y;
 	const float Spacing = FMath::Max(20.f, SpikeSpacing);
 
 	// Count from the plate's real size, so a plate trimmed back to a ledge loses points rather
@@ -99,9 +99,9 @@ void AGetawaySpikes::LayOutPoints()
 	// Each point keeps the same world size whatever the plate is scaled to, by dividing the actor
 	// scale back out. Without this a narrow plate would give flattened, wedge-shaped spikes.
 	const FVector Rel(
-		SpikeWidth / FMath::Max(1.f, PlateLocal * Scale.X),
-		SpikeWidth / FMath::Max(1.f, PlateLocal * Scale.Y),
-		SpikeHeight / FMath::Max(1.f, PlateLocal * Scale.Z));
+		SpikeWidth / FMath::Max(1.f, SpikePlateLocal * Scale.X),
+		SpikeWidth / FMath::Max(1.f, SpikePlateLocal * Scale.Y),
+		SpikeHeight / FMath::Max(1.f, SpikePlateLocal * Scale.Z));
 	const float LocalHeight = SpikeHeight / FMath::Max(KINDA_SMALL_NUMBER, Scale.Z);
 
 	int32 Used = 0;
@@ -113,11 +113,11 @@ void AGetawaySpikes::LayOutPoints()
 			UStaticMeshComponent* Spike = Points[Used++];
 			if (!Spike) continue;
 
-			const float LX = -PlateLocal * 0.5f + (PlateLocal / NX) * (I + 0.5f);
-			const float LY = -PlateLocal * 0.5f + (PlateLocal / NY) * (J + 0.5f);
+			const float LX = -SpikePlateLocal * 0.5f + (SpikePlateLocal / NX) * (I + 0.5f);
+			const float LY = -SpikePlateLocal * 0.5f + (SpikePlateLocal / NY) * (J + 0.5f);
 			Spike->SetRelativeScale3D(Rel);
 			// The cone mesh is centred, so half its local height above the plate puts its base on it.
-			Spike->SetRelativeLocation(FVector(LX, LY, PlateTopLocal + LocalHeight * 0.5f));
+			Spike->SetRelativeLocation(FVector(LX, LY, SpikePlateTopLocal + LocalHeight * 0.5f));
 			Spike->SetVisibility(true);
 		}
 	}
