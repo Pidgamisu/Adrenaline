@@ -96,6 +96,10 @@ nor directional:
 
 ### Dying
 
+> **Superseded 2026-10-31: death puts you back at the start instead.** See *Dying puts you back at
+> the start* at the end of this file. The old behaviour below is still there behind
+> `bRespawnOnDeath = false`, and everything about *who* decides a death still holds.
+
 **Death ends your run for that round. It does not respawn you** - you watch the rest from the fly
 camera and score nothing, which is what Ultimate Chicken Horse does and what the round-over logic
 already expected. `EGetawayRunState::Dead` is a new state that behaves exactly like `Forfeit`
@@ -183,3 +187,47 @@ Built clean. **Not played.**
   got. One charge is still a rocket jump, so the test course's 500 cm ledge is unaffected.
 
 Built clean. **Not played.**
+
+## Dying puts you back at the start (2026-10-31)
+
+Asked for: *"can we make it so that if you die you just go back to the start."*
+
+So `AGetawayGameMode::bRespawnOnDeath` (on, under *Getaway|Round*). Death no longer ends your run:
+after the same `DeathLingerTime` beat you get a **fresh character at the PlayerStart** and carry on,
+as many times as the run clock allows. Nothing else about dying changed - the victim's own machine
+still decides, the server still decides what it means, and `RegisterTrapKill` still credits whoever
+placed the thing (and still refuses to pay you for your own trap).
+
+- **Your run state never changes.** With respawning on, `PlayerDied` does not touch
+  `EGetawayRunState`: you were `Running` and you stay `Running`, which is what keeps the round open
+  for you and makes the `CheckRoundOver` call at the end of `PlayerDied` a no-op. That is why the
+  change is small - the round loop already knew how to wait for a slow runner.
+- **`EGetawayRunState::Dead` is not dead code.** It is still what `bRespawnOnDeath = false` sets,
+  and the HUD still draws "dead" for it. Turning the knob off restores the Ultimate Chicken Horse
+  behaviour exactly.
+- **`AGetawayGameMode::RespawnRunner` is the new half**, and it is `StartRunFor`'s spawn block with
+  the placement-pawn handling taken out: find the PlayerStart, unpossess and destroy the corpse,
+  spawn the `DefaultPawnClass` there, possess it, point the control rotation down the start's yaw.
+  It refuses to run outside `EGetawayPhase::Run` or for a player who is not `IsRunning()`, so a
+  death that lands on the same frame as the round ending cannot put a character back on a course
+  nobody is running.
+- **A fresh character, not a teleport.** `Die()` has already stopped the old one's movement and set
+  its `bDead`, so reviving it means undoing both by hand; a new pawn is the path the run itself
+  starts down and there is no half-reset state to get wrong. The price is that **your C4 goes with
+  it** - a respawn hands you `StartingCharges` (0), so dying costs you any charges you had picked
+  up. **Asked and confirmed 2026-10-31**, so it is settled rather than assumed: dying should cost
+  something now that it does not cost the round.
+- **Which route a death takes is read when you die**, not when the timer fires, and captured into
+  the lambda. Flipping the knob mid-run can therefore change what the *next* death does but cannot
+  land a player halfway between a respawn and the fly camera.
+- **The on-screen message now has to know the knob**, and a client has no game mode to ask.
+  `AGetawayCharacter::WillRespawnOnDeath()` reads it off `AGameStateBase::GameModeClass` - which
+  *is* replicated - via `GetDefaultObject<AGetawayGameMode>()`, which is sound because the knob is
+  `EditDefaultsOnly`, so the class default is the live value. It falls back to "yes" if the game
+  state has not arrived or the game mode is somebody else's class.
+- **What stops a round now is the clock, not the deaths.** `RunTimeLimit` (120 s) and the
+  `FinishGraceTime` (10 s) hurry-up after the first player home are the only things that end a run
+  you refuse to leave. Unlimited respawns make those two knobs load-bearing in a way they were not
+  before: a player who dies over and over holds the round open until one of them fires.
+
+Built clean, and **played on 2026-10-31: dying puts you back at the start and the run carries on.**

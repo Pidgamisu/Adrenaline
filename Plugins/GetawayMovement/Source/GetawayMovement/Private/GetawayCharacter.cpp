@@ -5,6 +5,7 @@
 #include "GetawayGameMode.h"
 #include "GetawayMovementComponent.h"
 #include "GetawayPlayerState.h"
+#include "GetawayStickInput.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -16,6 +17,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/DamageType.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerController.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -190,6 +192,13 @@ void AGetawayCharacter::BuildDefaultInput()
 	};
 	MoveAction     = MakeAction(TEXT("IA_GetawayMove"), EInputActionValueType::Axis2D);
 	LookAction     = MakeAction(TEXT("IA_GetawayLook"), EInputActionValueType::Axis2D);
+	// The pad's sticks get their own actions rather than extra keys on the two above. Look, because
+	// a stick is a rate and a mouse is a delta, so they cannot share a formula; move, because the
+	// stick wants a dead zone and a full-tilt threshold that would also reshape WASD if it were the
+	// same action - a diagonal on the keyboard is already longer than 1 and would get squashed.
+	MoveStickAction = MakeAction(TEXT("IA_GetawayMoveStick"), EInputActionValueType::Axis2D);
+	LookStickAction = MakeAction(TEXT("IA_GetawayLookStick"), EInputActionValueType::Axis2D);
+	GamepadProbeAction = MakeAction(TEXT("IA_GetawayPadProbe"), EInputActionValueType::Boolean);
 	JumpAction     = MakeAction(TEXT("IA_GetawayJump"), EInputActionValueType::Boolean);
 	JumpTapAction  = MakeAction(TEXT("IA_GetawayJumpWheel"), EInputActionValueType::Boolean);
 	CrouchAction   = MakeAction(TEXT("IA_GetawayCrouch"), EInputActionValueType::Boolean);
@@ -227,6 +236,25 @@ void AGetawayCharacter::BuildDefaultInput()
 	MappingContext->MapKey(DetonateAction, EKeys::F);
 	MappingContext->MapKey(RestartAction, EKeys::R);
 	MappingContext->MapKey(BackToPlacementAction, EKeys::BackSpace);
+
+	// The pad. Left stick moves, right stick looks; A jumps, so holding it bunny hops exactly like
+	// holding space. Crouch is on LB as well as B: it has to be held to slide, and a shoulder is
+	// easier to hold than a face button you also need your thumb for. There is no pad key on
+	// JumpTapAction - the mouse wheel is there for hop timing, which auto-hop already does for you.
+	MappingContext->MapKey(MoveStickAction, EKeys::Gamepad_Left2D);
+	MappingContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
+	MappingContext->MapKey(JumpAction, EKeys::Gamepad_FaceButton_Bottom);
+	MappingContext->MapKey(CrouchAction, EKeys::Gamepad_LeftShoulder);
+	MappingContext->MapKey(CrouchAction, EKeys::Gamepad_FaceButton_Right);
+	MappingContext->MapKey(ThrowAction, EKeys::Gamepad_RightShoulder);
+	MappingContext->MapKey(DetonateAction, EKeys::Gamepad_RightTrigger);
+	MappingContext->MapKey(RestartAction, EKeys::Gamepad_DPad_Down);
+	MappingContext->MapKey(BackToPlacementAction, EKeys::Gamepad_Special_Left);
+
+	for (const FKey& Key : GetawayStick::ProbeKeys())
+	{
+		MappingContext->MapKey(GamepadProbeAction, Key);
+	}
 }
 
 void AGetawayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -257,7 +285,11 @@ void AGetawayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	}
 
 	Input->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AGetawayCharacter::OnMove);
+	Input->BindAction(MoveStickAction, ETriggerEvent::Triggered, this, &AGetawayCharacter::OnMoveStick);
 	Input->BindAction(LookAction, ETriggerEvent::Triggered, this, &AGetawayCharacter::OnLook);
+	Input->BindAction(LookStickAction, ETriggerEvent::Triggered, this, &AGetawayCharacter::OnLookStick);
+	Input->BindAction(LookStickAction, ETriggerEvent::Completed, this, &AGetawayCharacter::OnLookStickReleased);
+	Input->BindAction(GamepadProbeAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnGamepadUsed);
 	Input->BindAction(JumpAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnJumpPressed);
 	Input->BindAction(JumpAction, ETriggerEvent::Completed, this, &AGetawayCharacter::OnJumpReleased);
 	Input->BindAction(JumpTapAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnJumpTap);
@@ -269,18 +301,36 @@ void AGetawayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	Input->BindAction(BackToPlacementAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnBackToPlacement);
 }
 
-void AGetawayCharacter::OnMove(const FInputActionValue& Value)
+void AGetawayCharacter::ApplyMoveInput(const FVector2D& Axis)
 {
-	const FVector2D Axis = Value.Get<FVector2D>();
 	const FRotator YawOnly(0.f, GetControlRotation().Yaw, 0.f);
 	const FRotationMatrix M(YawOnly);
 	AddMovementInput(M.GetUnitAxis(EAxis::X), Axis.Y);
 	AddMovementInput(M.GetUnitAxis(EAxis::Y), Axis.X);
 }
 
+void AGetawayCharacter::OnMove(const FInputActionValue& Value)
+{
+	ApplyMoveInput(Value.Get<FVector2D>());
+}
+
+void AGetawayCharacter::OnMoveStick(const FInputActionValue& Value)
+{
+	bUsingGamepad = true;
+
+	const FVector2D Stick = GetawayStick::SnapToFullTilt(
+		GetawayStick::ApplyDeadZone(Value.Get<FVector2D>(), MoveStickDeadZone), MoveStickFullTilt);
+	if (Stick.IsNearlyZero()) return;
+
+	ApplyMoveInput(Stick);
+}
+
 void AGetawayCharacter::OnLook(const FInputActionValue& Value)
 {
 	if (!Controller) return;
+	// Any mouse movement at all means a mouse is what you are holding. The pad side of this is the
+	// probe action, because the shared bindings cannot tell which key fired them.
+	bUsingGamepad = false;
 	const FVector2D Delta = Value.Get<FVector2D>();
 	// Unreal pre-scales mouse input by the Axis Config sensitivity (0.07 by default). Divide that back out to get
 	// mouse counts, then apply the Source formula. Set directly so legacy yaw/pitch input scales can't change the feel.
@@ -289,6 +339,54 @@ void AGetawayCharacter::OnLook(const FInputActionValue& Value)
 	R.Yaw += Delta.X * K;
 	R.Pitch = FMath::Clamp(FRotator::NormalizeAxis(R.Pitch + (bInvertMouseY ? -1.f : 1.f) * Delta.Y * K), -89.f, 89.f);
 	Controller->SetControlRotation(R);
+}
+
+void AGetawayCharacter::OnLookStick(const FInputActionValue& Value)
+{
+	if (!Controller) return;
+	bUsingGamepad = true;
+
+	const UWorld* World = GetWorld();
+	const float Dt = World ? World->GetDeltaSeconds() : 0.f;
+	if (Dt <= 0.f) return;
+
+	const FVector2D Stick = GetawayStick::ApplyCurve(
+		GetawayStick::ApplyDeadZone(Value.Get<FVector2D>(), StickLookDeadZone), StickLookExponent);
+	if (Stick.IsNearlyZero())
+	{
+		// Inside the dead zone counts as letting go, or the spin-up would already be at full rate
+		// by the time you actually pushed the stick far enough to turn.
+		StickLookHeld = 0.f;
+		return;
+	}
+
+	StickLookHeld += Dt;
+	const float Ramp = (StickLookRampTime > 0.f)
+		? FMath::Lerp(StickLookRampStartScale, 1.f, FMath::Min(StickLookHeld / StickLookRampTime, 1.f))
+		: 1.f;
+
+	// Degrees per second, so it has to be multiplied by the frame time. This is the whole reason
+	// the stick does not go through OnLook: a mouse delta must not be.
+	FRotator R = Controller->GetControlRotation();
+	R.Yaw += Stick.X * StickLookYawSpeed * Ramp * Dt;
+
+	// Note the sign: the stick's Y has to be flipped where the mouse's does not. Play-tested
+	// 2026-10-31 - built without the flip, pushing the stick up looked down. Pitch is the sign trap
+	// in this project (see the wallrun roll note in CLAUDE.md); copy the mouse formula's sign here
+	// and it comes out inverted, so bInvertStickY *adds* the flip rather than being the flip.
+	const float PitchStep = (bInvertStickY ? 1.f : -1.f) * Stick.Y * StickLookPitchSpeed * Ramp * Dt;
+	R.Pitch = FMath::Clamp(FRotator::NormalizeAxis(R.Pitch + PitchStep), -89.f, 89.f);
+	Controller->SetControlRotation(R);
+}
+
+void AGetawayCharacter::OnLookStickReleased(const FInputActionValue&)
+{
+	StickLookHeld = 0.f;
+}
+
+void AGetawayCharacter::OnGamepadUsed(const FInputActionValue&)
+{
+	bUsingGamepad = true;
 }
 
 void AGetawayCharacter::OnJumpPressed(const FInputActionValue&)
@@ -358,13 +456,26 @@ void AGetawayCharacter::ServerBackToPlacement_Implementation()
 
 /* ============================================================ dying */
 
+bool AGetawayCharacter::WillRespawnOnDeath() const
+{
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
+	const UClass* Class = GS ? GS->GameModeClass.Get() : nullptr;
+
+	// No game state yet, or somebody else's game mode: assume the default rather than guess.
+	if (!Class || !Class->IsChildOf(AGetawayGameMode::StaticClass())) return true;
+
+	return Class->GetDefaultObject<AGetawayGameMode>()->bRespawnOnDeath;
+}
+
 void AGetawayCharacter::Die(AActor* KilledBy)
 {
 	if (bDead) return;
 	bDead = true;
 
-	// Stop where you are. The run is over for you either way, and sliding on after the spikes went
-	// through you reads as the trap having missed.
+	// Stop where you are. This character is finished either way - it is destroyed a beat later,
+	// whether that beat ends in a respawn at the start or in the fly camera - and sliding on
+	// after the spikes went through you reads as the trap having missed.
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		Move->StopMovementImmediately();
@@ -372,13 +483,17 @@ void AGetawayCharacter::Die(AActor* KilledBy)
 	}
 	AddViewPunch(6.f);
 	AddCameraShake(1.f);
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(7004, 2.f, FColor(255, 80, 80), TEXT("Killed. Out until the next round"));
-	}
 
 	UWorld* World = GetWorld();
 	if (!World) return;
+
+	if (GEngine)
+	{
+		// A client has no game mode to ask, so the knob is read off the replicated game mode
+		// *class* default instead. EditDefaultsOnly means that default is the live value.
+		GEngine->AddOnScreenDebugMessage(7004, 2.f, FColor(255, 80, 80),
+			WillRespawnOnDeath() ? TEXT("Killed. Back to the start") : TEXT("Killed. Out until the next round"));
+	}
 
 	if (HasAuthority())
 	{
@@ -412,9 +527,9 @@ void AGetawayCharacter::FellOutOfWorld(const UDamageType& DmgType)
 	// the controller holding no pawn at all - no death, no score, no way back into the round, just
 	// a frozen camera - so a fall was the one hole in the round loop that nothing closed.
 	//
-	// Routed through Die() it reads exactly like walking into spikes: your run ends where you fell,
-	// you watch the rest from the fly camera, and you score nothing. KilledBy is null because
-	// nothing killed you, which RegisterTrapKill already treats as nobody to credit.
+	// Routed through Die() it reads exactly like walking into spikes: you die where you fell and
+	// the game mode decides what that costs you - the start line, or the round. KilledBy is null
+	// because nothing killed you, which RegisterTrapKill already treats as nobody to credit.
 	//
 	// The plane is the level's own KillZ, in World Settings - TestCourse sets it to -2000. Below
 	// z=-300 the course has a catch floor across its whole footprint, so this only fires if you

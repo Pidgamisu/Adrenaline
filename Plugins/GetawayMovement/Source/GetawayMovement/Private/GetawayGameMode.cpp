@@ -8,11 +8,13 @@
 #include "GetawayFinish.h"
 #include "GetawayGameState.h"
 #include "GetawayHUD.h"
+#include "GetawayJumpPad.h"
 #include "GetawayPiece.h"
 #include "GetawayPlacementPawn.h"
 #include "GetawayPlayerState.h"
 #include "GetawayRamp.h"
 #include "GetawaySpikes.h"
+#include "GetawayVortex.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -64,6 +66,16 @@ AGetawayGameMode::AGetawayGameMode()
 	// Surface mounted: the same three numbers as a wall, read as a plate - 400 x 400 across the
 	// face it sticks to, 50 thick out from it. It cannot be placed without something to stick to.
 	Catalog.Add(MakePiece(TEXT("spikes"), TEXT("Spikes"), FVector(400.f, 400.f, 50.f), AGetawaySpikes::StaticClass(), true, false, true));
+	// Surface mounted the other way round: the spikes are what you must not touch, a jump pad is
+	// what you aim for. It fires you straight out of the face it is stuck to, so the surface you
+	// place it on is the launch direction. 200 x 200 rather than the bed's 400, because a pad is a
+	// route you have to hit rather than a hazard you have to miss.
+	Catalog.Add(MakePiece(TEXT("jumppad"), TEXT("Jump pad"), FVector(200.f, 200.f, 50.f), AGetawayJumpPad::StaticClass(), true, false, true));
+	// Free-standing, not surface mounted: a column you stand in. 300 x 300 x 500 - three quarters of
+	// a floor tile across, and a storey and a half tall, so it is a wide enough mouth to run into at
+	// speed and long enough that how far up you come out is a decision. It lifts straight up however
+	// it is placed, so it needs nothing aimed and nothing stuck to.
+	Catalog.Add(MakePiece(TEXT("vortex"), TEXT("Vortex"), FVector(300.f, 300.f, 500.f), AGetawayVortex::StaticClass()));
 }
 
 AGetawayGameState* AGetawayGameMode::State() const
@@ -375,6 +387,14 @@ void AGetawayGameMode::StartPlacement()
 	{
 		It->SetArmed(false);
 	}
+	for (TActorIterator<AGetawayJumpPad> It(World); It; ++It)
+	{
+		It->SetArmed(false);
+	}
+	for (TActorIterator<AGetawayVortex> It(World); It; ++It)
+	{
+		It->SetArmed(false);
+	}
 	if (Rebuilt > 0)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Getaway: restored %d breakable(s) for the new round"), Rebuilt);
@@ -555,6 +575,14 @@ void AGetawayGameMode::BeginRun()
 	{
 		It->SetArmed(true);
 	}
+	for (TActorIterator<AGetawayJumpPad> It(World); It; ++It)
+	{
+		It->SetArmed(true);
+	}
+	for (TActorIterator<AGetawayVortex> It(World); It; ++It)
+	{
+		It->SetArmed(true);
+	}
 	if (Objectives == 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Getaway: no AGetawayFinish in the level, so the run cannot end. "
@@ -662,30 +690,82 @@ void AGetawayGameMode::PlayerDied(APlayerController* PC, AActor* KilledBy)
 	if (!World || !HasAuthority() || !PS) return;
 	if (GetPhase() != EGetawayPhase::Run || !PS->IsRunning()) return;
 
-	PS->SetRunState(EGetawayRunState::Dead);
-	UE_LOG(LogTemp, Log, TEXT("Getaway: %s was killed by %s"), *PS->GetPlayerName(),
-		KilledBy ? *KilledBy->GetName() : TEXT("something"));
+	// With respawning on, the run state does not change at all: you are still Running, so the
+	// round stays open for you and CheckRoundOver below is a no-op. Only the old behaviour ends
+	// the run here.
+	if (!bRespawnOnDeath)
+	{
+		PS->SetRunState(EGetawayRunState::Dead);
+	}
+	UE_LOG(LogTemp, Log, TEXT("Getaway: %s was killed by %s%s"), *PS->GetPlayerName(),
+		KilledBy ? *KilledBy->GetName() : TEXT("something"),
+		bRespawnOnDeath ? TEXT(" - back to the start") : TEXT(" - out until the next round"));
 
 	// Credit whoever placed it. RegisterTrapKill already refuses to pay a player for their own
 	// trap catching them - and this is its first live caller, the hook having been dead since it
 	// was written, because until spikes there was nothing in the game that could kill you.
 	RegisterTrapKill(Cast<AGetawayCharacter>(PC ? PC->GetPawn() : nullptr), KilledBy);
 
-	// The swap to the fly camera is deferred for two reasons. One is feel: a beat looking at what
-	// got you beats being yanked into the sky mid-impact. The other is that Die() can be called
-	// from inside the victim's own overlap callback, and StartPlacementFor destroys that pawn.
+	// The move is deferred for two reasons. One is feel: a beat looking at what got you beats
+	// being yanked away mid-impact. The other is that Die() can be called from inside the
+	// victim's own overlap callback, and either route destroys that pawn.
+	//
+	// Which route it is, is read now rather than when the timer fires, so flipping the knob
+	// mid-flight cannot land a player halfway between the two.
 	TWeakObjectPtr<APlayerController> WeakPC(PC);
+	const bool bRespawn = bRespawnOnDeath;
 	FTimerHandle Handle;
-	World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this, WeakPC]()
+	World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this, WeakPC, bRespawn]()
 	{
 		// Skipped if the round ended meanwhile - StartPlacement puts everybody in a camera anyway.
-		if (WeakPC.IsValid() && GetPhase() == EGetawayPhase::Run)
+		if (!WeakPC.IsValid() || GetPhase() != EGetawayPhase::Run) return;
+
+		if (bRespawn)
+		{
+			RespawnRunner(WeakPC.Get());
+		}
+		else
 		{
 			StartPlacementFor(WeakPC.Get());
 		}
 	}), FMath::Max(0.05f, DeathLingerTime), false);
 
 	CheckRoundOver();
+}
+
+void AGetawayGameMode::RespawnRunner(APlayerController* PC)
+{
+	UWorld* World = GetWorld();
+	AGetawayPlayerState* PS = StateOf(PC);
+	if (!World || !PC || !HasAuthority() || !PS) return;
+
+	// Only a live run gets a respawn. A player who has finished, forfeited or is back in the fly
+	// camera must not be handed a character at the start line.
+	if (GetPhase() != EGetawayPhase::Run || !PS->IsRunning()) return;
+
+	AActor* Start = FindPlayerStart(PC);
+	const FVector Where = Start ? Start->GetActorLocation() : FVector(0.f, 0.f, 200.f);
+	const FRotator Facing = Start ? FRotator(0.f, Start->GetActorRotation().Yaw, 0.f) : FRotator::ZeroRotator;
+
+	// A fresh character rather than teleporting the old one. The corpse has had its movement
+	// switched off and its bDead flag set by Die(), and a new pawn is the same path the run itself
+	// starts down in StartRunFor - no half-reset state to get wrong, at the cost of your C4.
+	if (APawn* Old = PC->GetPawn())
+	{
+		PC->UnPossess();
+		Old->Destroy();
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	UClass* Class = DefaultPawnClass ? DefaultPawnClass.Get() : AGetawayCharacter::StaticClass();
+	if (APawn* Runner = World->SpawnActor<APawn>(Class, Where, Facing, Params))
+	{
+		PC->Possess(Runner);
+		PC->SetControlRotation(Facing);
+		UE_LOG(LogTemp, Log, TEXT("Getaway: %s respawned at the start as %s"), *PC->GetName(),
+			*Runner->GetName());
+	}
 }
 
 void AGetawayGameMode::CheckRoundOver()

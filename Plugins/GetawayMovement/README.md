@@ -14,6 +14,9 @@ What's in it:
 | `AGetawayPiece` | A plain solid block for floors, walls and ledges. Scale it to size |
 | `AGetawayRamp` | A wedge you run up, rising along its own +X. The mesh is built in code, so it needs no wedge asset |
 | `AGetawayCollapsingBridge` | A long deck that holds for `CollapseDelay` once you stand on it, then drops under physics and comes back after `RespawnDelay` |
+| `AGetawaySpikes` | A bed of spikes that kills whoever touches it. Mounts flat on the floor, wall or ceiling you aim at |
+| `AGetawayJumpPad` | A pad that throws you out of whatever it is stuck to, at `LaunchSpeed`. Mounts flat the same way, so a wall pad fires you sideways |
+| `AGetawayVortex` | An anti-gravity column that holds you climbing at `LiftSpeed` for as long as you are inside it, while you keep full steering |
 | `AGetawayPlacementPawn` | The placement-phase fly camera: aim at a surface, drop the piece in your hand |
 | `AGetawayHUD` | Crosshair, speedometer in the lab's units, movement state, C4 count, the dealt hand while placing |
 | `AGetawayGameMode` | Uses the character and HUD above, owns the placement / run phases and the piece catalog |
@@ -44,6 +47,11 @@ To make the game spawn it you also need a Blueprint child of `GetawayGameMode`, 
 | W into a ledge mid-jump | Mantle |
 | G, then F | Throw C4 (two carried at a time), detonate. A thrown charge is spent: restock at an `AGetawayC4Pickup` |
 | R | Restart the level |
+
+A controller works too, keyboard and mouse untouched - swap between them mid-round. Left stick
+moves, right stick looks, A jumps, LB or B crouches and slides, RB throws C4 and RT detonates.
+The placement camera flies on the left stick with the triggers for up and down, A places, X turns.
+Full map and the tuning in `docs/controller.md`.
 
 ## Building a test course
 
@@ -77,6 +85,11 @@ Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, 
 | Mantle speed kept | 75% | MantleSpeedKept | 0.75 |
 | Smash speed | 360 u/s | SmashSpeed | 900 |
 | Sensitivity | 2.20 | MouseSensitivity (character) | 2.2 |
+| Pad turn rate | Apex 4 Linear | StickLookYawSpeed / StickLookPitchSpeed (character) | 230 / 180 deg/s |
+| Pad stick curve | Apex Linear | StickLookExponent (character) | 1.0 |
+| Pad dead zone | - | StickLookDeadZone / MoveStickDeadZone (character) | 0.05 / 0.12 |
+| Pad turn spin-up | Apex extra yaw off | StickLookRampTime (character) | 0 (off) |
+| Pad full-tilt point | - | MoveStickFullTilt (character) | 0.9 |
 | FOV | 100 | BaseFOV (character) | 100 |
 | C4 blast boost | 600 u/s | C4BlastBoost (character) | 1500 |
 | C4 blast radius | 6.0 m | C4BlastRadius (character) | 600 |
@@ -101,7 +114,7 @@ Presets from the lab, applied to the movement component:
 - **C4 is a resource:** a thrown charge is spent for good - detonating it doesn't give it back. You spawn with `StartingCharges` (0 by default) and restock by running through an `AGetawayC4Pickup`, which hands over `ChargesGranted` and comes back `RespawnDelay` seconds later. Set `StartingCharges` to `MaxCharges` if you'd rather always carry a full load.
 - **C4 effects:** with no Niagara effect assigned, a debug sphere flashes on detonation (editor and development builds only). Assign `ExplosionEffect` and `ExplosionSound` on a Blueprint child of `GetawayC4`, then set it as the character's `C4Class`.
 - **Not networked:** the movement doesn't use saved moves, so it isn't client-predicted. Fine for single-player.
-- **Pieces:** the party box deals from `AGetawayGameMode::Catalog` - floor, wall, ledge, breakable panel, crate, ramp, collapsing bridge, C4 pickup. The ramp and the bridge are *directional*: `bDirectional` on the piece makes the placement ghost draw an arrow, and the piece's own +X is the way a ramp rises and a bridge drops, which is the way you are looking until you press R.
+- **Pieces:** the party box deals from `AGetawayGameMode::Catalog` - floor, wall, ledge, breakable panel, crate, ramp, collapsing bridge, C4 pickup, spikes, jump pad, vortex. The spikes and the jump pad are *surface mounted*: `bSurfaceMounted` makes the piece lie flat on the face you aim at with its own +Z out of it, and it cannot be placed in mid-air. For the jump pad that +Z is the launch direction, so the surface you choose is the direction it fires. The ramp and the bridge are *directional*: `bDirectional` on the piece makes the placement ghost draw an arrow, and the piece's own +X is the way a ramp rises and a bridge drops, which is the way you are looking until you press R. The vortex is neither: it is a free-standing column that lifts straight up however it is placed, and it is the only piece whose effect is *sustained* rather than instant - the height you get out of it is decided by how long you stay in it.
 - **Ramps need no asset:** `AGetawayRamp` builds its wedge in `OnConstruction` with `UProceduralMeshComponent` - six vertices and a convex hull, filling a 100 cm cube so the catalog can scale it like any other piece. The hull is deliberately used for simple collision (`bUseComplexAsSimpleCollision = false`) so the slope reads as one flat plane to the movement component.
 - **Not ported yet:** the in-browser level editor, share codes, run timer and checkpoints. The Unreal editor replaces the level editor; the timer and checkpoints are easy next additions.
 - **Building destruction:** for Finals-style buildings later, Unreal's Chaos Destruction (Geometry Collections with fracture levels and connection graphs) is the right tool, rather than extending `GetawayBreakable`.

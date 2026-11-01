@@ -58,12 +58,14 @@ slopes* at the end.
 
 ### The catalog
 
-Nine pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
+Eleven pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
 Z-up): floor 400x400x50, wall 400x50x400, ledge 200x200x130, breakable panel 300x50x400, crate
 100x100x100, ramp 600x400x200, collapsing bridge 1200x400x60, and the C4 pickup. The ninth is
-**spikes** (400x400x50), added 2026-10-19, which has no lab equivalent and is the only
-surface-mounted piece - see *Spikes, and death*. The party box deals `HandSize` (3) of them at
-random without repeats.
+**spikes** (400x400x50), added 2026-10-19, which has no lab equivalent and was the first
+surface-mounted piece - see *Spikes, and death*. The tenth is the **jump pad** (200x200x50),
+added 2026-10-27, surface mounted the same way - see *The jump pad* below. The eleventh is the
+**vortex** (300x300x500), added 2026-10-31, a free-standing column - see *The anti-gravity vortex*
+below. The party box deals `HandSize` (3) of them at random without repeats.
 
 Edit the catalog on a Blueprint child of `GetawayGameMode` - it is `EditDefaultsOnly`.
 
@@ -95,6 +97,171 @@ something sitting in the empty air above its low end.
   with a 6 s `RespawnDelay` until 2026-10-26 and is now off by default, see *A bridge stays down,
   and C4 gets swept up*. `WarnShake`, `TipSpeed` and `CleanupDrop` are the rest of the knobs. No
   hinge constraint and no debris - heavy destruction stays scrapped.
+
+### The jump pad (added 2026-10-27)
+
+`AGetawayJumpPad`, catalog id `jumppad`, 200 x 200 x 50 - **the second surface-mounted piece, and
+the first one that is a route rather than a hazard.** Asked for as *"a jump pad that can be placed
+on anything (even horizontally) that launches you in the direction it points"*, and
+`bSurfaceMounted` turned out to be the whole of it: the piece's own +Z is turned out of the face
+you aim at, and **that axis is the launch direction**. So one catalog entry is a trampoline on a
+floor, a horizontal shove off a wall, a slam off a ceiling and a kicker off the side of a ramp.
+There is nothing else to aim - the face you stick it to *is* the direction, and R only spins the
+plate about the normal, which on a square plate you cannot see. That is also why it needs no
+placement code of its own: the flat mount, the no-mid-air rule, the 50 cm grid along the surface,
+the overhang trim and the server's re-check all came free from the spikes.
+
+- **It never blocks you,** the pattern every trigger piece in the game follows: the meshes have
+  collision off and the trigger is QueryOnly overlapping pawns only. You run, slide or wallrun
+  through the plate and it throws you, rather than stopping you first.
+- **The launch sets your speed out of the pad and leaves your speed across it alone.** A pad is
+  therefore the same height for everybody who touches it - which is what makes it a route you can
+  plan a level around - while a fast player still carries their whole run-up through it. It is a
+  `FMath::Max`, not an assignment, so arriving faster than the pad fires is never a reason to be
+  slowed down.
+- **A pad firing along the ground you stand on is tilted upward first** (`GroundLift`, 0.35,
+  added 2026-10-27 after the first pass). A wall pad fires horizontally, and a horizontal shove
+  handed to somebody standing on the floor is eaten by ground friction before it takes them
+  anywhere, so it would read as a shrug rather than a launch. This is the same trick, and the same
+  0.35, that `AGetawayC4` uses for a blast at your feet. It applies **only while you are on the
+  ground** - hit a wall pad in the air or off a wallrun and it fires exactly where it points, since
+  there is no friction there to beat - and never to a pad firing steeply downward, because a pad
+  under a ceiling means to slam you into the floor.
+- **It reuses `UGetawayMovementComponent::ApplyBlast`** (written for the C4 rocket jump) by handing
+  it the change in velocity it wants, so dropping out of a wallrun or a mantle, and coming off the
+  ground when the kick points away from it, is already handled.
+- **Your own machine throws you,** on the frame you touched the pad - the same client-authority
+  bargain as dying on spikes and the rocket jump. Nothing about a launch goes over the wire.
+- **Armed only during a run,** like the spikes: `StartPlacement` disarms every pad, `BeginRun` arms
+  them, and arming clears the per-player retrigger times so a new round starts clean.
+- **It belongs to what it is stuck to,** again like the spikes: attached with `KeepWorldTransform`
+  (so a pad on a collapsing bridge rides it down) and bound to a breakable host's `OnBroken` /
+  `OnRestored`, so **smashing the panel under a pad takes the pad with it**. That makes the
+  breakable the answer to a route built on a pad. The host is worked out by the server tracing back
+  out of the plate, not sent by the client.
+- **The disc is a disc on purpose.** A plate with points on it is the thing that kills you, and
+  these two pieces are otherwise the same shape; a single cylinder sticking out of the plate reads
+  as a piston and shows the firing direction at a glance. It keeps its world size however the plate
+  is scaled or trimmed, the same trick the spike points use.
+- **No ghost arrow**, unlike the directional pieces. The direction is decided entirely by the face
+  you aim at, and the ghost box already lies on that face, so an arrow would add nothing. `jumppad`
+  is therefore surface-mounted but *not* `bDirectional`.
+
+The tuning is on the actor, under **Getaway|Jump Pad**, so it can be changed per pad in the Details
+panel or on a Blueprint child:
+
+| Value | Default | What it does |
+|---|---|---|
+| `LaunchSpeed` | 1400 cm/s | The launch, along the pad's +Z. About 4.9 m of height off a floor pad against the character's 1.4 m jump, so just over the test course's 500 cm rocket ledge |
+| `bAddToIncoming` | off | Off: the pad decides, so every launch is the same. On: added to what you arrive with, so pads stack and jumping into one goes much higher |
+| `SideSpeedKept` | 1.0 | How much of your speed *across* the pad survives. 1 keeps the whole arc; lower values straighten your path towards the pad's facing |
+| `GroundLift` | 0.35 | The least upward tilt a launch gets while you are standing on the ground, so a wall pad throws you off the floor instead of along it. 0 turns it off; it never applies in the air or to a pad firing steeply down |
+| `Retrigger` | 0.25 s | Per player, so one pass through a pad is one launch |
+| `LaunchViewPunch` / `LaunchShake` | 1.2 deg / 0.35 | The camera kick, matching the C4 blast's |
+| `PistonWidth` / `PistonHeight` | 120 / 30 cm | The disc, held at a constant world size and kept inside a trimmed plate |
+
+**Known duplication:** the host-binding half of this (`Host`, `BindToHost`, `OnHostBroken`,
+`SetPresent` and the replication that goes with it) is copied from `AGetawaySpikes`, about forty
+lines. Pulling both onto a shared surface-mounted base class is the obvious cleanup, and was
+deliberately left out of this pass rather than reparenting a piece that has already been played.
+
+**Not played yet.** Built clean. What is unproven is all feel: whether 1400 is the right launch,
+whether 0.35 is the right ground lift, whether a pad should straighten your path (`SideSpeedKept`
+below 1), whether a 200 cm plate is a fair target at speed, and whether a wall pad reads as a
+kicker or as a surprise.
+
+### The anti-gravity vortex (added 2026-10-31)
+
+`AGetawayVortex`, catalog id `vortex`, 300 x 300 x 500 - **the first piece whose effect is
+sustained rather than instant.** Asked for as *"an anti-gravity vortex that lifts you up quickly but
+you can move at any time through it"*. A jump pad is one kick on the frame you touch it and gravity
+owns you afterwards; the vortex cancels gravity and holds you climbing at `LiftSpeed` for as long as
+you are in the column, so **the height you get is decided by how long you stay in it** rather than
+by how hard it hit you. That is the whole point of the piece: it is a route you can leave early.
+
+- **It lifts straight up, always** - never along the piece's own axis. It is not surface mounted, so
+  it stands on the floor (or against whatever you aimed at), takes the 50 cm grid and the
+  *everything touches something* rule unchanged, and R turns a square column invisibly. Placement
+  *does* lie a piece down on a sloped face, so the visible cage is held upright in world space to
+  say that the lift is not tilted with it; only the invisible trigger box leans.
+- **You keep full control the whole way up.** Two parts to that, and the second one is the piece.
+  Source air strafing still works, so a fast run-up carries its whole arc through the column. On top
+  of it the vortex gives you *direct* horizontal steering (`SteerSpeed`, `SteerAccel`), because plain
+  Source air acceleration can only add `AirSpeedCap` (75 cm/s) to a direction you already have speed
+  in - without the extra steering, walking into a column would ride you straight up it with no say
+  in where you came out. It goes through `SourceAccelerate`, which only ever adds speed *toward* the
+  keys you are holding, so the vortex can never slow anybody down.
+- **It never blocks you,** the pattern every trigger piece in the game follows: the meshes have
+  collision off and the trigger is QueryOnly overlapping pawns only, like the spikes, the jump pad
+  and the finish.
+- **The lift is offered, not applied.** `UGetawayMovementComponent::AddVortexLift` stores it and
+  `ApplyVortexLift` takes it at the top of the component's own update, where the jump and the double
+  jump already write vertical speed - the right place, because `CalcVelocity` is handed the vertical
+  velocity stripped out while falling, so a lift written there would be thrown away. A vortex
+  re-offers every tick it holds you, and the offer is consumed whether or not one came, so **the
+  lift expires by itself one frame after you leave** and nothing has to tell the character it is
+  out. Two overlapping columns resolve to the stronger `LiftSpeed` rather than to whichever ticked
+  last.
+- **It pays gravity back.** Gravity is applied inside the move that follows the update, so the lift
+  adds `LiftAccel` *and* the `gravity * frame time` the move is about to take off again. Without
+  that the hold would sag by a frame's worth of gravity and the climb would be slower on a slower
+  machine.
+- **It wins against a wall and a ledge.** It drops you out of a wallrun or a mantle the way
+  `ApplyBlast` does, and `bBlocksWallrun` (on) stops you grabbing a wall while the column has you -
+  otherwise a vortex placed against a wall hands you a wallrun whose own gravity fights the lift and
+  you hang there. Turn it off and the wallrun wins instead.
+- **Your own machine lifts you,** on the frames you are inside - the same client-authority bargain
+  as the jump pad, dying on spikes and the rocket jump. Nothing about the lift goes over the wire;
+  the actor replicates so everybody sees the column, and `SetReplicateMovement(false)` because it
+  never moves.
+- **Armed only during a run,** like the spikes and the pad: `StartPlacement` disarms every vortex,
+  `BeginRun` arms them, and arming clears who was riding so the column catches you - camera kick and
+  all - on the first frame of the new round.
+- **The cage is a cage because you have to see through it.** The plugin ships no content and there is
+  no translucent material, so the column is six thin vertical bars round its edge plus a thin disc at
+  each end, all collisionless, built from engine BasicShapes. The bars **spin while the piece is
+  armed**, which is the only thing that says it is live; they stop between rounds. They hang off a
+  `Column` scene component rather than the actor, because turning the actor would turn the trigger
+  box and change the footprint the column catches you in. Bar and disc thickness are held at a
+  constant world size however the piece is scaled, the same trick as the jump pad's disc.
+- **`GetStateName()` reports `VORTEX`,** so the HUD's state readout shows when the column has you.
+
+The tuning is on the actor, under **Getaway|Vortex**, so it can be changed per column in the Details
+panel or on a Blueprint child:
+
+| Value | Default | What it does |
+|---|---|---|
+| `LiftSpeed` | 1000 cm/s | The climb it holds you at. Crosses the 500 cm column in about half a second and leaves you with 1000 cm/s, which coasts a further 250 cm - so around 7.5 m in all if you ride the whole thing, against the 140 cm of a plain jump |
+| `LiftAccel` | 6000 cm/s² | How fast you reach it. It has to beat gravity (about 2000 here) by a long way or the catch feels soft; 6000 gets there in about 0.17 s, the first 85 cm of the column |
+| `SteerSpeed` | 400 cm/s | How fast you can move sideways inside the column under your own steam. A target, not a limit: run in faster and you keep it |
+| `SteerAccel` | 8 | How sharply that steering answers the keys. A Source coefficient, like `GroundAccelerate`'s 10 |
+| `bBlocksWallrun` | on | You cannot grab a wall while the column has you. Off lets a wallrun override the lift |
+| `LiftViewPunch` / `LiftShake` | 0.8 deg / 0.2 | The camera kick as it catches you, lighter than the pad's |
+| `BarCount` / `BarThickness` | 8 / 12 cm | The cage. Eight because the 300 cm ring leaves six of them over a metre apart. Up to 12 bars; they are pooled in the constructor and the spares hidden, as the spikes pool their points |
+| `DiscThickness` | 10 cm | The discs at each end |
+| `SpinRate` | 220 deg/s | How fast the cage turns while armed. 0 stops it |
+
+It was built at 100 x 100 x 200 and resized to 300 x 300 x 500 the same day, before it was ever
+played - a 1 m mouth was too small to hit at a run. The size is one line in the catalog and
+everything in the piece is driven off the actor scale, so nothing else had to change; `LiftAccel`
+came down from 9000 to 6000 and the cage went from six bars to eight, both because the piece is no
+longer short and narrow.
+
+**Not played yet.** Built clean, no warnings. What is unproven is all feel: whether 1000 is the
+right climb for a 5 m column, whether 400 of steering is too loose or too stiff, whether a 3 m
+footprint is now too easy a target, whether shooting out of the top at full climb is better than
+cresting, and whether the spinning cage reads as a vortex at all.
+
+**Known quirks, left alone deliberately:**
+
+- **A double jump inside the column is wasted.** You are falling, so the air jump is available, but
+  it sets vertical speed to `JumpSpeed * 0.92` (690), which is below the lift's hold, so the lift
+  simply tops it back up and nothing visible happens. Refilling or refusing the air jump inside a
+  vortex are both one line, but which one is right is a feel question.
+- **A vortex on a slope has an upright cage and a leaning trigger box,** so a bar can poke a few
+  centimetres outside the volume that actually lifts you. Cosmetic, and only on slopes.
+- **Nothing but pawns is affected.** C4 charges, loose scraps and a collapsing bridge fall through a
+  column as if it were not there.
 
 ### Gotcha: Enhanced Input contexts outlive the pawn
 

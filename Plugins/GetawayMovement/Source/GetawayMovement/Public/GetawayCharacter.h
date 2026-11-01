@@ -141,6 +141,78 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look")
 	float CrouchedEyeHeightAboveFeet = 95.f;
 
+	/* ---------------- Look and move on a pad ---------------- */
+
+	/**
+	 * Turn rate at full stick, in degrees per second, before the response curve bites.
+	 *
+	 * This is a rate and not a sensitivity: a stick says how far it is held, so it has to be turned
+	 * into degrees per second and multiplied by the frame time, where a mouse already reports a
+	 * delta. Vertical is slower than horizontal on purpose, which is what nearly every pad shooter
+	 * does - you need the full 180 sideways and barely 90 up and down.
+	 *
+	 * These are the same unit as Apex Legends' Advanced Look Controls "Yaw Speed" and "Pitch
+	 * Speed", so a value from there can be typed in here directly. The defaults aim at Apex's
+	 * 4 Linear - see docs/controller.md for where the numbers come from and how to check them.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "10"))
+	float StickLookYawSpeed = 230.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "10"))
+	float StickLookPitchSpeed = 180.f;
+
+	/**
+	 * How much of the stick's travel is fine aiming. 1 is linear - the whole stick is one straight
+	 * line from nothing to full rate, which is what Apex calls Linear and what its players use.
+	 * Above 1, the inner half is slow and precise and the outer edge is fast.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "1", ClampMax = "4"))
+	float StickLookExponent = 1.f;
+
+	/**
+	 * Radial dead zone for the look stick. The travel past it is rescaled back to the full range.
+	 * Small on purpose: a linear curve with a wide dead zone throws away the slow end of the stick,
+	 * which is the part a linear player is aiming with. Raise it if your sticks drift at rest.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float StickLookDeadZone = 0.05f;
+
+	/**
+	 * Turn spin-up, in seconds: a flick starts at StickLookRampStartScale of the full rate and
+	 * reaches it after this long, so small corrections do not snap. 0 turns it off, which is what
+	 * Apex's Linear players do with its Turning Extra Yaw and ramp-up settings - a ramp means the
+	 * same stick position turns you at different rates depending on how long you have held it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "0", ClampMax = "1"))
+	float StickLookRampTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "0.05", ClampMax = "1"))
+	float StickLookRampStartScale = 0.5f;
+
+	/** Separate from bInvertMouseY, because wanting one inverted says nothing about the other. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)")
+	bool bInvertStickY = false;
+
+	/** Radial dead zone for the move stick. Wider than the look stick's: walking slightly when you
+	 *  meant to stand still matters less than an aim that creeps, and a movement game wants the
+	 *  stick to read as "not pushed" the moment you let go. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Move (Pad)", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float MoveStickDeadZone = 0.12f;
+
+	/**
+	 * Push the stick past this and it counts as pushed all the way.
+	 *
+	 * Source air acceleration grows with how far sideways your input points, so a stick held most
+	 * of the way air strafes worse than A or D, which are always 100%. This hands the outer fifth
+	 * of the stick back. Set it to 1 for honest analogue input.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Move (Pad)", meta = (ClampMin = "0.5", ClampMax = "1"))
+	float MoveStickFullTilt = 0.9f;
+
+	/** True while the last thing you touched was the pad, so the HUD can name the right buttons. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool IsUsingGamepad() const { return bUsingGamepad; }
+
 	/* ---------------- C4 ---------------- */
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|C4")
@@ -207,16 +279,23 @@ public:
 	void ServerReportBreak(class AGetawayBreakable* Breakable, FVector_NetQuantize100 Velocity);
 
 	/**
-	 * Killed by a trap. Call it on the machine that owns this character: it stops you where you
-	 * stand and tells the server, which ends your round and credits whoever placed the thing.
-	 * Dying does not respawn you - your run is over until the next round, as in Ultimate Chicken
-	 * Horse. Safe to call twice; the second one does nothing.
+	 * Killed by a trap, or by falling. Call it on the machine that owns this character: it stops
+	 * you where you stand and tells the server, which credits whoever placed the thing and then
+	 * puts you back at the start - or ends your run for the round, if the game mode's
+	 * `bRespawnOnDeath` is off. Safe to call twice; the second one does nothing.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Getaway")
 	void Die(AActor* KilledBy);
 
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	bool IsDead() const { return bDead; }
+
+	/**
+	 * Whether dying puts you back at the start - the game mode's `bRespawnOnDeath`. Works on a
+	 * client, which has no game mode of its own: it reads the replicated game mode class default.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool WillRespawnOnDeath() const;
 
 	/**
 	 * Fall below this and you die - measured at your feet, in world Z, so -100 is one metre under
@@ -298,7 +377,13 @@ private:
 	void OnRep_NetMove();
 
 	void OnMove(const FInputActionValue& Value);
+	void OnMoveStick(const FInputActionValue& Value);
+	/** Shared by both of the above: a 2D wish direction, turned into world movement. */
+	void ApplyMoveInput(const FVector2D& Axis);
 	void OnLook(const FInputActionValue& Value);
+	void OnLookStick(const FInputActionValue& Value);
+	void OnLookStickReleased(const FInputActionValue& Value);
+	void OnGamepadUsed(const FInputActionValue& Value);
 	void OnJumpPressed(const FInputActionValue& Value);
 	void OnJumpReleased(const FInputActionValue& Value);
 	void OnJumpTap(const FInputActionValue& Value);
@@ -311,7 +396,10 @@ private:
 
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MappingContext;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> MoveAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> MoveStickAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> LookAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> LookStickAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> GamepadProbeAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> JumpAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> JumpTapAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CrouchAction;
@@ -342,4 +430,10 @@ private:
 	float Punch = 0.f;
 	float Shake = 0.f;
 	float SeenDoubleJumpTime = -100.f;
+
+	/** How long the look stick has been off centre, for the turn spin-up. */
+	float StickLookHeld = 0.f;
+
+	/** Purely for the HUD's hint lines. Local to this machine; nothing about it replicates. */
+	bool bUsingGamepad = false;
 };

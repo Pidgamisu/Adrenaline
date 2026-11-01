@@ -89,7 +89,10 @@ void AGetawayHUD::DrawHUD()
 		? FString(TEXT("C4  none"))
 		: FString::Printf(TEXT("C4  x%d%s"), Held, (Held >= Player->MaxCharges) ? TEXT("  full") : TEXT(""));
 	DrawText(C4Line, (Held > 0) ? Urgent : Dim, 24.f, 24.f, Small, 1.4f);
-	DrawText(TEXT("G throw C4  |  F detonate  |  Backspace gives up the run"), Dim, 24.f, 50.f, Small, 1.f);
+	DrawText(Player->IsUsingGamepad()
+			? TEXT("RB throw C4  |  RT detonate  |  View gives up the run")
+			: TEXT("G throw C4  |  F detonate  |  Backspace gives up the run"),
+		Dim, 24.f, 50.f, Small, 1.f);
 }
 
 /* ============================================================ the scoreboard */
@@ -194,6 +197,14 @@ void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const A
 	// back mid-run with your unspent pieces still in it).
 	const FGetawayPlacement P = Placing->GetPlacement();
 	const bool bCanBuild = Placing->CanBuildNow();
+
+	// Name the buttons on the thing they are actually holding. The pawn flips this as soon as the
+	// pad or the mouse is touched, so a hint that says "Click" while you hold a pad is at most one
+	// twitch of the right stick out of date.
+	const bool bPad = Placing->IsUsingGamepad();
+	const TCHAR* PlaceVerb = bPad ? TEXT("A") : TEXT("Click");
+	const TCHAR* TurnKey = bPad ? TEXT("X") : TEXT("R");
+
 	FString Status;
 	if (bImDone)
 	{
@@ -207,8 +218,8 @@ void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const A
 		: TEXT("Aim at a surface");
 	else if (P.bBlocked) Status = TEXT("Blocked - something is in the way");
 	else if (P.bFloating) Status = TEXT("Nothing to build off - it has to touch something");
-	else if (P.bTrimmed) Status = TEXT("Click to place  -  trimmed to fit");
-	else Status = TEXT("Click to place");
+	else if (P.bTrimmed) Status = FString::Printf(TEXT("%s to place  -  trimmed to fit"), PlaceVerb);
+	else Status = FString::Printf(TEXT("%s to place"), PlaceVerb);
 
 	const FLinearColor StatusColour = bImDone ? Go : ((bCanBuild && P.CanPlace()) ? Live : Urgent);
 	DrawText(Status, StatusColour, CX - 90.f, Bottom - 90.f, Small, 1.3f);
@@ -216,13 +227,17 @@ void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const A
 	// A ramp or a bridge plays differently depending on which way round it is, so say which way.
 	if (P.bDirectional)
 	{
-		DrawText(FString::Printf(TEXT("Facing %s  -  R turns it"), *Placing->GetFacingName()),
+		DrawText(FString::Printf(TEXT("Facing %s  -  %s turns it"), *Placing->GetFacingName(), TurnKey),
 			Dim, CX - 90.f, Bottom - 68.f, Small, 1.1f);
 	}
 
-	DrawText(TEXT("WASD + Space/C fly  |  Shift faster  |  wheel picks a piece  |  R turns it"),
+	DrawText(bPad
+			? TEXT("Left stick + triggers fly  |  LB faster  |  D-pad picks a piece  |  X turns it")
+			: TEXT("WASD + Space/C fly  |  Shift faster  |  wheel picks a piece  |  R turns it"),
 		Dim, 40.f, 24.f, Small, 1.f);
-	DrawText(TEXT("Click places  |  Enter when you are done  |  everyone sets off together"),
+	DrawText(bPad
+			? TEXT("A places  |  Start when you are done  |  everyone sets off together")
+			: TEXT("Click places  |  Enter when you are done  |  everyone sets off together"),
 		Dim, 40.f, 48.f, Small, 1.f);
 }
 

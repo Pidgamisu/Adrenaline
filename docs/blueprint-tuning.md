@@ -2,15 +2,21 @@
 
 Added 2026-10-26. How to change a feel value and keep it, without touching C++.
 
-## The two Blueprints
+## The three Blueprints
 
 | Asset | Parent | What it is for |
 |---|---|---|
 | `/Game/Blueprints/BP_Character` | `AGetawayCharacter` | The pawn that actually spawns. Tune movement here. |
-| `/Game/Blueprints/BP_GetawayGameMode` | `AGetawayGameMode` | Changes nothing except `Default Pawn Class = BP_Character`. |
+| `/Game/Blueprints/BP_PlacementCamera` | `AGetawayPlacementPawn` | The placement fly camera. Added 2026-10-31 so its fly speed and pad look values could be tuned in the editor at all. |
+| `/Game/Blueprints/BP_GetawayGameMode` | `AGetawayGameMode` | Changes nothing except `Default Pawn Class = BP_Character` and `Placement Pawn Class = BP_PlacementCamera`. |
 
-Both are created by `Content/Python/setup_tuning_blueprints.py` (*Tools > Execute Python Script...*).
-It is safe to re-run: it reuses assets that already exist, so tuning is never overwritten.
+All three are created by `Content/Python/setup_tuning_blueprints.py`
+(*Tools > Execute Python Script...*). It is safe to re-run: it reuses assets that already exist, so
+tuning is never overwritten, and it only ever writes the game mode's two pawn class fields.
+
+`PlacementPawnClass` is `EditDefaultsOnly` on the game mode and is read by
+`AGetawayGameMode::StartPlacementFor` when it spawns the camera, with the C++ class as a fallback,
+so an unset or broken value falls back to the old behaviour rather than failing to spawn.
 
 ## Why the game mode needs a Blueprint too
 
@@ -81,3 +87,7 @@ that table, not only in the Blueprint - a Blueprint-only value is invisible to a
   move, but it is the one gap left.
 - **Changing a value in `BP_Character` and feeling it has not been done.** The wiring is proved; the
   round trip through the Details panel is not.
+- **`BP_PlacementCamera` exists and the script's write took: run 2026-10-31 and reported clean.**
+  `placement_pawn_class` does accept a Blueprint class through `set_editor_property`, the same as
+  `default_pawn_class`. What has *not* been done is changing a value on `BP_PlacementCamera` and
+  feeling it in the camera - the same gap as `BP_Character` above.

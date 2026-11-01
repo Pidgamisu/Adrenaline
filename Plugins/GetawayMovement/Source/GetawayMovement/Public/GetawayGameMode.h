@@ -148,16 +148,34 @@ public:
 	void GiveUpRunFor(APlayerController* PC);
 
 	/**
-	 * A trap killed somebody. Ends their run, credits whoever placed the thing, and checks whether
-	 * that was the last runner. Server only; `AGetawayCharacter::Die` routes here.
-	 *
-	 * Dying does not respawn you. Your run is over until the next round, which is what Ultimate
-	 * Chicken Horse does and what the existing round-over logic already expects.
+	 * A trap killed somebody. Credits whoever placed the thing and then, after `DeathLingerTime`,
+	 * either puts the victim back at the start or ends their run, depending on `bRespawnOnDeath`.
+	 * Server only; `AGetawayCharacter::Die` routes here.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Getaway")
 	void PlayerDied(APlayerController* PC, AActor* KilledBy);
 
-	/** Beat between being killed and being put back in the fly camera, so you see what got you. */
+	/**
+	 * Put one player back at the PlayerStart with a fresh character, their run still live. Server
+	 * only; `PlayerDied` calls it after the linger. Does nothing outside a run, or for a player
+	 * who is not running.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway")
+	void RespawnRunner(APlayerController* PC);
+
+	/**
+	 * Dying puts you back at the start and your run carries on, as many times as you like until
+	 * the run clock runs out.
+	 *
+	 * Turn it off for the old behaviour, which is what Ultimate Chicken Horse itself does: one
+	 * death ends your run for the round and you watch the rest from the fly camera, scoring
+	 * nothing. With it on, the thing that stops a brutal level dragging is `RunTimeLimit` and the
+	 * `FinishGraceTime` hurry-up, not the death itself.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Round")
+	bool bRespawnOnDeath = true;
+
+	/** Beat between being killed and being moved, so you get a look at what got you. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Round", meta = (ClampMin = "0"))
 	float DeathLingerTime = 1.2f;
 

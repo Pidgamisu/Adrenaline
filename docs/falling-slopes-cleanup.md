@@ -28,10 +28,12 @@ the round loop.
   it is one metre under a course whose floor is at zero. It is checked every frame in `Tick`, on the
   machine that owns the character only - the same bargain as spikes and breaking, where the victim's
   own eyes decide and the server decides what it means.
-- **It goes through `Die(nullptr)`**, so a fall is exactly a spike: your run ends where you fell, you
-  watch the rest from the fly camera after `DeathLingerTime`, and you score nothing. A null killer is
-  already what `RegisterTrapKill` treats as nobody to credit, so **nobody is paid for your fall** -
-  not even the player whose piece you were trying to clear.
+- **It goes through `Die(nullptr)`**, so a fall is exactly a spike: whatever dying costs you, falling
+  off costs you the same thing. Since 2026-10-31 that is a trip back to the start after
+  `DeathLingerTime` rather than the end of your run - see *Dying puts you back at the start* in
+  `docs/spikes-and-death.md`. A null killer is already what `RegisterTrapKill` treats as nobody to
+  credit, so **nobody is paid for your fall** - not even the player whose piece you were trying to
+  clear.
 - **Only while you are running.** `IsRunning()` is checked first, so a player still standing around
   during the finish banner is not told they have been killed.
 - **`FellOutOfWorld` is overridden as well**, on both pawns. On the character it is the backstop: if

@@ -8,12 +8,13 @@ A 3D, first-person take on **Ultimate Chicken Horse**: each round, players draft
 
 Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` plugin.
 
-## Where things stand (2026-10-26)
+## Where things stand (2026-10-27)
 
 - **Movement:** ported from the browser prototype and signed off.
+- **Input:** keyboard and mouse, plus a full controller map for both the run and the placement camera (not yet play-tested with a pad in hand). See `docs/controller.md`.
 - **Multiplayer:** client-authoritative, two players play-tested 2026-10-17.
 - **Round loop:** shared placement phase with a build clock, the run, Ultimate Chicken Horse scoring, and deaths (spikes, falling off the course).
-- **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes.
+- **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes, jump pad, anti-gravity vortex.
 - **Art:** none yet. Everything is grey boxes and debug-line ghosts. Free third-party assets come later.
 
 ## Where the details live
@@ -28,6 +29,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 | `docs/round-loop.md` | phases, scoring, shared placement, syncing breakables, bridge, C4 and pickups |
 | `docs/spikes-and-death.md` | spikes, surface-mounted pieces, dying, breakables |
 | `docs/falling-slopes-cleanup.md` | fall deaths, the "everything touches something" rule, pieces on slopes, between-round cleanup |
+| `docs/controller.md` | controller support: the button map, stick tuning, why a stick can't use the mouse look code |
 | `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named |
 | `Plugins/GetawayMovement/README.md` | setup, controls and the full tuning table |
 | `Reference/getaway-lab.html` | the browser prototype: the reference for how movement should **feel** |
@@ -94,6 +96,7 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Destruction stays simple:** only panels and crates break, into loose scraps the player can shove around. A Finals-style fracture/collapse system was tried in the prototype and **scrapped**: it was too heavy and didn't feel like The Finals. If big destruction comes back later, use Chaos Destruction (Geometry Collections), not custom code.
 - **Camera effects:** wallrun tilt, speed FOV, shake, landing kick and mantle jiggle are wanted, with a toggle to turn them off. Note when porting camera effects: roll signs invert between the lab and Unreal. three.js rolls about a camera Z axis pointing back at the viewer; Unreal rolls about forward X in the aviation sense (positive = right side down). Copying a roll formula across verbatim tilts it the wrong way, which is exactly what happened to the wallrun tilt (fixed 2026-10-15). A camera "shaking" bug was reported in the prototype and was likely frame-timing judder. Movement should look smooth at any refresh rate.
 
+- **Dying puts you back at the start** (decided 2026-10-31, replacing "death ends your run for the round"). A fresh character at the PlayerStart after `DeathLingerTime`, your run state untouched, as many times as the run clock allows. Your C4 charges do not come back with you (confirmed 2026-10-31). The game mode's `bRespawnOnDeath` turns it off for the old Ultimate Chicken Horse behaviour. See `docs/spikes-and-death.md`.
 - **Local first, Steam later** (decided 2026-10-26). Build and test for local/LAN play now. Steamworks, online sessions and achievements wait until the game is fun locally.
 - **Client-authoritative multiplayer is fine for local play. Revisit it before Steam.** Each machine decides where its own player is, which makes cheating easy with strangers online. That is a deliberate trade-off for now, not something to fix unasked.
 

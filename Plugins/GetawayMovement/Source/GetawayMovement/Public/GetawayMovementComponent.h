@@ -162,6 +162,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Getaway")
 	void ApplyBlast(const FVector& DeltaVelocity);
 
+	/**
+	 * A sustained lift, from an AGetawayVortex you are inside. Unlike ApplyBlast this is not a kick:
+	 * the vortex hands it over again every frame it holds you, and it expires by itself one frame
+	 * after it stops doing so, so nothing has to tell the character it has left.
+	 *
+	 * UpSpeed is the climb it holds you at (cm/s) and UpAccel how fast you get there (cm/s^2). The
+	 * steer pair is Source-style - SteerSpeed is a target in cm/s and SteerAccel a coefficient like
+	 * GroundAccelerate - and it only ever adds speed toward the keys you are holding, so the lift
+	 * can never slow down a player who arrived fast. The strongest UpSpeed wins if two overlap.
+	 */
+	void AddVortexLift(float UpSpeed, float UpAccel, float SteerSpeed, float SteerAccel, bool bBlockWallrun);
+
+	/** True on a frame a vortex is holding you up. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool IsInVortex() const { return bVortexActive; }
+
 	/* ---------------- State ---------------- */
 
 	UFUNCTION(BlueprintPure, Category = "Getaway")
@@ -227,6 +243,9 @@ private:
 	void SmashAhead(float DeltaTime);
 	void PushScraps();
 
+	// Vortex lift
+	void ApplyVortexLift(float DeltaSeconds);
+
 	// Runtime state
 	bool bJumpHeld = false;
 	bool bCrouchHeld = false;
@@ -247,6 +266,19 @@ private:
 	bool bHasLastWall = false;
 	FVector LastWallNormal = FVector::ZeroVector;
 	float LastWallPlane = 0.f;
+
+	/**
+	 * The lift a vortex has offered for the next update, and whether one is holding you now. Set by
+	 * AddVortexLift and consumed once per tick, so a vortex that stops calling stops lifting - no
+	 * end-overlap bookkeeping, and two overlapping columns resolve to the stronger one by themselves.
+	 */
+	float VortexUpSpeed = 0.f;
+	float VortexUpAccel = 0.f;
+	float VortexSteerSpeed = 0.f;
+	float VortexSteerAccel = 0.f;
+	bool bVortexBlocksWallrun = false;
+	bool bVortexOffered = false;
+	bool bVortexActive = false;
 
 	FVector MantleStart = FVector::ZeroVector;
 	FVector MantleEnd = FVector::ZeroVector;

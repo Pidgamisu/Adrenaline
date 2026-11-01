@@ -91,6 +91,40 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look", meta = (ClampMin = "60", ClampMax = "140"))
 	float BaseFOV = 100.f;
 
+	/* ---------------- Look on a pad ---------------- */
+
+	/**
+	 * Degrees per second at full stick. Slower than the character's, because this camera is for
+	 * lining a piece up rather than fighting, and a fast pad turn here overshoots the grid square
+	 * you were aiming at. See AGetawayCharacter for why the stick cannot share the mouse formula.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "10"))
+	float StickLookYawSpeed = 150.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "10"))
+	float StickLookPitchSpeed = 110.f;
+
+	/** Linear, to match the character's stick. Only the speeds differ between the two. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "1", ClampMax = "4"))
+	float StickLookExponent = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float StickLookDeadZone = 0.05f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look (Pad)")
+	bool bInvertStickY = false;
+
+	/** Radial dead zone for the fly stick, and a flat one for the up/down triggers. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Fly (Pad)", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float MoveStickDeadZone = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Fly (Pad)", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float TriggerDeadZone = 0.1f;
+
+	/** True while the last thing you touched was the pad, so the HUD can name the right buttons. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool IsUsingGamepad() const { return bUsingGamepad; }
+
 	/* ---------------- Placement ---------------- */
 
 	/** Snap step in cm on the two axes that are not pinned to the surface. The lab uses 0.5 m. */
@@ -238,7 +272,11 @@ private:
 
 	void OnMove(const FInputActionValue& Value);
 	void OnUpDown(const FInputActionValue& Value);
+	void OnMoveStick(const FInputActionValue& Value);
+	void OnUpDownStick(const FInputActionValue& Value);
 	void OnLook(const FInputActionValue& Value);
+	void OnLookStick(const FInputActionValue& Value);
+	void OnGamepadUsed(const FInputActionValue& Value);
 	void OnFast(const FInputActionValue& Value);
 	void OnSlow(const FInputActionValue& Value);
 	void OnPlace(const FInputActionValue& Value);
@@ -250,7 +288,11 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MappingContext;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> MoveAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> UpDownAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> MoveStickAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> UpDownStickAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> LookAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> LookStickAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> GamepadProbeAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> FastAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> PlaceAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RotateAction;
@@ -260,8 +302,20 @@ private:
 
 	FVector2D MoveInput = FVector2D::ZeroVector;
 	float UpInput = 0.f;
+
+	/**
+	 * The pad's fly input, kept apart from the keyboard's rather than written into the same fields.
+	 * Both are latched until the input is released, so sharing them would mean the stick going
+	 * back to centre also wiping WASD for anyone using both at once. Tick adds the two together.
+	 */
+	FVector2D StickMoveInput = FVector2D::ZeroVector;
+	float StickUpInput = 0.f;
+
 	bool bFast = false;
 	FVector FlyVelocity = FVector::ZeroVector;
+
+	/** Purely for the HUD's hint lines. Local to this machine; nothing about it replicates. */
+	bool bUsingGamepad = false;
 
 	int32 HandSlot = 0;
 	int32 ManualRotation = 0;

@@ -111,6 +111,7 @@ FString UGetawayMovementComponent::GetStateName() const
 {
 	if (IsMantling()) return TEXT("MANTLE");
 	if (IsWallRunning()) return TEXT("WALLRUN");
+	if (bVortexActive) return TEXT("VORTEX");
 	if (bSliding) return TEXT("SLIDE");
 	if (!IsMovingOnGround()) return TEXT("AIR");
 	if (IsCrouching()) return TEXT("CROUCH");
@@ -222,6 +223,10 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 {
 	SlideCooldownLeft -= DeltaSeconds;
 	WallCooldown -= DeltaSeconds;
+
+	// Before the mantle bail-out below, so a vortex always wins: like a C4 blast or a jump pad it
+	// takes you out of a scripted climb rather than waiting politely for it to finish.
+	ApplyVortexLift(DeltaSeconds);
 
 	// Keep the capsule size fixed for the whole mantle, so the climb lands where it was measured.
 	if (IsMantling())
@@ -345,6 +350,72 @@ void UGetawayMovementComponent::ApplyBlast(const FVector& DeltaVelocity)
 	}
 }
 
+/* ============================================================ vortex lift */
+
+void UGetawayMovementComponent::AddVortexLift(float UpSpeed, float UpAccel, float SteerSpeed,
+	float SteerAccel, bool bBlockWallrun)
+{
+	// Strongest climb wins where two columns overlap, rather than the last one to tick.
+	if (bVortexOffered && UpSpeed <= VortexUpSpeed)
+	{
+		bVortexBlocksWallrun |= bBlockWallrun;
+		return;
+	}
+
+	VortexUpSpeed = UpSpeed;
+	VortexUpAccel = UpAccel;
+	VortexSteerSpeed = SteerSpeed;
+	VortexSteerAccel = SteerAccel;
+	bVortexBlocksWallrun = bVortexOffered ? (bVortexBlocksWallrun || bBlockWallrun) : bBlockWallrun;
+	bVortexOffered = true;
+}
+
+void UGetawayMovementComponent::ApplyVortexLift(float DeltaSeconds)
+{
+	// Consume the offer, whether or not there was one: a vortex re-offers every frame it holds you,
+	// so this is what makes the lift stop a frame after you leave the column.
+	bVortexActive = bVortexOffered;
+	bVortexOffered = false;
+
+	if (!bVortexActive || DeltaSeconds < MIN_TICK_TIME)
+	{
+		return;
+	}
+
+	// The vortex is a route, so it takes priority over a wall or a ledge you happen to be on.
+	if (IsWallRunning() || IsMantling())
+	{
+		SetMovementMode(MOVE_Falling);
+	}
+
+	// Gravity is applied inside the move that follows this, so the lift pays it back as well as
+	// adding its own climb. Without that the hold sags by gravity * frame time and the rise would
+	// be slower on a slower machine.
+	const float GravityBack = -GetGravityZ() * DeltaSeconds;
+	const float Target = VortexUpSpeed + GravityBack;
+	if (Velocity.Z < Target)
+	{
+		Velocity.Z = FMath::Min(Target, Velocity.Z + VortexUpAccel * DeltaSeconds + GravityBack);
+	}
+
+	// Standing in the bottom of a column: come off the floor so the climb can happen at all.
+	if (IsMovingOnGround() && Velocity.Z > 50.f)
+	{
+		bSliding = false;
+		SetMovementMode(MOVE_Falling);
+	}
+
+	// Direct steering, which is the whole point of the piece: plain Source air acceleration can only
+	// add AirSpeedCap (75) to a direction you already have speed in, so without this you would ride
+	// the column wherever you entered it. SourceAccelerate never brakes you, so somebody who ran in
+	// fast keeps every bit of their run-up through it.
+	const float Analog = WishAnalog();
+	if (Analog > 0.f && VortexSteerSpeed > 0.f)
+	{
+		SourceAccelerate(Acceleration.GetSafeNormal2D(), VortexSteerSpeed * Analog, VortexSteerAccel, DeltaSeconds);
+	}
+}
+
 /* ============================================================ wallrun */
 
 bool UGetawayMovementComponent::TraceWall(const FVector& Dir, float Reach, FHitResult& OutHit, float& OutGap) const
@@ -406,6 +477,9 @@ bool UGetawayMovementComponent::IsSameWall(const FVector& Normal, const FVector&
 bool UGetawayMovementComponent::TryStartWallRun()
 {
 	if (WallCooldown > 0.f || bCrouchHeld) return false;
+	// A column that reaches a wall would otherwise have you grab it and hang there with the wallrun's
+	// own gravity fighting the lift. The wind wins; the vortex can turn this off per piece.
+	if (bVortexActive && bVortexBlocksWallrun) return false;
 
 	const float HSpeed = Velocity.Size2D();
 	if (HSpeed < WallRunMinSpeed || Velocity.Z < -1200.f) return false;

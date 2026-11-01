@@ -2,9 +2,11 @@
 #include "GetawayBreakable.h"
 #include "GetawayGameMode.h"
 #include "GetawayGameState.h"
+#include "GetawayJumpPad.h"
 #include "GetawayPlayerState.h"
 #include "GetawayRamp.h"
 #include "GetawaySpikes.h"
+#include "GetawayStickInput.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
@@ -216,6 +218,12 @@ void AGetawayPlacementPawn::BuildDefaultInput()
 	};
 	MoveAction      = MakeAction(TEXT("IA_PlaceMove"), EInputActionValueType::Axis2D);
 	UpDownAction    = MakeAction(TEXT("IA_PlaceUpDown"), EInputActionValueType::Axis1D);
+	// Separate actions for the pad, for the same reasons as on the character: a stick is a rate
+	// where a mouse is a delta, and the stick's dead zone must not reshape the keyboard's input.
+	MoveStickAction   = MakeAction(TEXT("IA_PlaceMoveStick"), EInputActionValueType::Axis2D);
+	UpDownStickAction = MakeAction(TEXT("IA_PlaceUpDownStick"), EInputActionValueType::Axis1D);
+	LookStickAction   = MakeAction(TEXT("IA_PlaceLookStick"), EInputActionValueType::Axis2D);
+	GamepadProbeAction = MakeAction(TEXT("IA_PlacePadProbe"), EInputActionValueType::Boolean);
 	LookAction      = MakeAction(TEXT("IA_PlaceLook"), EInputActionValueType::Axis2D);
 	FastAction      = MakeAction(TEXT("IA_PlaceFast"), EInputActionValueType::Boolean);
 	PlaceAction     = MakeAction(TEXT("IA_PlacePlace"), EInputActionValueType::Boolean);
@@ -255,6 +263,28 @@ void AGetawayPlacementPawn::BuildDefaultInput()
 	MappingContext->MapKey(NextPieceAction, EKeys::MouseScrollUp);
 	MappingContext->MapKey(PrevPieceAction, EKeys::MouseScrollDown);
 	MappingContext->MapKey(StartRunAction, EKeys::Enter);
+
+	// The pad. Up and down go on the analogue triggers rather than two buttons, so you can ease a
+	// piece into place; A places, because A is the confirm button everywhere else; Start says you
+	// are done building, which is the same promise Enter makes.
+	MappingContext->MapKey(MoveStickAction, EKeys::Gamepad_Left2D);
+	MappingContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
+	MappingContext->MapKey(UpDownStickAction, EKeys::Gamepad_RightTriggerAxis);
+	{
+		FEnhancedActionKeyMapping& M = MappingContext->MapKey(UpDownStickAction, EKeys::Gamepad_LeftTriggerAxis);
+		M.Modifiers.Add(NewObject<UInputModifierNegate>(this));
+	}
+	MappingContext->MapKey(FastAction, EKeys::Gamepad_LeftShoulder);
+	MappingContext->MapKey(PlaceAction, EKeys::Gamepad_FaceButton_Bottom);
+	MappingContext->MapKey(RotateAction, EKeys::Gamepad_FaceButton_Left);
+	MappingContext->MapKey(NextPieceAction, EKeys::Gamepad_DPad_Right);
+	MappingContext->MapKey(PrevPieceAction, EKeys::Gamepad_DPad_Left);
+	MappingContext->MapKey(StartRunAction, EKeys::Gamepad_Special_Right);
+
+	for (const FKey& Key : GetawayStick::ProbeKeys())
+	{
+		MappingContext->MapKey(GamepadProbeAction, Key);
+	}
 }
 
 void AGetawayPlacementPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -289,6 +319,12 @@ void AGetawayPlacementPawn::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	Input->BindAction(MoveAction, ETriggerEvent::Completed, this, &AGetawayPlacementPawn::OnMove);
 	Input->BindAction(UpDownAction, ETriggerEvent::Triggered, this, &AGetawayPlacementPawn::OnUpDown);
 	Input->BindAction(UpDownAction, ETriggerEvent::Completed, this, &AGetawayPlacementPawn::OnUpDown);
+	Input->BindAction(MoveStickAction, ETriggerEvent::Triggered, this, &AGetawayPlacementPawn::OnMoveStick);
+	Input->BindAction(MoveStickAction, ETriggerEvent::Completed, this, &AGetawayPlacementPawn::OnMoveStick);
+	Input->BindAction(UpDownStickAction, ETriggerEvent::Triggered, this, &AGetawayPlacementPawn::OnUpDownStick);
+	Input->BindAction(UpDownStickAction, ETriggerEvent::Completed, this, &AGetawayPlacementPawn::OnUpDownStick);
+	Input->BindAction(LookStickAction, ETriggerEvent::Triggered, this, &AGetawayPlacementPawn::OnLookStick);
+	Input->BindAction(GamepadProbeAction, ETriggerEvent::Started, this, &AGetawayPlacementPawn::OnGamepadUsed);
 	Input->BindAction(LookAction, ETriggerEvent::Triggered, this, &AGetawayPlacementPawn::OnLook);
 	Input->BindAction(FastAction, ETriggerEvent::Started, this, &AGetawayPlacementPawn::OnFast);
 	Input->BindAction(FastAction, ETriggerEvent::Completed, this, &AGetawayPlacementPawn::OnSlow);
@@ -304,14 +340,56 @@ void AGetawayPlacementPawn::OnUpDown(const FInputActionValue& Value) { UpInput =
 void AGetawayPlacementPawn::OnFast(const FInputActionValue&) { bFast = true; }
 void AGetawayPlacementPawn::OnSlow(const FInputActionValue&) { bFast = false; }
 
+void AGetawayPlacementPawn::OnMoveStick(const FInputActionValue& Value)
+{
+	bUsingGamepad = true;
+	StickMoveInput = GetawayStick::ApplyDeadZone(Value.Get<FVector2D>(), MoveStickDeadZone);
+}
+
+void AGetawayPlacementPawn::OnUpDownStick(const FInputActionValue& Value)
+{
+	bUsingGamepad = true;
+	StickUpInput = GetawayStick::ApplyDeadZone(Value.Get<float>(), TriggerDeadZone);
+}
+
+void AGetawayPlacementPawn::OnGamepadUsed(const FInputActionValue&)
+{
+	bUsingGamepad = true;
+}
+
 void AGetawayPlacementPawn::OnLook(const FInputActionValue& Value)
 {
 	if (!Controller) return;
+	// Any mouse movement at all means a mouse is what you are holding; the pad side is the probe.
+	bUsingGamepad = false;
 	const FVector2D Delta = Value.Get<FVector2D>();
 	const float K = MouseSensitivity * 0.022f / FMath::Max(MouseInputScale, 0.0001f);
 	FRotator R = Controller->GetControlRotation();
 	R.Yaw += Delta.X * K;
 	R.Pitch = FMath::Clamp(FRotator::NormalizeAxis(R.Pitch + Delta.Y * K), -89.f, 89.f);
+	Controller->SetControlRotation(R);
+}
+
+void AGetawayPlacementPawn::OnLookStick(const FInputActionValue& Value)
+{
+	if (!Controller) return;
+	bUsingGamepad = true;
+
+	const UWorld* World = GetWorld();
+	const float Dt = World ? World->GetDeltaSeconds() : 0.f;
+	if (Dt <= 0.f) return;
+
+	const FVector2D Stick = GetawayStick::ApplyCurve(
+		GetawayStick::ApplyDeadZone(Value.Get<FVector2D>(), StickLookDeadZone), StickLookExponent);
+	if (Stick.IsNearlyZero()) return;
+
+	// No spin-up here, unlike the character: this camera is for aiming at a grid square, and a
+	// ramp means the first moments of a nudge move you less than you asked for.
+	FRotator R = Controller->GetControlRotation();
+	R.Yaw += Stick.X * StickLookYawSpeed * Dt;
+	// Flipped, the same way and for the same reason as AGetawayCharacter::OnLookStick. Keep in step.
+	const float PitchStep = (bInvertStickY ? 1.f : -1.f) * Stick.Y * StickLookPitchSpeed * Dt;
+	R.Pitch = FMath::Clamp(FRotator::NormalizeAxis(R.Pitch + PitchStep), -89.f, 89.f);
 	Controller->SetControlRotation(R);
 }
 
@@ -452,7 +530,7 @@ void AGetawayPlacementPawn::ServerPlacePiece_Implementation(int32 Slot, FVector_
 		return;
 	}
 
-	// Worked out here rather than sent, so the client cannot nominate what its spikes are glued to.
+	// Worked out here rather than sent, so a client cannot nominate what its piece is glued to.
 	AActor* Host = FindHostAt(Centre, Turned, Def);
 
 	if (AActor* Spawned = GM->PlacePiece(Def, Centre, Turned, PS, Local))
@@ -460,6 +538,10 @@ void AGetawayPlacementPawn::ServerPlacePiece_Implementation(int32 Slot, FVector_
 		if (AGetawaySpikes* Spikes = Cast<AGetawaySpikes>(Spawned))
 		{
 			Spikes->AttachToHost(Host);
+		}
+		else if (AGetawayJumpPad* Pad = Cast<AGetawayJumpPad>(Spawned))
+		{
+			Pad->AttachToHost(Host);
 		}
 		GM->TakeFromHand(Cast<APlayerController>(GetController()), Slot);
 	}
@@ -853,10 +935,17 @@ void AGetawayPlacementPawn::Tick(float DeltaSeconds)
 	const FVector Fwd = FRotationMatrix(Rot).GetUnitAxis(EAxis::X);
 	const FVector Right = FRotationMatrix(FRotator(0.f, Rot.Yaw, 0.f)).GetUnitAxis(EAxis::Y);
 
-	FVector Wish = Fwd * MoveInput.Y + Right * MoveInput.X + FVector::UpVector * UpInput;
+	// Keyboard and pad are added together so that holding both does not fight. The direction is
+	// normalised and then scaled by how hard you are pushing, capped at 1: a key is always worth at
+	// least 1 and so still flies at full speed, while a stick gives a slow crawl near the middle,
+	// which is what you want easing up to a ledge.
+	const FVector2D Plane = MoveInput + StickMoveInput;
+	const float Up = UpInput + StickUpInput;
+	FVector Wish = Fwd * Plane.Y + Right * Plane.X + FVector::UpVector * Up;
 	if (!Wish.IsNearlyZero())
 	{
-		Wish = Wish.GetSafeNormal() * FlySpeed * (bFast ? FastMultiplier : 1.f);
+		const float Push = FMath::Min(FMath::Max(Plane.Size(), FMath::Abs(Up)), 1.f);
+		Wish = Wish.GetSafeNormal() * FlySpeed * Push * (bFast ? FastMultiplier : 1.f);
 	}
 	FlyVelocity = FMath::VInterpTo(FlyVelocity, Wish, DeltaSeconds, FlySmoothing);
 	if (!FlyVelocity.IsNearlyZero())
