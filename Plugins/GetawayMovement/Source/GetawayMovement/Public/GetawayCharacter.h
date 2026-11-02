@@ -343,8 +343,25 @@ private:
 	void SetProxySimulation(bool bProxy);
 	/** Squash the body when the state byte says crouched or sliding. */
 	void UpdateBody();
-	/** On-screen readout of what the remote players are doing. */
+
+	/**
+	 * Say something to the player holding this character, through AGetawayHUD::ShowMessage. Does
+	 * nothing for a character we do not control, which is what keeps a listen-server host from
+	 * drawing another player's pickups and deaths on its own screen.
+	 *
+	 * These lines used to go to GEngine->AddOnScreenDebugMessage, which is compiled out of Shipping
+	 * and Test builds - see ShowMessage for the detail.
+	 */
+	void Notify(const FString& Text, float Seconds, const FLinearColor& Colour, int32 Key) const;
+
+#if !UE_BUILD_SHIPPING
+	/**
+	 * On-screen readout of what the remote players are doing. Still a debug message rather than a
+	 * HUD line, and deliberately so: it is spike scaffolding keyed on the actor, and what the game
+	 * actually wants here one day is a nameplate over each player, not a list in the corner.
+	 */
 	void ShowRemoteState() const;
+#endif
 
 	UFUNCTION(Server, Unreliable)
 	void ServerUpdateMove(FGetawayNetMove Move);

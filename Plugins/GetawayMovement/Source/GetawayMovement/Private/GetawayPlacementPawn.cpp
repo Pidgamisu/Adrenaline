@@ -9,7 +9,15 @@
 #include "GetawayStickInput.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
-#include "DrawDebugHelpers.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
+#include "Engine/StaticMesh.h"
+#include "MaterialDomain.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "ProceduralMeshComponent.h"
+#include "UObject/ConstructorHelpers.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -38,6 +46,44 @@ AGetawayPlacementPawn::AGetawayPlacementPawn()
 	Camera->SetupAttachment(Root);
 	Camera->bUsePawnControlRotation = true;
 	Camera->SetFieldOfView(BaseFOV);
+
+	// The ghost. Absolute transforms on all four, so they stay where the placement is instead of
+	// being carried around by the camera they hang off; invisible by default, because the server
+	// holds a copy of every client's placement pawn and Tick returns early there.
+	auto SetUpGhostPart = [Root](UPrimitiveComponent* Part)
+	{
+		Part->SetupAttachment(Root);
+		Part->SetUsingAbsoluteLocation(true);
+		Part->SetUsingAbsoluteRotation(true);
+		Part->SetUsingAbsoluteScale(true);
+		Part->SetVisibility(false);
+		Part->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Part->SetGenerateOverlapEvents(false);
+		Part->SetCastShadow(false);
+		Part->SetMobility(EComponentMobility::Movable);
+	};
+
+	GhostBox = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GhostBox"));
+	SetUpGhostPart(GhostBox);
+
+	GhostWedge = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("GhostWedge"));
+	SetUpGhostPart(GhostWedge);
+
+	GhostArrowShaft = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GhostArrowShaft"));
+	SetUpGhostPart(GhostArrowShaft);
+
+	GhostArrowHead = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GhostArrowHead"));
+	SetUpGhostPart(GhostArrowHead);
+
+	// The same 100 cm cube every box piece is built from, so one scale rule covers piece and ghost.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (Cube.Succeeded())
+	{
+		GhostBox->SetStaticMesh(Cube.Object);
+		GhostArrowShaft->SetStaticMesh(Cube.Object);
+		GhostArrowHead->SetStaticMesh(Cube.Object);
+	}
 
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationPitch = true;
@@ -99,6 +145,9 @@ void AGetawayPlacementPawn::BeginPlay()
 	{
 		Camera->SetFieldOfView(BaseFOV);
 	}
+
+	// The ghost's materials are built on its first drawn frame, not here. See EnsureGhostMaterials:
+	// BeginPlay runs before this pawn is possessed, so there is nothing to ask about who holds it.
 
 #if !UE_BUILD_SHIPPING
 	// Two headless clients cannot click, so the net test drives a placement from a timer instead.
@@ -876,6 +925,9 @@ FGetawayPlacement AGetawayPlacementPawn::ComputePlacement(const FGetawayPieceDef
 	const int32 Steps = GetRotationSteps();
 	Out.bDirectional = Def.bDirectional;
 	Out.bSurfaceMounted = Def.bSurfaceMounted;
+	// Asked of the class rather than carried in the catalog, so a Blueprint child of AGetawayRamp is
+	// still drawn as a wedge without anyone having to remember to tick a box for it.
+	Out.bWedge = Def.ActorClass && Def.ActorClass->IsChildOf(AGetawayRamp::StaticClass());
 
 	const FVector Start = Camera->GetComponentLocation();
 	const FVector Dir = Camera->GetForwardVector();
@@ -1061,48 +1113,144 @@ void AGetawayPlacementPawn::Tick(float DeltaSeconds)
 	// Which piece it was worked out for, so a click can tell whether it is still the one in hand.
 	PlannedSlot = Planned.bHasTarget ? HandSlot : -1;
 
-	// No ghost once building is shut: a cyan box tracking your crosshair reads as an invitation,
-	// and the HUD line alone is easy to miss while you are flying around.
-	if (bDrawGhost && CanBuildNow())
-	{
-		DrawGhost();
-	}
+	// UpdateGhost hides itself when there is nothing to place or building is shut - a box tracking
+	// your crosshair reads as an invitation, and the HUD line alone is easy to miss while flying.
+	UpdateGhost();
 }
 
-void AGetawayPlacementPawn::DrawGhost() const
+bool AGetawayPlacementPawn::EnsureGhostMaterials()
 {
-	if (!Planned.bHasTarget) return;
-	UWorld* World = GetWorld();
-	if (!World) return;
+	if (GhostDynamic && GhostWedgeDynamic) return true;
 
-	// Debug lines rather than a translucent mesh, so the plugin still needs no content. They are
-	// compiled out of Shipping builds, so this wants a real ghost material before release.
-	const FColor Colour = Planned.CanPlace() ? FColor(95, 196, 214) : FColor(230, 70, 60);
+	// The ghost material is content, and this plugin ships none, so say plainly in the log if it is
+	// missing. The fallback is deliberately noisy in the log and quiet on screen, because the
+	// engine default material is *lit*: in this game's unlit world it draws as a black outline,
+	// which is a bad thing to have to diagnose from a screenshot.
+	UMaterialInterface* Base = GhostMaterial.LoadSynchronous();
+	if (!Base)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Getaway: no placement ghost material at '%s'. Run "
+			"Content/Python/vaultborne_look.py in the editor to build it. Falling back to the "
+			"engine default material, which is lit, so the ghost will look black."),
+			*GhostMaterial.ToString());
+		Base = UMaterial::GetDefaultMaterial(MD_Surface);
+	}
+
+	GhostDynamic = UMaterialInstanceDynamic::Create(Base, this);
+	GhostWedgeDynamic = UMaterialInstanceDynamic::Create(Base, this);
+	if (!GhostDynamic || !GhostWedgeDynamic) return false;
+
+	// The wedge is not a box, so its band is measured in UVs. Same reason as MI_VB_Ramp.
+	GhostWedgeDynamic->SetScalarParameterValue(TEXT("BandMode"), 1.f);
+
+	if (GhostBox) GhostBox->SetMaterial(0, GhostDynamic);
+	if (GhostArrowShaft) GhostArrowShaft->SetMaterial(0, GhostDynamic);
+	if (GhostArrowHead) GhostArrowHead->SetMaterial(0, GhostDynamic);
+	BuildGhostWedge();
+	return true;
+}
+
+void AGetawayPlacementPawn::BuildGhostWedge()
+{
+	if (!GhostWedge) return;
+
+	TArray<FVector> Verts;
+	TArray<int32> Tris;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FVector> Hull;
+	// The ramp's own geometry, so the ghost is the shape you get and not an approximation of it.
+	AGetawayRamp::BuildWedgeGeometry(Verts, Tris, Normals, UVs, Hull);
+
+	GhostWedge->ClearAllMeshSections();
+	GhostWedge->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, UVs, TArray<FLinearColor>(),
+		TArray<FProcMeshTangent>(), /*bCreateCollision=*/false);
+	// After the section, never before: a procedural mesh has no material slot until one exists.
+	GhostWedge->SetMaterial(0, GhostWedgeDynamic);
+}
+
+void AGetawayPlacementPawn::HideGhost()
+{
+	if (GhostBox) GhostBox->SetVisibility(false);
+	if (GhostWedge) GhostWedge->SetVisibility(false);
+	if (GhostArrowShaft) GhostArrowShaft->SetVisibility(false);
+	if (GhostArrowHead) GhostArrowHead->SetVisibility(false);
+}
+
+void AGetawayPlacementPawn::UpdateGhost()
+{
+	if (!bDrawGhost || !Planned.bHasTarget || !CanBuildNow() || !EnsureGhostMaterials())
+	{
+		HideGhost();
+		return;
+	}
+
+	// The band is what you read at a glance; the face only tints, because additive blending means a
+	// bright face washes out whatever you are lining the piece up against.
+	const FLinearColor Edge = Planned.CanPlace() ? GhostEdgeColour : GhostBlockedEdgeColour;
+	const FLinearColor Face = Edge * GhostFaceScale;
+	for (UMaterialInstanceDynamic* Mat : { GhostDynamic.Get(), GhostWedgeDynamic.Get() })
+	{
+		if (!Mat) continue;
+		Mat->SetVectorParameterValue(TEXT("EdgeColor"), Edge);
+		Mat->SetVectorParameterValue(TEXT("Color"), Face);
+	}
+
 	// The piece's own box, turned the way the piece is turned - the same oriented box the blocked
-	// test uses, so what you see is what gets tested. This used to draw Planned.Size with an
-	// identity rotation, because Size is the *world* extent and rotating that swapped X and Y
-	// straight back; drawing LocalSize instead makes the rotation the right thing to pass, and it
-	// is the only way to show a piece lying over on a slope.
-	DrawDebugBox(World, Planned.Centre, Planned.LocalSize * 0.5f, Planned.Rotation.Quaternion(),
-		Colour, false, -1.f, 0, 3.f);
+	// test uses, so what you see is what gets tested. LocalSize and not Size: Size is the *world*
+	// extent, and scaling a rotated component by that would swap X and Y straight back. It is also
+	// the only way to show a piece lying over on a slope.
+	//
+	// Both the engine cube and the ramp's wedge fill the same 100 cm cube, so one scale does for
+	// either, exactly as it does for the spawned piece (see FGetawayPieceDef::bScaleToSize).
+	const FVector Scale = Planned.LocalSize / 100.f;
 
-	// Only the pieces that care which way round they are get an arrow, as in the lab (DIRTYPES):
-	// it points the way a ramp rises and the way a bridge drops.
-	if (!Planned.bDirectional) return;
+	// A ramp half fills its footprint, so it shows the wedge instead of the box. Which of the two is
+	// drawn is the only thing bWedge changes: the overlap test is still run on the whole box.
+	UPrimitiveComponent* Shown = Planned.bWedge ? Cast<UPrimitiveComponent>(GhostWedge.Get())
+		: Cast<UPrimitiveComponent>(GhostBox.Get());
+	UPrimitiveComponent* Hidden = Planned.bWedge ? Cast<UPrimitiveComponent>(GhostBox.Get())
+		: Cast<UPrimitiveComponent>(GhostWedge.Get());
+	if (Hidden) Hidden->SetVisibility(false);
+	if (Shown)
+	{
+		Shown->SetWorldLocationAndRotation(Planned.Centre, Planned.Rotation);
+		Shown->SetWorldScale3D(Scale);
+		Shown->SetVisibility(true);
+	}
+
+	// Only the pieces that care which way round they are get an arrow, as in the lab (DIRTYPES): it
+	// points the way a ramp rises and the way a bridge drops. A wedge shows its own slope, but the
+	// arrow stays on it anyway - it is the one thing readable from behind, where the wedge's high
+	// back wall is all you can see.
+	if (!Planned.bDirectional)
+	{
+		if (GhostArrowShaft) GhostArrowShaft->SetVisibility(false);
+		if (GhostArrowHead) GhostArrowHead->SetVisibility(false);
+		return;
+	}
 
 	const FVector Fwd = Planned.Rotation.RotateVector(FVector::ForwardVector);
 	// Clear of the piece's own top face rather than straight up, so the arrow still sits above a
-	// piece that is lying over on a slope instead of cutting through it.
+	// piece lying over on a slope instead of cutting through it.
 	const FVector Up = Planned.Rotation.RotateVector(FVector::UpVector);
 	const FVector Base = Planned.Centre + Up * (Planned.LocalSize.Z * 0.5f + 20.f);
-	DrawDebugDirectionalArrow(World, Base, Base + Fwd * 120.f, 40.f, Colour, false, -1.f, 0, 3.f);
 
-	// A ramp only fills half of its ghost box, so trace the edge it will slope along: low end at the
-	// back, high end under the arrow. On a bridge the same two lines read as the way it will drop.
-	const FVector Half = Planned.LocalSize * 0.5f;
-	const FVector Low = Planned.Centre + Planned.Rotation.RotateVector(FVector(-Half.X, 0.f, -Half.Z));
-	const FVector High = Planned.Centre + Planned.Rotation.RotateVector(FVector(Half.X, 0.f, Half.Z));
-	const FVector Side = Planned.Rotation.RotateVector(FVector(0.f, Half.Y, 0.f));
-	DrawDebugLine(World, Low - Side, High - Side, Colour, false, -1.f, 0, 2.f);
-	DrawDebugLine(World, Low + Side, High + Side, Colour, false, -1.f, 0, 2.f);
+	if (GhostArrowShaft)
+	{
+		// A 120 cm bar, 7 cm square, which the edge band fills solid at any sane BorderWidth.
+		GhostArrowShaft->SetWorldLocationAndRotation(Base + Fwd * 60.f, Planned.Rotation);
+		GhostArrowShaft->SetWorldScale3D(FVector(1.2f, 0.07f, 0.07f));
+		GhostArrowShaft->SetVisibility(true);
+	}
+	if (GhostArrowHead)
+	{
+		// A cube turned 45 degrees about the piece's own up axis reads as a point from any angle,
+		// and needs no second mesh. Quaternions compose right-to-left, so the local turn is applied
+		// first and the piece's rotation carries it.
+		const FQuat Head = Planned.Rotation.Quaternion() * FRotator(0.f, 45.f, 0.f).Quaternion();
+		GhostArrowHead->SetWorldLocationAndRotation(Base + Fwd * 134.f, Head);
+		GhostArrowHead->SetWorldScale3D(FVector(0.26f));
+		GhostArrowHead->SetVisibility(true);
+	}
 }

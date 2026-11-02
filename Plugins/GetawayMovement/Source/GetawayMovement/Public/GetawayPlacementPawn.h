@@ -3,12 +3,17 @@
 #include "CoreMinimal.h"
 #include "Engine/NetSerialization.h"
 #include "GameFramework/Pawn.h"
+#include "UObject/SoftObjectPtr.h"
 #include "GetawayPiece.h"
 #include "GetawayPlacementPawn.generated.h"
 
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UProceduralMeshComponent;
+class UStaticMeshComponent;
 struct FInputActionValue;
 
 /** Where the piece in your hand would land, and whether it may. */
@@ -35,6 +40,12 @@ struct FGetawayPlacement
 	UPROPERTY(BlueprintReadOnly, Category = "Getaway") FVector LocalSize = FVector::ZeroVector;
 	/** True when the trim took something off, so the HUD can say the plate was cut down. */
 	UPROPERTY(BlueprintReadOnly, Category = "Getaway") bool bTrimmed = false;
+	/**
+	 * The piece is a wedge rather than a box - a ramp - so the ghost shows the real shape instead of
+	 * the box it half fills. The placement maths is unaffected: the footprint box is still what the
+	 * overlap test uses, which is why a ramp is refused where its whole box would not fit.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Getaway") bool bWedge = false;
 	/**
 	 * Nothing to hang off: the piece would float with clear air on every side. A level is a
 	 * structure you extend, not a cloud of blocks, so this refuses the placement.
@@ -65,6 +76,33 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
 	TObjectPtr<UCameraComponent> Camera;
+
+	/* ---------------- The ghost ---------------- */
+
+	/*
+	 * Four real components, because the ghost used to be DrawDebugBox, DrawDebugDirectionalArrow and
+	 * two DrawDebugLines - and every one of those is compiled out of Shipping and Test builds, which
+	 * would have shipped a placement camera you aim with blind. See *The placement ghost* in
+	 * docs/look.md.
+	 *
+	 * All four hang off the root but use absolute transforms, so they sit where the placement is
+	 * instead of being dragged about by the fly camera they are attached to. None collides.
+	 */
+
+	/** The piece's footprint box. Hidden for a ramp, which shows its wedge instead. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
+	TObjectPtr<UStaticMeshComponent> GhostBox;
+
+	/** A ramp's real wedge, built from `AGetawayRamp::BuildWedgeGeometry`. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
+	TObjectPtr<UProceduralMeshComponent> GhostWedge;
+
+	/** Which way a directional piece faces: a bar out of the top face, with a diamond on the end. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
+	TObjectPtr<UStaticMeshComponent> GhostArrowShaft;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
+	TObjectPtr<UStaticMeshComponent> GhostArrowHead;
 
 	/* ---------------- Flying ---------------- */
 
@@ -161,6 +199,42 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement")
 	bool bDrawGhost = true;
 
+	/**
+	 * What the ghost is made of. `MI_VB_Ghost` is additive, two-sided and hollow-faced with an edge
+	 * band - a hologram already - and is built by `Content/Python/vaultborne_look.py` along with the
+	 * rest of the palette. See *Where each part lives* in docs/look.md.
+	 *
+	 * A soft reference resolved on the first ghost frame rather than a constructor `FObjectFinder`,
+	 * which would warn on every editor start until that script has been run. If it will not load,
+	 * the engine's default material stands in - and note that it is a *lit* material, so in this
+	 * game's unlit world it reads as a black outline rather than as something obviously wrong.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement")
+	TSoftObjectPtr<UMaterialInterface> GhostMaterial =
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Materials/MI_VB_Ghost.MI_VB_Ghost")));
+
+	/**
+	 * The edge band's colour where the piece may be placed, and where it may not. The band is what
+	 * you actually read at a glance, which is why these two are the knobs rather than the face.
+	 *
+	 * Cyan and red keep what the debug lines did, and are a deliberate exception to the colour rule
+	 * in docs/look.md - the ghost is a cursor, not architecture, so it is allowed its own hues.
+	 * Settled 2026-11-02.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement")
+	FLinearColor GhostEdgeColour = FLinearColor(0.37f, 0.77f, 0.84f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement")
+	FLinearColor GhostBlockedEdgeColour = FLinearColor(0.90f, 0.27f, 0.24f);
+
+	/**
+	 * How much of the band's colour the see-through face gets. The face stays dark on purpose: the
+	 * material is additive, so a bright face would wash out whatever you are lining the piece up
+	 * against. 0 leaves the faces black and only the edges lit.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement", meta = (ClampMin = "0", ClampMax = "1"))
+	float GhostFaceScale = 0.25f;
+
 	/* ---------------- State, for the HUD ---------------- */
 
 	/** Which slot of the drafted hand is in your hand right now. */
@@ -215,7 +289,26 @@ private:
 	void BuildDefaultInput();
 	bool CurrentPiece(FGetawayPieceDef& OutDef) const;
 	FGetawayPlacement ComputePlacement(const FGetawayPieceDef& Def) const;
-	void DrawGhost() const;
+
+	/** Move the ghost onto this frame's placement, or hide it when there is nothing to place. */
+	void UpdateGhost();
+	void HideGhost();
+
+	/**
+	 * Create the two dynamic materials and the wedge section, once, on the first frame the ghost is
+	 * actually drawn. False if there is nothing to draw with.
+	 *
+	 * **Not** in BeginPlay, and that is the whole point: the game mode spawns this pawn with
+	 * `World->SpawnActor` and possesses it on the next line, so BeginPlay runs *before* possession
+	 * and `IsLocallyControlled()` is still false there. Round 1's pawn is built during world start,
+	 * where BeginPlay comes after possession instead - so gating on it in BeginPlay gave a correct
+	 * ghost in the first placement phase and a black one in every phase after. Found by playing,
+	 * 2026-11-02. Same family of bug as the role check in `AGetawayCharacter::SetProxySimulation`.
+	 */
+	bool EnsureGhostMaterials();
+
+	/** Fill GhostWedge's one mesh section. Only its transform changes after. */
+	void BuildGhostWedge();
 
 	/** The world-space extent of a piece of this own-axes size at this rotation: the ghost's box. */
 	static FVector WorldSizeFor(const FVector& LocalSize, const FRotator& Rotation);
@@ -338,4 +431,14 @@ private:
 	 */
 	FGetawayPlacement Planned;
 	int32 PlannedSlot = -1;
+
+	/**
+	 * One dynamic instance for the boxes and a second for the wedge, both off GhostMaterial. Two,
+	 * not one, because the band is measured differently on a wedge: the boxes keep `BandMode` 0,
+	 * which measures the band in centimetres off the bounding box, and the wedge takes `BandMode` 1,
+	 * the UV band, for exactly the reason `MI_VB_Ramp` does. See *How the edge band works* in
+	 * docs/look.md.
+	 */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> GhostDynamic;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> GhostWedgeDynamic;
 };

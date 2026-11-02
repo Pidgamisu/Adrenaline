@@ -34,6 +34,55 @@ void AGetawayHUD::RightAligned(const FString& Text, UFont* Font, float Scale, fl
 	DrawText(Text, Color, Right - W, Y, Font, Scale);
 }
 
+void AGetawayHUD::ShowMessage(const FString& Text, float Seconds, FLinearColor Colour, int32 Key)
+{
+	const UWorld* World = GetWorld();
+	if (!World || Text.IsEmpty() || Seconds <= 0.f) return;
+
+	const double Until = World->GetTimeSeconds() + Seconds;
+
+	// A keyed line replaces its own: "Picked up C4 (carrying 2)" straight after "(carrying 1)" is a
+	// correction, not a second thing that happened.
+	if (Key >= 0)
+	{
+		for (FGetawayMessage& Existing : Messages)
+		{
+			if (Existing.Key == Key)
+			{
+				Existing.Text = Text;
+				Existing.Colour = Colour;
+				Existing.Until = Until;
+				return;
+			}
+		}
+	}
+
+	Messages.Add({ Text, Colour, Until, Key });
+	while (Messages.Num() > FMath::Max(1, MaxMessages))
+	{
+		Messages.RemoveAt(0);
+	}
+}
+
+void AGetawayHUD::DrawMessages(float CX, float CY)
+{
+	const UWorld* World = GetWorld();
+	if (!World || Messages.IsEmpty()) return;
+
+	const double Now = World->GetTimeSeconds();
+	Messages.RemoveAll([Now](const FGetawayMessage& M) { return M.Until <= Now; });
+
+	UFont* Small = GEngine->GetSmallFont();
+	float Y = CY + 48.f;
+	for (const FGetawayMessage& Line : Messages)
+	{
+		FLinearColor Colour = Line.Colour;
+		Colour.A = FMath::Clamp(static_cast<float>(Line.Until - Now) / FMath::Max(0.05f, MessageFadeTime), 0.f, 1.f);
+		Centred(Line.Text, Small, 1.3f, CX, Y, Colour);
+		Y += 26.f;
+	}
+}
+
 void AGetawayHUD::DrawHUD()
 {
 	Super::DrawHUD();
@@ -42,6 +91,10 @@ void AGetawayHUD::DrawHUD()
 	const float CX = Canvas->ClipX * 0.5f;
 	const float CY = Canvas->ClipY * 0.5f;
 	DrawRect(FLinearColor::White, CX - 2.f, CY - 2.f, 4.f, 4.f);
+
+	// Before either early return below, so a line still draws during placement and in the frames
+	// where the pawn is being swapped over.
+	DrawMessages(CX, CY);
 
 	// Both of these replicate, so unlike the game mode they are here on a client too.
 	const AGetawayGameState* GS = GetWorld() ? GetWorld()->GetGameState<AGetawayGameState>() : nullptr;

@@ -3,6 +3,7 @@
 #include "GetawayC4.h"
 #include "GetawayFinish.h"
 #include "GetawayGameMode.h"
+#include "GetawayHUD.h"
 #include "GetawayMovementComponent.h"
 #include "GetawayPlayerState.h"
 #include "GetawayStickInput.h"
@@ -29,6 +30,9 @@
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
+#if !UE_BUILD_SHIPPING
+// Both of these exist only for ShowRemoteState's debug readout, so they go when it does rather
+// than sitting in a Shipping build as functions with internal linkage that nothing calls.
 namespace
 {
 	/** The six states that cross the wire, named for logs and the on-screen readout. */
@@ -57,6 +61,7 @@ namespace
 		}
 	}
 }
+#endif
 
 AGetawayCharacter::AGetawayCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UGetawayMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -429,7 +434,7 @@ void AGetawayCharacter::OnRestart(const FInputActionValue&)
 	// and on a listen server it would throw everyone else out with you.
 	if (GetNetMode() != NM_Standalone)
 	{
-		if (GEngine) GEngine->AddOnScreenDebugMessage(7004, 1.5f, FColor(255, 120, 90), TEXT("R restart is single-player only"));
+		Notify(TEXT("R restart is single-player only"), 1.5f, FLinearColor(1.f, 0.42f, 0.3f), 7004);
 		return;
 	}
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)));
@@ -487,13 +492,10 @@ void AGetawayCharacter::Die(AActor* KilledBy)
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	if (GEngine)
-	{
-		// A client has no game mode to ask, so the knob is read off the replicated game mode
-		// *class* default instead. EditDefaultsOnly means that default is the live value.
-		GEngine->AddOnScreenDebugMessage(7004, 2.f, FColor(255, 80, 80),
-			WillRespawnOnDeath() ? TEXT("Killed. Back to the start") : TEXT("Killed. Out until the next round"));
-	}
+	// A client has no game mode to ask, so the knob is read off the replicated game mode *class*
+	// default instead. EditDefaultsOnly means that default is the live value.
+	Notify(WillRespawnOnDeath() ? TEXT("Killed. Back to the start") : TEXT("Killed. Out until the next round"),
+		2.f, FLinearColor(1.f, 0.31f, 0.31f), 7004);
 
 	if (HasAuthority())
 	{
@@ -576,10 +578,10 @@ int32 AGetawayCharacter::AddCharges(int32 Count)
 	const int32 Room = FMath::Max(0, MaxCharges - ChargesHeld);
 	const int32 Taken = FMath::Clamp(Count, 0, Room);
 	ChargesHeld += Taken;
-	if (Taken > 0 && GEngine)
+	if (Taken > 0)
 	{
-		GEngine->AddOnScreenDebugMessage(7003, 1.2f, FColor(255, 170, 90),
-			*FString::Printf(TEXT("Picked up C4  (carrying %d)"), ChargesHeld));
+		Notify(FString::Printf(TEXT("Picked up C4  (carrying %d)"), ChargesHeld), 1.2f,
+			FLinearColor(0.94f, 0.70f, 0.24f), 7003);
 	}
 	return Taken;
 }
@@ -589,7 +591,7 @@ void AGetawayCharacter::ThrowC4()
 	Charges.RemoveAll([](const TObjectPtr<AGetawayC4>& C) { return !IsValid(C); });
 	if (ChargesHeld <= 0)
 	{
-		if (GEngine) GEngine->AddOnScreenDebugMessage(7002, 1.2f, FColor(255, 120, 90), TEXT("No C4. Find a pickup"));
+		Notify(TEXT("No C4. Find a pickup"), 1.2f, FLinearColor(1.f, 0.42f, 0.3f), 7002);
 		return;
 	}
 
@@ -722,7 +724,9 @@ void AGetawayCharacter::Tick(float DeltaSeconds)
 		{
 			ApplyProxyMove(DeltaSeconds);
 		}
+#if !UE_BUILD_SHIPPING
 		ShowRemoteState();
+#endif
 	}
 
 	UpdateBody();
@@ -890,6 +894,21 @@ void AGetawayCharacter::UpdateBody()
 	}
 }
 
+void AGetawayCharacter::Notify(const FString& Text, float Seconds, const FLinearColor& Colour, int32 Key) const
+{
+	// Only the machine that owns this character has a HUD worth drawing on. On a listen server the
+	// host's copy of a client's character does have a Controller, but that controller's HUD only
+	// exists on the client, so this would be a null anyway - the check is here to say so plainly.
+	if (!IsLocallyControlled()) return;
+
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (AGetawayHUD* HUD = PC ? Cast<AGetawayHUD>(PC->GetHUD()) : nullptr)
+	{
+		HUD->ShowMessage(Text, Seconds, Colour, Key);
+	}
+}
+
+#if !UE_BUILD_SHIPPING
 void AGetawayCharacter::ShowRemoteState() const
 {
 	if (!bShowRemoteState || !GEngine || GetNetMode() == NM_Standalone) return;
@@ -900,6 +919,7 @@ void AGetawayCharacter::ShowRemoteState() const
 	GEngine->AddOnScreenDebugMessage(static_cast<uint64>(GetUniqueID()), 0.2f, NetMoveColour(State),
 		FString::Printf(TEXT("%s  %s  %d u/s"), *GetName(), NetMoveName(State), Ups));
 }
+#endif
 
 void AGetawayCharacter::UpdateCamera(float DeltaSeconds)
 {

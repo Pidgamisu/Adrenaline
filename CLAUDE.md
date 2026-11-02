@@ -13,9 +13,15 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
 - **Movement:** ported from the browser prototype and signed off.
 - **Input:** keyboard and mouse, plus a full controller map for both the run and the placement camera (not yet play-tested with a pad in hand). See `docs/controller.md`.
 - **Multiplayer:** client-authoritative, two players play-tested 2026-10-17.
+- **Playing with friends:** the project packages and hosts over direct IP with the launchers in
+  `Tools/`, set up 2026-11-02, **not yet packaged or played**. No menu and no lobby yet. Shipping
+  builds no longer lose the placement ghost or the on-screen messages (see *Next steps* 3), though
+  Development is still the build to hand to playtesters. See `docs/multiplayer.md`.
 - **Round loop:** shared placement phase with a build clock, the run, Ultimate Chicken Horse scoring, and deaths (spikes, falling off the course).
 - **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes, jump pad, anti-gravity vortex.
-- **Art:** none yet. Everything is grey boxes and debug-line ghosts. Free third-party assets come later.
+- **Art:** an art direction, not assets. Unlit pink on black with glowing wire edges, first pass
+  2026-11-02, not yet played. See `docs/look.md`. The point of it is that greybox *is* the look,
+  so meshes stop being a blocker.
 
 ## Where the details live
 
@@ -25,12 +31,13 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 |---|---|
 | `docs/test-course.md` | `/Game/Maps/TestCourse`, its layout and what each obstacle tests |
 | `docs/placement.md` | the placement phase, build clock, catalog, piece positioning, directional pieces, the objective |
-| `docs/multiplayer.md` | replication, client authority, running the two-player test in the editor |
+| `docs/multiplayer.md` | replication, client authority, running the two-player test in the editor, packaging and LAN play with friends |
 | `docs/round-loop.md` | phases, scoring, shared placement, syncing breakables, bridge, C4 and pickups |
 | `docs/spikes-and-death.md` | spikes, surface-mounted pieces, dying, breakables |
 | `docs/falling-slopes-cleanup.md` | fall deaths, the "everything touches something" rule, pieces on slopes, between-round cleanup |
 | `docs/controller.md` | controller support: the button map, stick tuning, why a stick can't use the mouse look code |
-| `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named |
+| `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named, giving a piece a material |
+| `docs/look.md` | the unlit pink look: materials, the palette and what each colour is allowed to mean, lighting, bloom |
 | `Plugins/GetawayMovement/README.md` | setup, controls and the full tuning table |
 | `Reference/getaway-lab.html` | the browser prototype: the reference for how movement should **feel** |
 
@@ -140,6 +147,11 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 
 1. More traps. Spikes were the first.
 2. The party box deals from the whole catalog. A per-round deck is still to do.
-3. The placement ghost is drawn with debug lines, which don't exist in Shipping builds. It needs a real translucent material before release.
+3. ~~The placement ghost is drawn with debug lines, which don't exist in Shipping builds.~~ Done
+   2026-11-02: the ghost is real geometry on `MI_VB_Ghost`, and the four gameplay messages moved
+   from `AddOnScreenDebugMessage` onto `AGetawayHUD::ShowMessage`. **Not played yet.** The one thing
+   left that a Shipping build still loses: `AGetawayC4::PlayBlastEffects` falls back to
+   `DrawDebugSphere` when no Niagara `ExplosionEffect` is assigned, so a detonation is invisible in
+   Shipping until that slot is filled.
 4. Settle whether the wall and breakable panel should be rotated to match the lab (see *Still unverified* in `docs/placement.md`). It's a feel question for me.
 5. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.

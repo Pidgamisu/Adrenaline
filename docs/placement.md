@@ -79,9 +79,9 @@ way**, so `Size.X` is the length along the facing, not along world X. That is wh
 you are looking, so a ramp slopes away from you and a bridge drops away from you until you press R.
 
 The ghost draws the arrow (and the HUD prints "facing north", the lab's `DIRNAME`) only for
-directional pieces, plus the sloping edge the piece will actually have, since a ramp fills only half
-of its ghost box. The blocked test still uses the whole box, so a ramp is called blocked by
-something sitting in the empty air above its low end.
+directional pieces. Since 2026-11-02 a ramp's ghost is the **real wedge** rather than the box it
+half fills - see *The ghost is real geometry* below. The blocked test still uses the whole box, so a
+ramp is called blocked by something sitting in the empty air above its low end.
 
 - **The ramp has no wedge asset.** The engine BasicShapes set has none and this plugin ships no
   content, so `AGetawayRamp` builds one: six vertices, five faces and a convex hull, filling a 100 cm
@@ -312,8 +312,8 @@ Play-tested 2026-10-16: reaching it ends the run and returns to placement as int
 - **The rest of the round loop:** deaths. More than one player, scoring and per-player finish
   arrived on 2026-10-17 - see *The round loop*. The party box still deals from the whole catalog
   rather than a per-round deck.
-- **The ghost is drawn with debug lines**, which are compiled out of Shipping builds. That keeps the
-  plugin free of content, but it wants a real translucent material before release.
+- ~~**The ghost is drawn with debug lines**, which are compiled out of Shipping builds.~~
+  **Done 2026-11-02**, see *The ghost is real geometry* at the end of this file.
 
 `bStartInPlacement` on the game mode defaults to **on**, so pressing Play now opens in the placement
 camera rather than dropping you straight into the run. Press Enter to run immediately, or untick it
@@ -436,6 +436,19 @@ Four bugs, all of them only on spikes and the jump pad - the pieces that go thro
 
 Not verified by playing yet.
 
+### Played and signed off (2026-11-01)
+
+The three fixes above were played the day they were written and confirmed working. Two of them the
+test course exercises directly: every breakable in it is 25 cm thick, which is exactly what the
+thin-ledge mantle is for, and the surface-mounted ghost fix shows up placing pieces at the edge of a
+wall or a ledge.
+
+Still resting on reading rather than playing: **climbing a breakable instead of bursting it**,
+unless a crate was placed during the placement phase to try it. No crate stands in the map (see
+*What is actually in the map* in `docs/test-course.md`), so `bMantleOverSmash` has no standing
+obstacle to prove itself against. To settle it, place a crate and jump at it above `SmashSpeed`: it
+should be a step up, not scrap.
+
 ### Still unverified (placement and pieces)
 
 The placement loop itself is confirmed working: place a piece, Enter to run, and the character moves
@@ -460,3 +473,132 @@ lab**. The lab's wall at facing 0 lies *across* your view (its thin axis is the 
 (length along the facing), so if the wall should too, swap X and Y on the `wall` and `break` catalog
 entries. It was left alone because a wall along your view is arguably the better wallrun piece -
 that is a feel question, not a code one.
+
+## The ghost is real geometry (2026-11-02)
+
+The placement ghost was `DrawDebugBox`, `DrawDebugDirectionalArrow` and two `DrawDebugLine`s, and
+**every one of those is compiled out of Shipping and Test builds**. A Shipping package would have
+shipped a placement camera with nothing under the crosshair at all - you would have been clicking
+blind. This was *Next steps* 3 in CLAUDE.md and the last thing standing between the project and a
+build fit to put in front of strangers.
+
+It is now four components on `AGetawayPlacementPawn`, and it needed no new look: `M_VB_Pane` is
+already additive, two-sided and hollow-faced with an edge band, which is a hologram. See *The
+placement ghost* in `docs/look.md` for the material side.
+
+| Component | What it is |
+|---|---|
+| `GhostBox` | the engine cube at the piece's footprint. Hidden for a ramp |
+| `GhostWedge` | a procedural mesh carrying the ramp's own wedge. Hidden for everything else |
+| `GhostArrowShaft` | a 120 x 7 x 7 cm bar out of the top face, along the piece's +X |
+| `GhostArrowHead` | a 26 cm cube turned 45 degrees about the piece's up axis, so it reads as a point |
+
+- **A ramp's ghost is the real wedge.** `AGetawayRamp::BuildWedgeGeometry` was pulled out of
+  `BuildWedge` as a public static, and the pawn builds its ghost from the same call, so the shape
+  you line up is the shape you get rather than a box with two lines traced along one edge. Both the
+  cube and the wedge fill the same 100 cm cube, so `LocalSize / 100` scales either - the same rule
+  the spawned piece uses. **Only what is drawn changes:** the overlap test is still run on the whole
+  footprint box, which is why a ramp is still refused where its empty upper half would not fit.
+  Asked and settled 2026-11-02; the alternative kept was a box plus arrow plus slope edges.
+- **Which piece is a wedge is asked of the class**, `Def.ActorClass->IsChildOf(AGetawayRamp)`, on
+  the new `FGetawayPlacement::bWedge`. Not a flag in the catalog, so a Blueprint child of
+  `AGetawayRamp` is drawn correctly without anyone remembering to tick a box.
+- **The arrow stays on a wedge**, even though the wedge shows its own slope. From behind, the
+  wedge's tall back wall is all you can see, and the arrow is the only thing that still reads.
+- **Absolute transforms.** All four hang off the pawn's root but set
+  `SetUsingAbsoluteLocation/Rotation/Scale`, so they sit where the placement is instead of being
+  dragged around by the fly camera they are attached to.
+- **Invisible by default, and built only where they are flown.** The server holds a copy of every
+  client's placement pawn, and `Tick` returns early there, so the components would otherwise sit
+  visible at the world origin. The materials are built lazily on the first frame the ghost is
+  actually drawn, which is only ever reached on the machine flying the camera - see *Fixed: the
+  ghost went black after the first round* below for why that is not in `BeginPlay`.
+- **Two dynamic material instances, not one.** The boxes keep `BandMode` 0, which measures the edge
+  band in centimetres off the bounding box; the wedge takes `BandMode` 1, the UV band, for exactly
+  the reason `MI_VB_Ramp` does - a bounding box cannot find a wedge's sloping face. See *How the
+  edge band works* in `docs/look.md`.
+- **Cyan for a spot you may use, red for one you may not**, which is what the debug lines did.
+  Settled 2026-11-02, and a deliberate exception to the colour rule in `docs/look.md`: the ghost is
+  a cursor, not architecture, so it gets its own hues. `GhostEdgeColour`,
+  `GhostBlockedEdgeColour` and `GhostFaceScale` are on the pawn in the Details panel. The face is
+  only tinted, not lit: the material is additive, and a bright face washes out the thing you are
+  lining the piece up against.
+- **`bDrawGhost` still turns the whole thing off**, and `UpdateGhost` hides itself when building is
+  shut, so a box tracking your crosshair never invites a click the server will refuse.
+
+### The ghost material is content, so it is built by script
+
+`MI_VB_Ghost` is a new row in `Content/Python/vaultborne_look.py`'s palette - additive, cyan-edged,
+`GridStrength` 0 so a cursor does not carry the world grid. **Run that script once in the editor or
+there is no ghost material.** The pawn holds it as a soft reference resolved at `BeginPlay`, not a
+constructor `FObjectFinder`, which would warn on every editor start until the script had been run.
+If it will not load, the log says so in one line and the engine default material stands in: ugly,
+but visible, which is the entire point of the change.
+
+### Still unverified
+
+**Not played.** It builds clean, and the reasoning above is reasoning. Open:
+
+- **Whether the ghost reads at all** against a level made of the same additive pink panes. The
+  ghost is a see-through box inside see-through geometry, and that is the obvious risk.
+- **Whether cyan and red still work** now that the ghost is a lit surface rather than a 3 px line.
+  Red on near-black was easy to see as a wireframe; as an additive face it may just look dim.
+- **Whether the edge band suits a 7 cm bar.** At `BorderWidth` 6-8 the arrow should fill solid,
+  which is what is wanted, but it has not been looked at.
+- **Whether the wedge ghost is clearer than the old box.** It should be, and it was asked for, but
+  a ramp whose ghost no longer shows the footprint may make the "blocked by empty air above the low
+  end" rule harder to understand rather than easier.
+- **The 45-degree arrowhead.** A cube turned about the piece's own up axis should read as a point
+  from any angle; on a piece lying over on a slope that axis is tilted, and nobody has looked at
+  one.
+
+### Fixed: the ghost went black after the first round (2026-11-02)
+
+Reported from playing, the same day the ghost landed: "the first placement works then it goes
+black" - the outline, not the screen. Round 1's ghost was cyan; every placement phase after it drew
+a black box.
+
+**The ghost was wearing the engine's default material, which is lit.** In a world whose lights are
+dimmed to zero that renders pure black - the same thing that makes an undressed `BP_Character` a
+black silhouette (see *Known gaps and traps* in `docs/look.md`). So the symptom was not a colour
+being set wrong; it was `GhostDynamic` never being created, leaving the components on whatever
+material they were born with.
+
+The cause was one line in the wrong function:
+
+```cpp
+void AGetawayPlacementPawn::BeginPlay()
+{
+    if (IsLocallyControlled())   // false here for every pawn after the first
+    {
+        // ... create the dynamic materials
+    }
+}
+```
+
+`AGetawayGameMode::StartPlacementFor` does `World->SpawnActor<AGetawayPlacementPawn>(...)` and
+possesses the result on a following line. For an actor spawned into a world that has already begun
+play, **`BeginPlay` runs inside `SpawnActor`** - before the `Possess` call - so the pawn has no
+controller yet and `IsLocallyControlled()` is false.
+
+Round 1 worked for a reason that makes the bug look stranger than it is: that pawn is created from
+`HandleStartingNewPlayer` during world start, and an actor spawned before the world's BeginPlay
+dispatch has its `BeginPlay` called afterwards, by which point possession has happened. One code
+path, two orderings, and only the rarer one was ever looked at.
+
+**The fix is `EnsureGhostMaterials()`**, called from `UpdateGhost` and building the two dynamic
+instances and the wedge section on the first frame the ghost is actually drawn. Nothing then has to
+ask who owns the pawn at all: `Tick` already returns early when the pawn is not locally controlled,
+so `UpdateGhost` is only ever reached on the machine flying the camera. It also covers a joining
+client, where the replicated `Controller` arrives a frame or two after the pawn.
+
+Worth recording because **this is the third time this project has been bitten by asking who owns a
+pawn too early.** The other two are in `docs/multiplayer.md`: `AGetawayCharacter::SetProxySimulation`
+checks `ROLE_AutonomousProxy` rather than `IsLocallyControlled()` precisely because the role is set
+when the actor channel opens and the controller arrives later, and the placement pawn's own `Tick`
+guard was written for the same reason. The rule that keeps coming out of it: **do not ask who holds
+a pawn in `BeginPlay`.** Ask on the frame you need the answer.
+
+It compiles clean. **The fix itself has not been played** - the diagnosis explains the symptom
+exactly and the mechanism is checked against the engine's spawn path, but nobody has yet watched a
+second placement phase draw a cyan ghost.
