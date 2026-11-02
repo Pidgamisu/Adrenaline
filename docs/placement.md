@@ -360,6 +360,82 @@ raising it would make 2 m objects mantleable everywhere but diverges from the pr
 and declined 2026-10-16** - left at the lab's 170 to see how the ramp feels with the landing fix
 first. Do not raise it without asking.
 
+### Fixed: a thin ledge could not be mantled (2026-11-01)
+
+**This is the one that mattered.** Every breakable in `/Game/Maps/TestCourse` is 25 cm thick (read
+out of the map; see *What is actually in the map* in `docs/test-course.md`), and the mantle put its
+landing probe `R + 10` = 44 cm past the wall face. That is 19 cm *past* a 25 cm panel, so the probe
+came down in open air behind it, found the floor 200 cm below or nothing at all, and the climb was
+refused. None of the four panels could be mantled from either side, at any speed, holding anything -
+and nor could any other thin wall, breakable or not. The report was "you can't mantle the breakable
+objects in the original world", and it was not about breakables at all.
+
+`FindMantle` now tries the deepest landing first and walks in towards the face - `R + 10`, `0.7 R`,
+`0.35 R`, 6 cm - taking the first that holds the capsule up at a height inside the mantle window. A
+thick ledge is found on the first try and behaves exactly as it did, so the ramp fix above is
+untouched. A thin one lands you on top of it, and since a mantle keeps 75% of your run-up speed
+pointed over the top, a 25 cm panel reads as a vault rather than a perch.
+
+The height window moved inside that loop rather than being applied to whatever the single probe hit.
+It has to be: a probe that overshoots a thin ledge usually *does* hit something, namely the floor far
+below, and the old code had already committed to that reading.
+
+### Fixed: a breakable could not be mantled at speed (2026-11-01)
+
+A crate is 100 cm tall, well inside the mantle window, and nothing in the mantle code ever skipped
+breakables - but jumping at one above `SmashSpeed` always burst it instead of climbing it. (Found by
+reading, not by playing: no crate exists in the test course, so this one had never been hit.) The two
+tests race each other and the break sweep is always in front: `SmashAhead` sweeps the capsule along
+`Velocity * (DeltaTime + 0.05)`, so at 900 cm/s it reaches about 94 cm past the capsule axis and
+further the faster you go, while the mantle wall probe is a fixed `R + 30` = 64 cm. Every crate in
+that 30 cm gap was already scrap by the time the mantle probe could see it, which at bunny-hop
+speeds is every crate.
+
+`SmashAhead` now asks the mantle question first, from as far out as its own sweep reaches, and
+spares the breakable it would climb. The geometry moved out of `TryStartMantle` into
+`FindMantle(ExtraReach, Out)`, which changes nothing and decides nothing - `TryStartMantle` passes 0
+and then commits to the answer, so how close you have to be to climb is exactly what it was. The
+prediction is re-made every frame, so a crate that turns out not to be climbable after all (a
+ceiling you only see from close) breaks on the frame the mantle test starts failing.
+
+What still breaks a breakable: hitting it without holding forward into it, sliding into it,
+anything whose top is outside `MantleMinHeight..MantleMaxHeight` - the 400 cm panel always, a stack
+of two crates at 200 - and C4. `bMantleOverSmash` on the movement component turns the whole thing
+off for the old behaviour.
+
+### Fixed: a surface-mounted piece the ghost said yes to (2026-11-01)
+
+Four bugs, all of them only on spikes and the jump pad - the pieces that go through
+`TrimToSupport` - and all but the overhang silent:
+
+- **The click re-asked the question.** `OnPlace` ran `ComputePlacement` again instead of using the
+  `Planned` the ghost was drawn from. A click is handled a hair after that tick, by which time the
+  mouse has moved a pixel or two, and the trim grows the plate out of **the grid cell you are
+  pointing at**: near the edge of a wall or a ledge one cell is backed and its neighbour is not, so
+  the answer flipped between the frame you saw and the frame you clicked. The cyan box did nothing
+  and nothing reached the log, because the request was never sent. It now places the ghost you
+  clicked on. The hand slot is checked too, so scrolling the hand in the same frame as the click
+  cannot send one piece's box with another piece's slot.
+- **The trim kept cells it had only half tested, so the plate overhung the edge.** It probed one
+  point per cell, at the centre, and kept any cell whose centre was backed - including a cell whose
+  outer half hangs over the edge of the ledge. That is the reported "it seems to have overhang which
+  it shouldn't": up to half a cell, 25 cm with the default grid, of spikes or of jump pad sticking
+  out into the air, launching off a face that is not there. A cell is now kept only if all four of
+  its **corners** are backed. Corners are shared between neighbouring cells, so it is one trace per
+  lattice point, not four per cell, and the whole lattice is pulled in 2 cm (`SupportEdgeBias`) so a
+  plate flush with the edge still counts - 2 cm is now the most a piece can overhang.
+- **The server asked a different question again.** `IsFullySupported` probed the four corners of the
+  trimmed plate pulled in 12 cm, which agreed with neither version of the trim. It is now
+  `IsBackedAcross`, the same corner lattice over the trimmed plate, off the shared `SupportCells`
+  layout, so a cyan ghost is a piece the server accepts.
+- **Aiming at the lip no longer refuses the placement.** The trim grows out of the cell under the
+  crosshair and gave up if that one cell was not backed, which with corner probing is any aim within
+  half a cell of an edge - exactly where you aim when you want spikes *at* the edge. It now slides
+  to the nearest fully backed cell, scanned in a fixed order so the server reaches the same answer.
+  That also kills the blink: the ghost used to vanish as the aim point crossed a cell boundary.
+
+Not verified by playing yet.
+
 ### Still unverified (placement and pieces)
 
 The placement loop itself is confirmed working: place a piece, Enter to run, and the character moves

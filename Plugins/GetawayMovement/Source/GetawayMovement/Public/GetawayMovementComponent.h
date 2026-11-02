@@ -13,6 +13,27 @@ enum class EGetawayCustomMove : uint8
 };
 
 /**
+ * A ledge the mantle probe found: what it is, and where a climb would put you.
+ *
+ * Plain struct, not a USTRUCT: it lives for the length of one test and never leaves the component.
+ */
+struct FGetawayMantleFit
+{
+	/** The face you would climb, and the thing you would stand on. Usually the same actor. */
+	const AActor* Wall = nullptr;
+	const AActor* Ledge = nullptr;
+	/** Flat direction into the wall, i.e. the way you go over the top. */
+	FVector Dir = FVector::ZeroVector;
+	/** Where the capsule ends up, X and Y only. */
+	FVector LandXY = FVector::ZeroVector;
+	/** World Z of the surface up there, and how much a slope lifts the landing capsule. */
+	float Top = 0.f;
+	float SlopeLift = 0.f;
+	/** False when there is only room to crouch on top, so the climb has to duck. */
+	bool bStandFits = false;
+};
+
+/**
  * Source-engine style movement for a first-person character, ported from the Getaway Movement Lab prototype.
  *
  * - Ground: Source friction (sv_friction / sv_stopspeed) and acceleration (sv_accelerate).
@@ -162,6 +183,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Breakables", meta = (ClampMin = "0"))
 	float SmashSpeed = 900.f;
 
+	/**
+	 * A breakable you are about to mantle is climbed, not burst. Off, a crate in the air always
+	 * bursts above SmashSpeed, because the break sweep reaches further ahead than the mantle probe.
+	 * Panels and anything too tall to climb still break either way.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Breakables")
+	bool bMantleOverSmash = true;
+
 	/* ---------------- Input from the character ---------------- */
 
 	void QueueJump();
@@ -250,6 +279,13 @@ private:
 	void WallKick();
 
 	// Mantle
+	/**
+	 * The whole geometric question - is there a ledge ahead I could pull myself onto, and where
+	 * would it put me - with nothing changed. ExtraReach looks further ahead than a climb would
+	 * really start from, which is how SmashAhead can ask the same question its break sweep is
+	 * about to answer for itself. TryStartMantle passes 0 and then commits to the answer.
+	 */
+	bool FindMantle(float ExtraReach, FGetawayMantleFit& Out) const;
 	bool TryStartMantle();
 	void PhysMantle(float DeltaTime, int32 Iterations);
 

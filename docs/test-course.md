@@ -22,6 +22,50 @@ tests rather than merely allow it.
 Colour coding follows the browser lab: cyan = wallrun surface, green = mantle ledge, amber = slide /
 finish, orange = breakable, dark grey = ordinary solid.
 
+### What is actually in the map (read 2026-11-01)
+
+The table above is what the course was *built* as. The map has been edited by hand since, and it no
+longer matches. Read out of `/Game/Maps/TestCourse` with a headless Python dump of every actor's
+bounds, so these are the numbers the traces meet:
+
+| Actor | X | Y | Z |
+|---|---|---|---|
+| `Floor_Start` | -400..2300 | ±400 | -50..0 |
+| `SlideBar` | 1620..1780 | ±400 | 110..230 |
+| `WallRun_L` / `_R` | 2300..3700 | -440..-400 / 400..440 | 0..400 |
+| `Floor_Mantle` | 3700..5600 | ±400 | -50..0 |
+| `Panel_1` (breakable) | 4767.5..4792.5 | ±400 | 0..200 |
+| `Panel_2` (breakable) | 5466.4..5491.4 | -402..398 | -1.6..198.4 |
+| `Panel_3` (breakable) | 5466.4..5491.4 | -402..398 | 198.4..398.4 |
+| `Floor_Break` | 5600..6900 | ±400 | -50..0 |
+| `Panel_4` (breakable) | 6126.4..6151.4 | -402..398 | -1.6..198.4 |
+| `Jump_1`..`Jump_4` | 7100..7400, 7800..8100, 8297.7..8597.7, 8780..9080 | 600 wide, shifted each time | 0..50, 37.5..87.5, 132.2..182.2, 267.5..317.5 |
+| `RocketLedge_500cm` | 9500..9800 | ±300 | 470..500 |
+| `Finish` | 9500..9800 | ±150 | 500..900 |
+
+Differences from the table above, all of them things to know before writing a test against this map:
+
+- **The three mantle ledges are gone.** `Floor_Mantle` is 1900 cm of empty floor with `Panel_1`
+  standing in the middle of it. There is nothing in the map built to be mantled.
+  **Put them back** with `Content/Python/restore_mantle_ledges.py`: open the map, Tools > Execute
+  Python Script..., pick the file, then Ctrl+S if you like where they landed (the script saves
+  nothing itself). It adds `Ledge_60` at X 3850..4150, `Ledge_110` at X 4250..4550 and `Ledge_165`
+  at X 5000..5300, each 300 cm deep and the floor's full 800 cm across, tops at 60 / 110 / 165, in
+  the green `M_Course_Ledge`. The gaps dodge the panels: 217 cm clear before `Panel_1` and 166 cm
+  after the last ledge. 300 cm deep is deliberate - the landing capsule has room to stand on top, so
+  these test the ordinary mantle rather than the thin-ledge path added the same day. Re-running it
+  moves the ledges instead of duplicating them, so the table in the script is editable.
+- **There is no crate stack and no breakable blast wall.** Every breakable in the course is the same
+  piece: 800 wide, 200 tall and **25 cm thick**. `Panel_2` and `Panel_3` are stacked into one 400
+  tall wall; `Panel_1` and `Panel_4` stand alone at 200.
+- **There is no C4 pickup actor**, so the section below about `C4Pickup_1` at X=6100 is stale too and
+  the rocket-jump ledge cannot be reached on charges collected in the map. Set the character's
+  `StartingCharges` to test the blast.
+- There are **four** jump platforms, not three, and the last one at 267.5..317.5 is a long way under
+  the 470 rocket ledge.
+- The 25 cm thickness is why no breakable in this map could be mantled until 2026-11-01; see *Fixed:
+  a thin ledge could not be mantled* in `docs/placement.md`.
+
 A catch floor runs under the whole course at z=-300 so a miss never drops you into the void, and
 7-step staircases (40 cm rise, under the 50 cm MaxStepHeight) climb out of each pit at its far end.
 Falling used to cost a few seconds and skip that obstacle instead of ending the run, which also

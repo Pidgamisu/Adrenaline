@@ -649,7 +649,7 @@ void UGetawayMovementComponent::PhysWallRun(float DeltaTime, int32 Iterations)
 
 /* ============================================================ mantle */
 
-bool UGetawayMovementComponent::TryStartMantle()
+bool UGetawayMovementComponent::FindMantle(float ExtraReach, FGetawayMantleFit& Out) const
 {
 	const FVector Fwd = ViewForward();
 	if (WishAnalog() <= 0.f || FVector::DotProduct(Acceleration.GetSafeNormal2D(), Fwd) < 0.5f) return false;
@@ -669,13 +669,17 @@ bool UGetawayMovementComponent::TryStartMantle()
 	// such limit: it mantles off whatever you actually collided with, at whatever height contact
 	// happened. Probe up the capsule instead and take the lowest wall, which restores the full
 	// MantleMinHeight..MantleMaxHeight window.
+	//
+	// ExtraReach looks further ahead than a mantle would actually start from. SmashAhead uses it to
+	// ask "is this crate one I am about to climb?" from as far out as its own break sweep reaches;
+	// the mantle itself always uses 0, so how close you have to be to climb has not changed.
 	FHitResult WallHit;
 	bool bFoundWall = false;
 	for (float H = 20.f; H <= MantleMaxHeight && !bFoundWall; H += 20.f)
 	{
 		const FVector Start = Feet + FVector(0.f, 0.f, H);
 		FHitResult Hit;
-		if (!World->LineTraceSingleByChannel(Hit, Start, Start + Fwd * (R + 30.f), Channel, Params)) continue;
+		if (!World->LineTraceSingleByChannel(Hit, Start, Start + Fwd * (R + 30.f + FMath::Max(0.f, ExtraReach)), Channel, Params)) continue;
 		if (FMath::Abs(Hit.ImpactNormal.Z) > 0.3f || FVector::DotProduct(Fwd, Hit.ImpactNormal) > -0.5f) continue;
 		// Breakables were skipped here too. A crate you have not broken is something to climb.
 		WallHit = Hit;
@@ -685,17 +689,42 @@ bool UGetawayMovementComponent::TryStartMantle()
 	const FVector N = WallHit.ImpactNormal;
 
 	// Find the top of the ledge just past the wall face.
+	//
+	// The landing point was a single probe R + 10 past the face - 44 cm with the default capsule,
+	// far enough that you land clear of the wall rather than balanced on its edge. That is further
+	// than a thin piece is deep: the test course's breakable panels are 25 cm thick, so the probe
+	// came down 19 cm *past* them into open air, found nothing, and refused the climb. None of the
+	// four panels could be mantled from either side, and nor could any other thin wall, breakable
+	// or not.
+	//
+	// Try the deepest landing first and walk in towards the face until something holds you up. A
+	// thick ledge is found at R + 10 on the first try and behaves exactly as it did; a thin one puts
+	// you on top of it, which with the speed a mantle keeps reads as vaulting the panel.
 	const FVector Dir = -N.GetSafeNormal2D();
-	const FVector Probe = WallHit.ImpactPoint + Dir * (R + 10.f); // where the capsule will stand on top
+	const float Insets[] = { R + 10.f, R * 0.7f, R * 0.35f, 6.f };
 	FHitResult TopHit;
-	const FVector TopStart(Probe.X, Probe.Y, Feet.Z + MantleMaxHeight + 20.f);
-	const FVector TopEnd(Probe.X, Probe.Y, Feet.Z + MantleMinHeight - 5.f);
-	if (!World->LineTraceSingleByChannel(TopHit, TopStart, TopEnd, Channel, Params)) return false;
-	if (TopHit.bStartPenetrating || !IsWalkable(TopHit)) return false;
+	FVector Probe = FVector::ZeroVector; // where the capsule will stand on top
+	bool bFoundTop = false;
+	for (const float Inset : Insets)
+	{
+		const FVector At = WallHit.ImpactPoint + Dir * Inset;
+		const FVector TopStart(At.X, At.Y, Feet.Z + MantleMaxHeight + 20.f);
+		const FVector TopEnd(At.X, At.Y, Feet.Z + MantleMinHeight - 5.f);
+		FHitResult Hit;
+		if (!World->LineTraceSingleByChannel(Hit, TopStart, TopEnd, Channel, Params)) continue;
+		if (Hit.bStartPenetrating || !IsWalkable(Hit)) continue;
+		// The height window is part of the question, not a test applied afterwards: a probe that
+		// overshoots a thin ledge often lands on the floor far below, and that is not a ledge.
+		const float H = Hit.ImpactPoint.Z - Feet.Z;
+		if (H < MantleMinHeight || H > MantleMaxHeight) continue;
+		TopHit = Hit;
+		Probe = At;
+		bFoundTop = true;
+		break;
+	}
+	if (!bFoundTop) return false;
 
 	const float Top = TopHit.ImpactPoint.Z;
-	const float Rel = Top - Feet.Z;
-	if (Rel < MantleMinHeight || Rel > MantleMaxHeight) return false;
 
 	// Room to stand (or at least crouch) on top?
 	//
@@ -731,20 +760,39 @@ bool UGetawayMovementComponent::TryStartMantle()
 		return false;
 	}
 
+	// Both the face and the top: usually the same actor, but a crate pushed against a wall can be
+	// the face you climb while something else is the ledge you land on, and SmashAhead has to spare
+	// whichever of the two is breakable.
+	Out.Wall = WallHit.GetActor();
+	Out.Ledge = TopHit.GetActor();
+	Out.Dir = Dir;
+	Out.LandXY = LandXY;
+	Out.Top = Top;
+	Out.SlopeLift = SlopeLift;
+	Out.bStandFits = bStandFits;
+	return true;
+}
+
+bool UGetawayMovementComponent::TryStartMantle()
+{
+	FGetawayMantleFit Fit;
+	if (!FindMantle(0.f, Fit)) return false;
+
 	MantleSavedVelocity = Velocity;
-	if (!bStandFits && !IsCrouching())
+	if (!Fit.bStandFits && !IsCrouching())
 	{
 		bWantsToCrouch = true;
 		Crouch(false);
 	}
 
+	// Read after the crouch above, so a mantle into a low-ceilinged gap lands at the crouched height.
 	MantleStart = UpdatedComponent->GetComponentLocation();
-	MantleEnd = FVector(Probe.X, Probe.Y, 0.f);
-	MantleDir = Dir;
+	MantleEnd = FVector(Fit.LandXY.X, Fit.LandXY.Y, 0.f);
+	MantleDir = Fit.Dir;
 	// Land a touch clear of a sloped top rather than inside it; the floor snap settles the rest.
-	MantleTopCenterZ = Top + CapsuleHalfHeight() + 2.f + SlopeLift;
+	MantleTopCenterZ = Fit.Top + CapsuleHalfHeight() + 2.f + Fit.SlopeLift;
 	MantleElapsed = 0.f;
-	LastMantleTime = World->GetTimeSeconds();
+	LastMantleTime = GetWorld()->GetTimeSeconds();
 	EndSlide();
 	Velocity = FVector::ZeroVector;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(EGetawayCustomMove::Mantle));
@@ -801,12 +849,42 @@ void UGetawayMovementComponent::SmashAhead(float DeltaTime)
 	// WallKick, rather than disappearing out from under you mid-run.
 	const AActor* CurrentWall = IsWallRunning() ? WallActor.Get() : nullptr;
 
+	// Is there anything to break at all? Asked first so the mantle test below, which is a handful
+	// of traces, only runs on the frames it can actually change something.
+	bool bAnyBreakable = false;
+	for (const FHitResult& H : Hits)
+	{
+		const AGetawayBreakable* B = Cast<AGetawayBreakable>(H.GetActor());
+		bAnyBreakable |= (B && !B->IsBroken());
+	}
+
+	// A crate you are about to pull yourself onto is spared too. This sweep reaches a capsule radius
+	// plus roughly a twentieth of a second of travel ahead of you and grows with your speed, while
+	// the mantle probe is a fixed 30 cm past the capsule: above SmashSpeed the break always won the
+	// race, which is why a breakable could never be climbed at speed. Asking from as far out as the
+	// sweep itself reaches makes the two agree.
+	//
+	// Only while airborne, because that is the only state a mantle can start from. Hitting a panel
+	// head-on still bursts it: a mantle needs its top within MantleMaxHeight of your feet, with room
+	// to stand up there and a clear climb - see FindMantle.
+	const AActor* MantleWall = nullptr;
+	const AActor* MantleLedge = nullptr;
+	if (bAnyBreakable && bMantleOverSmash && IsFalling())
+	{
+		FGetawayMantleFit Fit;
+		if (FindMantle((End - Start).Size2D(), Fit))
+		{
+			MantleWall = Fit.Wall;
+			MantleLedge = Fit.Ledge;
+		}
+	}
+
 	bool bBroke = false;
 	for (const FHitResult& H : Hits)
 	{
 		if (AGetawayBreakable* B = Cast<AGetawayBreakable>(H.GetActor()))
 		{
-			if (B == CurrentWall) continue;
+			if (B == CurrentWall || B == MantleWall || B == MantleLedge) continue;
 			if (!B->IsBroken())
 			{
 				B->Break(Velocity);

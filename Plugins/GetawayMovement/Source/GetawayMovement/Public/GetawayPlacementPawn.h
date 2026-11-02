@@ -223,12 +223,23 @@ private:
 	bool IsBlockedAt(const FVector& Centre, const FRotator& Rotation, const FVector& LocalSize) const;
 
 	/**
-	 * Is every corner of a plate of this size, at this spot, actually backed by something? Used to
-	 * check a trim rather than to forbid one: the client works out how far the surface reaches and
-	 * the server checks the answer with this. Corners are tested separately, so a plate bridging
-	 * two surfaces that meet underneath is supported.
+	 * The grid of support probes a surface-mounted piece of this catalog size is tested on: one
+	 * cell per grid square. Shared so TrimToSupport and IsBackedAcross ask about the same points.
 	 */
-	bool IsFullySupported(const FVector& Centre, const FRotator& Rotation, const FVector& LocalSize) const;
+	void SupportCells(const FVector& PieceSize, int32& OutNX, int32& OutNY,
+		float& OutStepX, float& OutStepY) const;
+
+	/**
+	 * Is a plate of this size, at this spot, backed by something across its whole face? Used to
+	 * check a trim rather than to forbid one: the client works out how far the surface reaches and
+	 * the server checks the answer with this. Cells are tested separately, so a plate bridging two
+	 * surfaces that meet underneath is supported.
+	 *
+	 * PieceSize is the catalog size the trim started from, which is what fixes the cell grid;
+	 * LocalSize is what came back from the trim.
+	 */
+	bool IsBackedAcross(const FVector& Centre, const FRotator& Rotation, const FVector& LocalSize,
+		const FVector& PieceSize) const;
 
 	/** True if anything solid is within ContactReach of the piece's faces. See ContactReach. */
 	bool IsTouchingSomething(const FVector& Centre, const FRotator& Rotation, const FVector& LocalSize) const;
@@ -319,5 +330,12 @@ private:
 
 	int32 HandSlot = 0;
 	int32 ManualRotation = 0;
+
+	/**
+	 * Where the piece in hand would land, worked out once a tick and drawn as the ghost. Clicking
+	 * places this, so what you see is what you get; PlannedSlot is the hand slot it was worked out
+	 * for, or -1 when there is nothing to place. See OnPlace.
+	 */
 	FGetawayPlacement Planned;
+	int32 PlannedSlot = -1;
 };

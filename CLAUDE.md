@@ -78,6 +78,10 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   - In the Unreal version you can't re-grab the same wall until you land.
 - **Mantle:** stays in. Keeps 75% of your run-up speed (it doesn't stop you) and does a small camera jiggle.
 - **No kick/punch button.** Breaking things is done by hitting them at speed (slide or jump into them) or with C4.
+- **Climbing beats breaking** (decided 2026-11-01): a breakable whose top you could mantle is
+  climbed, not burst, so a crate is a step up as well as a wall to smash. `bMantleOverSmash` on the
+  movement component turns it off. Panels, crate stacks and anything else outside the mantle window
+  still break on contact at speed.
 - **C4:**
   - Carry up to two charges at a time, G to throw, F to detonate.
   - **C4 is a collectable resource** (decided 2026-10-15, replacing "charges return when they detonate"): a thrown

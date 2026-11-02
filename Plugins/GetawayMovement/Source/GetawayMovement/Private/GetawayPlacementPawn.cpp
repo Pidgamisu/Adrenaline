@@ -435,7 +435,19 @@ void AGetawayPlacementPawn::OnPlace(const FInputActionValue&)
 	FGetawayPieceDef Def;
 	if (!CurrentPiece(Def)) return;
 
-	const FGetawayPlacement P = ComputePlacement(Def);
+	// Place the ghost you clicked on, not a fresh answer to the same question.
+	//
+	// This used to re-run ComputePlacement here, and a click is handled a hair after the tick that
+	// drew the ghost, by which time the mouse has moved a pixel or two. For a surface-mounted piece
+	// that is enough to land the aim point in the next grid cell along, and the trim starts from
+	// the cell you are pointing at: near the edge of a wall or a ledge one cell is backed and its
+	// neighbour is not, so the answer flipped between the frame you saw and the frame you clicked.
+	// A cyan box did nothing, with nothing in the log, because the request was never sent.
+	//
+	// Tick recomputes Planned every frame and the ghost is drawn from it, so this is exactly what
+	// was on screen. The slot is checked because scrolling the hand in the same frame as the click
+	// would otherwise send one piece's box with another piece's slot.
+	FGetawayPlacement P = (PlannedSlot == HandSlot) ? Planned : ComputePlacement(Def);
 	if (!P.CanPlace()) return;
 
 	// The client decides where it is aiming, which only it can know, but it does not place anything:
@@ -514,7 +526,7 @@ void AGetawayPlacementPawn::ServerPlacePiece_Implementation(int32 Slot, FVector_
 		return;
 	}
 
-	if (Def.bSurfaceMounted && !IsFullySupported(Centre, Turned, Local))
+	if (Def.bSurfaceMounted && !IsBackedAcross(Centre, Turned, Local, Def.Size))
 	{
 		UE_LOG(LogTemp, Log, TEXT("Getaway: refused %s at %s, it is not backed by anything"),
 			*Def.Id.ToString(), *Centre.ToCompactString());
@@ -628,14 +640,38 @@ bool AGetawayPlacementPawn::IsTouchingSomething(const FVector& Centre, const FRo
 
 namespace
 {
-	/** How far in from each corner the support probe sits, so a flush edge is not an overhang. */
-	constexpr float SupportInset = 12.f;
-	/** How far a corner may be off its surface before it counts as hanging in the air. */
+	/** How far a probe may be off its surface before it counts as hanging in the air. */
 	constexpr float SupportReach = 18.f;
+
+	/**
+	 * Probes on the outer edge of a plate are pulled this far in, so a plate ending exactly level
+	 * with the edge of a floor is still called supported instead of putting a trace right on the
+	 * join and taking whatever floating point says. It is also the most a piece may overhang.
+	 */
+	constexpr float SupportEdgeBias = 2.f;
+
+	/** Scales a probe offset measured from the middle of a plate so the outermost comes in by the bias. */
+	float EdgeShrink(float FullSize)
+	{
+		const float Half = FullSize * 0.5f;
+		return (Half > SupportEdgeBias) ? (Half - SupportEdgeBias) / Half : 0.f;
+	}
 }
 
-bool AGetawayPlacementPawn::IsFullySupported(const FVector& Centre, const FRotator& Rotation,
-	const FVector& LocalSize) const
+void AGetawayPlacementPawn::SupportCells(const FVector& PieceSize, int32& OutNX, int32& OutNY,
+	float& OutStepX, float& OutStepY) const
+{
+	// One cell per grid square, so a trimmed plate still lands on the same 50 cm lattice as
+	// everything else and two players trimming the same ledge get the same answer.
+	const float Grid = FMath::Max(1.f, GridSize);
+	OutNX = FMath::Max(1, FMath::RoundToInt(PieceSize.X / Grid));
+	OutNY = FMath::Max(1, FMath::RoundToInt(PieceSize.Y / Grid));
+	OutStepX = PieceSize.X / OutNX;
+	OutStepY = PieceSize.Y / OutNY;
+}
+
+bool AGetawayPlacementPawn::IsBackedAcross(const FVector& Centre, const FRotator& Rotation,
+	const FVector& LocalSize, const FVector& PieceSize) const
 {
 	const UWorld* World = GetWorld();
 	if (!World) return false;
@@ -644,22 +680,40 @@ bool AGetawayPlacementPawn::IsFullySupported(const FVector& Centre, const FRotat
 	const FVector Out = Q.GetAxisZ();   // the way the piece faces, i.e. away from the surface
 	const FVector AxisX = Q.GetAxisX();
 	const FVector AxisY = Q.GetAxisY();
-
-	// The face lying against the surface. Corners pulled in by SupportInset so a plate ending
-	// exactly level with the edge of a floor is still called supported.
 	const FVector Face = Centre - Out * (LocalSize.Z * 0.5f);
-	const float HX = FMath::Max(1.f, LocalSize.X * 0.5f - SupportInset);
-	const float HY = FMath::Max(1.f, LocalSize.Y * 0.5f - SupportInset);
+
+	// The same corner lattice TrimToSupport grew the plate out of, so this asks about the very
+	// points the trim found backed. It used to probe four corners pulled in 12 cm from the edges,
+	// which disagreed with the trim by up to half a cell: wherever a surface ended inside that
+	// margin - anything not lined up with the grid, and every slope - the server refused a piece
+	// its own client had just drawn in cyan, and said so only in the log. Same question, one answer.
+	//
+	// The trim's lattice is laid out on the catalog piece and this one on the trimmed plate, so
+	// where a trimmed edge falls inside the catalog piece the two probes differ by the edge bias.
+	// Only ever in the safe direction: this one sits further inside the part the trim kept.
+	int32 CellsX, CellsY;
+	float StepX, StepY;
+	SupportCells(PieceSize, CellsX, CellsY, StepX, StepY);
+	const int32 NX = FMath::Clamp(FMath::RoundToInt(LocalSize.X / StepX), 1, CellsX);
+	const int32 NY = FMath::Clamp(FMath::RoundToInt(LocalSize.Y / StepY), 1, CellsY);
+	// Taken off the size that arrived rather than off the step, so a client that asks for a plate
+	// no trim would ever produce still gets every bit of it tested.
+	const float CellX = LocalSize.X / NX;
+	const float CellY = LocalSize.Y / NY;
+	const float ShrinkX = EdgeShrink(LocalSize.X);
+	const float ShrinkY = EdgeShrink(LocalSize.Y);
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(GetawaySupport), false, this);
-	for (int32 SX = -1; SX <= 1; SX += 2)
+	for (int32 I = 0; I <= NX; ++I)
 	{
-		for (int32 SY = -1; SY <= 1; SY += 2)
+		for (int32 J = 0; J <= NY; ++J)
 		{
-			const FVector Corner = Face + AxisX * (HX * SX) + AxisY * (HY * SY);
+			const FVector P = Face
+				+ AxisX * ((-LocalSize.X * 0.5f + CellX * I) * ShrinkX)
+				+ AxisY * ((-LocalSize.Y * 0.5f + CellY * J) * ShrinkY);
 			// Start just clear of the surface and poke into it. Same channel the aim trace uses, so
 			// anything you can point at can hold the piece up.
-			if (!World->LineTraceTestByChannel(Corner + Out * 4.f, Corner - Out * SupportReach,
+			if (!World->LineTraceTestByChannel(P + Out * 4.f, P - Out * SupportReach,
 				ECC_Visibility, Params))
 			{
 				return false;
@@ -681,34 +735,81 @@ bool AGetawayPlacementPawn::TrimToSupport(const FVector& AimPoint, const FVector
 	const FVector AxisY = Q.GetAxisY();
 	const FVector Face = UntrimmedCentre - Out * (Def.Size.Z * 0.5f);
 
-	// One cell per grid square, so a trimmed plate still lands on the same 50 cm lattice as
-	// everything else and two players trimming the same ledge get the same answer.
-	const float Grid = FMath::Max(1.f, GridSize);
-	const int32 NX = FMath::Max(1, FMath::RoundToInt(Def.Size.X / Grid));
-	const int32 NY = FMath::Max(1, FMath::RoundToInt(Def.Size.Y / Grid));
-	const float StepX = Def.Size.X / NX;
-	const float StepY = Def.Size.Y / NY;
+	int32 NX, NY;
+	float StepX, StepY;
+	SupportCells(Def.Size, NX, NY, StepX, StepY);
 
+	// A cell counts only if all four of its corners are backed, not just its centre.
+	//
+	// Centres were what this probed, and a cell whose centre is on the floor but whose outer half
+	// hangs past the edge was kept, so the plate overhung the ledge by up to half a cell - 25 cm
+	// with the default grid. That is wrong for a bed of spikes and wronger for a jump pad, whose
+	// launch direction comes off a face that is not there. Corners are shared between neighbouring
+	// cells, so this is one trace per lattice point rather than four per cell, and the whole
+	// lattice is pulled in by SupportEdgeBias so a plate flush with the edge still counts.
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(GetawaySupport), false, this);
+	const float ShrinkX = EdgeShrink(Def.Size.X);
+	const float ShrinkY = EdgeShrink(Def.Size.Y);
+	TArray<bool> Corner;
+	Corner.SetNumZeroed((NX + 1) * (NY + 1));
+	for (int32 I = 0; I <= NX; ++I)
+	{
+		for (int32 J = 0; J <= NY; ++J)
+		{
+			const float OX = (-Def.Size.X * 0.5f + StepX * I) * ShrinkX;
+			const float OY = (-Def.Size.Y * 0.5f + StepY * J) * ShrinkY;
+			const FVector P = Face + AxisX * OX + AxisY * OY;
+			Corner[I * (NY + 1) + J] = World->LineTraceTestByChannel(
+				P + Out * 4.f, P - Out * SupportReach, ECC_Visibility, Params);
+		}
+	}
+
 	TArray<bool> Backed;
 	Backed.SetNumZeroed(NX * NY);
 	for (int32 I = 0; I < NX; ++I)
 	{
 		for (int32 J = 0; J < NY; ++J)
 		{
-			const float OX = -Def.Size.X * 0.5f + StepX * (I + 0.5f);
-			const float OY = -Def.Size.Y * 0.5f + StepY * (J + 0.5f);
-			const FVector P = Face + AxisX * OX + AxisY * OY;
-			Backed[I * NY + J] = World->LineTraceTestByChannel(
-				P + Out * 4.f, P - Out * SupportReach, ECC_Visibility, Params);
+			Backed[I * NY + J] = Corner[I * (NY + 1) + J] && Corner[(I + 1) * (NY + 1) + J]
+				&& Corner[I * (NY + 1) + J + 1] && Corner[(I + 1) * (NY + 1) + J + 1];
 		}
 	}
 
 	// Start from the cell you were actually pointing at and grow outwards.
 	const FVector D = AimPoint - Face;
-	const int32 AI = FMath::Clamp(FMath::FloorToInt32((FVector::DotProduct(D, AxisX) + Def.Size.X * 0.5f) / StepX), 0, NX - 1);
-	const int32 AJ = FMath::Clamp(FMath::FloorToInt32((FVector::DotProduct(D, AxisY) + Def.Size.Y * 0.5f) / StepY), 0, NY - 1);
-	if (!Backed[AI * NY + AJ]) return false;
+	int32 AI = FMath::Clamp(FMath::FloorToInt32((FVector::DotProduct(D, AxisX) + Def.Size.X * 0.5f) / StepX), 0, NX - 1);
+	int32 AJ = FMath::Clamp(FMath::FloorToInt32((FVector::DotProduct(D, AxisY) + Def.Size.Y * 0.5f) / StepY), 0, NY - 1);
+	if (!Backed[AI * NY + AJ])
+	{
+		// Aiming at the lip of a ledge, where the cell under the crosshair is itself half over the
+		// edge. Slide to the nearest cell that is fully backed instead of refusing: asking for
+		// spikes at the edge of a ledge should give you spikes that stop at the edge. Refusing
+		// outright - which is what this did - also made the ghost blink out as the aim point
+		// crossed a cell boundary, which is a pixel or two of mouse movement.
+		//
+		// Nearest by cell, scanned in a fixed order so ties always fall the same way: the server
+		// re-checks the answer and the two have to agree.
+		int32 BestI = -1;
+		int32 BestJ = -1;
+		int32 BestDist = MAX_int32;
+		for (int32 I = 0; I < NX; ++I)
+		{
+			for (int32 J = 0; J < NY; ++J)
+			{
+				if (!Backed[I * NY + J]) continue;
+				const int32 Dist = (I - AI) * (I - AI) + (J - AJ) * (J - AJ);
+				if (Dist < BestDist)
+				{
+					BestDist = Dist;
+					BestI = I;
+					BestJ = J;
+				}
+			}
+		}
+		if (BestI < 0) return false; // nothing under any part of the plate
+		AI = BestI;
+		AJ = BestJ;
+	}
 
 	auto ColumnBacked = [&](int32 I, int32 J0, int32 J1)
 	{
@@ -899,9 +1000,11 @@ FGetawayPlacement AGetawayPlacementPawn::ComputePlacement(const FGetawayPieceDef
 	// the ghost turning red and the server refusing agree unless the level changed underneath.
 	Out.bBlocked = IsBlockedAt(Out.Centre, Out.Rotation, Out.LocalSize);
 
-	// Everything has to touch something. A surface-mounted piece is exempt because the support
-	// test it already passed is strictly stronger - it wants the whole footprint backed, not one
-	// corner of contact - and running both would be the same question asked twice.
+	// Everything has to touch something. A surface-mounted piece is exempt because the trim it has
+	// already been through is strictly stronger - it wants the whole footprint backed, not one
+	// corner of contact - and running both would be the same question asked twice. That trim is
+	// also what the server re-checks with IsBackedAcross, cell for cell, so a cyan ghost here is a
+	// piece the server will accept.
 	Out.bFloating = !Def.bSurfaceMounted && !IsTouchingSomething(Out.Centre, Out.Rotation, Out.LocalSize);
 
 	return Out;
@@ -955,6 +1058,8 @@ void AGetawayPlacementPawn::Tick(float DeltaSeconds)
 
 	FGetawayPieceDef Def;
 	Planned = (CanBuildNow() && CurrentPiece(Def)) ? ComputePlacement(Def) : FGetawayPlacement();
+	// Which piece it was worked out for, so a click can tell whether it is still the one in hand.
+	PlannedSlot = Planned.bHasTarget ? HandSlot : -1;
 
 	// No ghost once building is shut: a cyan box tracking your crosshair reads as an invitation,
 	// and the HUD line alone is easy to miss while you are flying around.
