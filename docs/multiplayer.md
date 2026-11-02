@@ -192,3 +192,143 @@ the single global finish - was **done on 2026-10-17**; see *The round loop* belo
   spike.
 - **`R` to restart is now standalone-only.** Reopening the level would have dropped a client's
   connection, or thrown everyone off the listen server.
+
+## Playing with friends on a LAN (2026-11-02)
+
+Step 1 of the plan for playing with other people: **a packaged build that two machines can connect
+with over direct IP, and no new gameplay code at all.** There is no menu, no host/join screen and
+no lobby - the URL is passed on the command line, which is what the two `.bat` files in `Tools/`
+exist to hide. A front end is step 2 and is deliberately not in here.
+
+Nothing in this project had ever been packaged before this, so most of the work was config.
+
+### Development, not Shipping, and why it matters
+
+**Package Development builds.** `Config/DefaultGame.ini` now pins `BuildConfiguration=PPBC_Development`
+on purpose, not out of laziness:
+
+- The **console survives**, and with no menu yet the console is how you join a game: a friend whose
+  `.bat` file fails can still open it and type `open 192.168.1.42` by hand. That is the escape hatch
+  for everything in here, and it is the reason this stays on Development until there is a front end.
+- A **C4 detonation is still invisible in Shipping**: `AGetawayC4::PlayBlastEffects` falls back to
+  `DrawDebugSphere` when `BP_C4` has no Niagara `ExplosionEffect` assigned, and debug draw is
+  compiled out. Filling that slot is the last of *Next steps* 3.
+
+**Two bigger reasons used to be here and were fixed on 2026-11-02**, the day after this section was
+written: the placement ghost was `DrawDebugBox` and friends, and four gameplay messages went through
+`GEngine->AddOnScreenDebugMessage`, whose body is `#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)`. A
+Shipping package then meant a placement camera you aimed with blind and a game that had quietly
+stopped telling you when you picked up C4 or died. The ghost is now real geometry and the messages
+are on `AGetawayHUD::ShowMessage` - see *The ghost is real geometry* in `docs/placement.md`. A
+Shipping build was compiled on 2026-11-02 to prove the guards hold.
+
+### What was changed
+
+| Where | What |
+|---|---|
+| `Config/DefaultGame.ini` | a `ProjectPackagingSettings` block: Development, target `Getaway`, `TestCourse` as the map to cook, `Maps` / `Blueprints` / `Materials` always cooked, `__ExternalActors__` never cooked, editor content skipped |
+| `Getaway.uproject` | `PythonScriptPlugin` and `EditorScriptingUtilities` given `"TargetAllowList": [ "Editor" ]` |
+| `Tools/Host-Vaultborne.bat`, `Tools/Join-Vaultborne.bat` | double-click launchers, copied into the packaged build |
+
+Three of those are worth a sentence each:
+
+- **`Maps`, `Blueprints` and `Materials` are cooked outright**, rather than trusting the map's
+  references. The piece Blueprints in `Content/Blueprints/Pieces/` and the Vaultborne materials are
+  reached through the game mode's catalog and through soft references, which the cooker does not
+  reliably follow. Cheap insurance against a piece that looks right in the editor and spawns as a
+  plain cube in the build. `Content/ThirdParty` is deliberately **not** on the list: a pack's demo
+  maps and unused meshes should come in only where a piece actually references them.
+- **`Content/__ExternalActors__` is explicitly never cooked.** It holds 51 MB of orphaned
+  one-file-per-actor packages belonging to a map called `NewMap` that no longer exists -
+  `TestCourse.umap` is the only map in the project, and it does not use external actors. Nothing
+  references them, so the folder is junk and can be deleted outright. It is named in the ini
+  because the first version of this config cooked all of `/Game` and would have dragged the lot
+  into the build.
+- **`PythonScriptPlugin` was being packaged.** It has a module of type `Runtime`
+  (`PythonScriptPluginPreload`), so without an allow list it goes into the build along with a Python
+  distribution, for a game that uses Python only as an editor tool. `EditorScriptingUtilities` is
+  editor-only by nature and the allow list just makes that explicit.
+
+The runtime plugin itself needed nothing: `GetawayMovement` has no editor includes anywhere
+(checked for `GEditor`, `Editor.h`, `UnrealEd`, `Kismet2`), and both build targets - `Getaway` for
+the game and `GetawayEditor` - already existed.
+
+### Packaging it, click by click
+
+1. Open `Getaway.uproject`.
+2. Top toolbar, **Platforms** (the icon left of *Settings*) - **Windows** - check that
+   **Development** is ticked under *Build Configuration*, and that *Build Target* says **Getaway**.
+   Both now come from `DefaultGame.ini`, so they should already be right.
+3. **Platforms** - **Windows** - **Package Project**.
+4. Pick an output folder outside the project - `C:\Users\natha\Desktop\VaultborneBuild` is fine.
+   Never inside the project, or the next cook tries to cook the last one.
+5. It takes a while the first time (shaders). Watch the *Output Log* for `BUILD SUCCESSFUL`.
+6. The result is `<output>\Windows\Getaway.exe` plus a `Getaway` folder beside it. **The exe is
+   still called `Getaway.exe`** - the display name is Vaultborne but the binary keeps the module
+   name, as everything else does (see *Naming* in CLAUDE.md).
+7. Copy both files from `Tools/` into the folder that holds `Getaway.exe`.
+
+To share it, zip the whole `Windows` folder. It is a few hundred MB and everyone needs the same
+build - a client and a server on different builds will refuse each other.
+
+### Hosting and joining
+
+The host runs **Host-Vaultborne.bat**, reads the address it prints to everyone else, and the
+others run **Join-Vaultborne.bat** and type it in. Both ask for a name, which is passed as
+`?Name=` and is what the scoreboard draws (`AGetawayPlayerState::GetPlayerName`, truncated to 20
+characters by the engine in `AGameModeBase::InitNewPlayer`). Without it you are "Player 0".
+
+By hand, the same thing is:
+
+    Getaway.exe "/Game/Maps/TestCourse?listen?Name=Nathan" -windowed -resx=1600 -resy=900
+    Getaway.exe "192.168.1.42?Name=Sam" -windowed -resx=1600 -resy=900
+
+`-windowed` is there so you can alt-tab, which you will want while sorting out addresses.
+
+- **The host's Windows Firewall will ask.** Allow it, and tick **Private networks**. A joiner who
+  hangs on a black screen and then fails is almost always this.
+- **Same house**: the `192.168.x.x` or `10.x.x.x` address the host script prints.
+- **Different cities**: either forward **UDP 7777** on the host's router, or - much easier - put
+  everyone on a mesh VPN (Tailscale, ZeroTier, Radmin) and use the address it gives you. The game
+  cannot do NAT punch-through on its own; that arrives with SteamSockets, which is step 4.
+- **Anyone can join mid-session.** `HandleStartingNewPlayer` deals a late joiner their own hand and
+  their own fly camera, and `Logout` releases a round that was waiting on someone who quit. That is
+  why there is no lobby here: the round loop already copes.
+
+### Still unverified
+
+**None of this has been packaged or played.** The config is right by inspection, the game target
+compiles, and every setting name was checked against
+`Engine/Source/Developer/DeveloperToolSettings/Classes/Settings/ProjectPackagingSettings.h`. What
+nobody has done is press *Package Project* and then connect two machines. Specifically open:
+
+- **Whether the cook is clean.** A missing material or a piece that spawns as a bare cube is the
+  likely first fault, and the *Output Log* names it.
+- **Whether the ghost draws in a packaged Development build.** It should - debug draw is compiled in
+  outside Shipping - but it has only ever been seen in the editor.
+- **Whether two separate machines connect**, as opposed to two PIE windows. Everything up to now,
+  including the two-player sign-off on 2026-10-17, was one process, or three on the loopback.
+- **How it feels over a real connection.** Every play-test so far has had zero latency. The knobs
+  are `NetSendRate`, `ProxyInterpSpeed`, `ProxyExtrapolationLimit` and `ProxySnapDistance` on the
+  character.
+- **The `.bat` files have not been run.** They read the IPv4 address out of `ipconfig` by matching
+  the English string "IPv4 Address", which is fine here and would need changing on a non-English
+  Windows.
+
+### Rough edges you will meet, and which step fixes them
+
+Known and left alone on purpose, because step 1 was meant to be config only:
+
+- **No way to leave.** Alt+F4 is it. Escape does nothing. Step 2 (the menu) adds *Leave*.
+- **No feedback while connecting.** A failed join is a black screen and then the window closing,
+  with no reason given. Step 3 hooks `NetworkFailure` / `TravelFailure`.
+- **Everyone spawns at one `PlayerStart`** and the engine shoves them apart. Drop a second one
+  beside the first - *Place Actors* panel, search `PlayerStart`, drag it into the viewport next to
+  the existing one, same Z, about a metre to the side. `FindPlayerStart` picks an unoccupied one per
+  player, so nothing in code has to change. Keep them level with each other or you have changed the
+  race.
+- **`R` to restart is single-player only** and says so on screen. The session runs rounds forever;
+  step 3 adds an end to it.
+- **A client could place a piece anywhere in the level.** The server checks that you own the piece
+  and that it fits, but not where you placed it from. Fine among friends, not fine on Steam - see
+  *Deliberately not done* above.
