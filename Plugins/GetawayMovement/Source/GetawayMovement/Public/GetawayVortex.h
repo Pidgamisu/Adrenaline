@@ -7,6 +7,7 @@
 class UBoxComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+class UMaterialInterface;
 class AGetawayVortex;
 class AGetawayCharacter;
 
@@ -126,6 +127,15 @@ public:
 	/** How fast the bars turn, in degrees a second. It stops when the piece is disarmed. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Vortex")
 	float SpinRate = 220.f;
+
+	/**
+	 * What the bars are made of. They are pooled in the constructor, so the two discs can be
+	 * dressed from the Components panel but the bars cannot: this covers all of them at once. A
+	 * translucent or glowing material is the one that reads right here - you have to be able to
+	 * see the course through the cage. Empty leaves the engine default.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Vortex")
+	TObjectPtr<UMaterialInterface> BarMaterial;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;

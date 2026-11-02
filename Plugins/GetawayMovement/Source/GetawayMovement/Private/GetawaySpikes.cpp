@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -86,6 +87,13 @@ void AGetawaySpikes::OnConstruction(const FTransform& Transform)
 
 void AGetawaySpikes::LayOutPoints()
 {
+	// The whole pool, hidden spares included, so a plate resized in the editor cannot bring back
+	// an undressed point. Set unconditionally, so clearing the property puts the default back.
+	for (UStaticMeshComponent* Point : Points)
+	{
+		if (Point) Point->SetMaterial(0, PointMaterial);
+	}
+
 	const FVector Scale = GetActorScale3D().GetAbs();
 	const float WorldX = SpikePlateLocal * Scale.X;
 	const float WorldY = SpikePlateLocal * Scale.Y;

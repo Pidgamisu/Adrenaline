@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -133,6 +134,10 @@ void AGetawayVortex::LayOutColumn()
 	{
 		UStaticMeshComponent* Bar = Bars[I];
 		if (!Bar) continue;
+
+		// Every bar, hidden spares included, and unconditionally, so clearing the property in the
+		// Details panel puts the engine default back.
+		Bar->SetMaterial(0, BarMaterial);
 
 		if (I >= Used)
 		{

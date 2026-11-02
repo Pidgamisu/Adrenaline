@@ -78,6 +78,62 @@ The C++ defaults are unchanged and stay the source of truth; the tuned table is 
 `Plugins/GetawayMovement/README.md`. When a value settles, it belongs in the C++ default and in
 that table, not only in the Blueprint - a Blueprint-only value is invisible to anyone reading code.
 
+## Dressing a piece: materials
+
+Added 2026-11-02. The plugin ships no content, so every piece wears an engine default: the cube's
+`BasicShapeMaterial`, except breakables, which are given `WorldGridMaterial` in
+`AGetawayBreakable`'s constructor so they read as breakable at a glance. Logic stays in C++ and the
+look is hooked up in a Blueprint subclass, the same rule as any third-party art.
+
+Three things to know before changing any of it.
+
+**One class can only have one look.** The catalog's `floor`, `wall` and `ledge` entries all point at
+`AGetawayPiece` (see `AGetawayGameMode`'s constructor), so a material set on that class dresses all
+three. Different looks need a Blueprint child each - `BP_Piece_Floor`, `BP_Piece_Wall`,
+`BP_Piece_Ledge` - with the entry's **Actor Class** in `BP_GetawayGameMode`'s **Catalog** repointed
+at it. Leave **Size**, **Directional** and **Surface Mounted** alone; those came from the lab.
+
+**Most parts are reachable from the Components panel.** Everything a piece shows is a default
+subobject created in its constructor - `Mesh`, `Base`, `Piston`, `Pad`, `Charge`, `Cap`, and even
+the pooled `Spike_0_0…` and `Bar0…` - so a Blueprint child can select any of them and set
+**Materials > Element 0** in *Details*.
+
+**Three slots exist because the Details panel cannot reach those parts** (added 2026-11-02), beside
+one older one:
+
+| Property | Class | Why it has to be a property |
+|---|---|---|
+| `SurfaceMaterial` | `AGetawayRamp` | The wedge is a `UProceduralMeshComponent`. A procedural mesh has no material slot until its section exists, and the section is only built by `BuildWedge` on spawn, so there is nothing to set at Blueprint-edit time. Applied after `CreateMeshSection_LinearColor`, which is the only order that works. |
+| `PointMaterial` | `AGetawaySpikes` | Covers the whole pooled bed of cones in one field instead of 16 components. Applied in `LayOutPoints`. |
+| `BarMaterial` | `AGetawayVortex` | Same for the cage's bars. Applied in `LayOutColumn`. A translucent or glowing material is the one that reads right - you have to be able to see the course through the cage. |
+| `ScrapMaterial` | `AGetawayBreakable` | Older. The scraps are `NewObject`ed when the panel bursts, so they exist on no Blueprint. Falls back to the mesh's own material when empty. |
+
+All four are set unconditionally, so clearing one in the Details panel puts the engine default back
+rather than leaving the last material stuck on.
+
+**`Content/Python/dress_pieces.py` does all eleven at once**, added 2026-11-02. It makes one
+Blueprint per catalog entry under `/Game/Blueprints/Pieces`, puts a material on each, and rewires
+`BP_GetawayGameMode`'s **Catalog > Actor Class** to point at them. The colours live in a `PIECES`
+table at the top of the script - they are a first guess, not a decision, and changing them there
+or in the Blueprint's Details panel both stick. Safe to run twice: existing Blueprints are reused,
+though the materials named in the table are rewritten every run, so a colour picked by hand needs
+clearing out of the table to survive.
+
+Two things it does that are worth knowing. It matches catalog entries on **Id**, not position,
+because adding a piece to the C++ catalog later would shift every index below it and silently
+dress the wrong piece. And it **reads every material back** after compiling, because writing to a
+component on a Blueprint's class default object is the part most likely to go quietly nowhere; a
+material that did not take is reported with the panel to set it in by hand.
+
+**Scale stretches UVs.** Pieces are the 100 cm engine cube scaled to `Size`, so the catalog's
+400 x 50 x 400 wall is scale (4, 0.5, 4) and any ordinary UV-mapped texture smears with it. A
+world-aligned or triplanar material is the way out, and the one the first pack happens to use:
+`/Game/ThirdParty/GlowGridStarter/Materials/M_GG_Grid` is built on the engine's
+`WorldAlignedTexture` function, so its grid holds its size whatever a piece is scaled to. Packs
+live under `Content/ThirdParty/<PackName>/` and are never edited in place; `CREDITS.md` says what
+is still unanswered about this one, and `Content/Python/move_pack_to_thirdparty.py` is what
+moves a pack there.
+
 ## Not verified yet
 
 - **Single player: played 2026-10-26 and fine.** `BP_GetawayGameMode_C` spawning `BP_Character_C`
@@ -87,7 +143,36 @@ that table, not only in the Blueprint - a Blueprint-only value is invisible to a
   move, but it is the one gap left.
 - **Changing a value in `BP_Character` and feeling it has not been done.** The wiring is proved; the
   round trip through the Details panel is not.
+- **No material has been seen on a piece in play.** The three slots above compile and are
+  applied in the right place by reading, but nothing has been dressed and run yet: the ramp's
+  procedural-mesh slot is the one most worth a look, since it is the only one whose timing could be
+  wrong. Nor has a Blueprint child of any piece been made, so *one class, one look* - floor, wall
+  and ledge sharing `AGetawayPiece` - is read off the catalog rather than played.
 - **`BP_PlacementCamera` exists and the script's write took: run 2026-10-31 and reported clean.**
   `placement_pawn_class` does accept a Blueprint class through `set_editor_property`, the same as
   `default_pawn_class`. What has *not* been done is changing a value on `BP_PlacementCamera` and
   feeling it in the camera - the same gap as `BP_Character` above.
+- **`Content/Python/move_pack_to_thirdparty.py`: first run failed, 2026-11-02, and two things
+  came out of it.** The script itself works - it loaded all 62 assets and started the rename -
+  but `rename_directory` puts up a **modal dialog** when the folder holds maps: *"Source code,
+  config INI, and text files may need Find/Replace for: StarterRoom, Overview ... Continue with
+  rename?"*. That was answered Cancel, so `RenameDirectory failed: Could not rename the assets`
+  and nothing moved. Click **OK**, or delete the pack's demo maps first and the dialog never
+  appears. The script now names the maps before it starts so the dialog is expected.
+  The second thing: in UE 5.8 the Content Browser folder menu entry is **Update Redirector
+  References**, under *Bulk Operations* just below *Delete*. It was called *Fix Up Redirectors in
+  Folder* in earlier versions, which is what sent me looking for a menu item that no longer
+  exists by that name (`AssetFolderContextMenu.cpp` still uses `FixUpRedirectorsInFolder` as the
+  internal id). It is always in the menu, whether or not any redirectors exist.
+  The script still stops short of doing the fixup itself: `IAssetTools::FixupReferencers` is not
+  a `UFUNCTION` in 5.8, so it is not reachable from Python.
+  **A successful move has still not been seen.**
+- **`Content/Python/dress_pieces.py` has not been run.** Written 2026-11-02. Its Blueprint
+  creation, CDO writes, `compile_blueprint` and read-back all copy `setup_tuning_blueprints.py`,
+  which is proven, and `set_material` / `get_material` are `BlueprintCallable` on
+  `UPrimitiveComponent` in 5.8 (checked in `PrimitiveComponent.h`; `OverrideMaterials` is
+  deliberately not written directly, as the header warns against it). What is genuinely untested
+  is whether a material set on an **inherited native component** of a Blueprint's class default
+  object survives a compile and save. That is why the script verifies instead of assuming. If it
+  reports those by name, they are three clicks each in the Components panel and the script's
+  other work still stands.

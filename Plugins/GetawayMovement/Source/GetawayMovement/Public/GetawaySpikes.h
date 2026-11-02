@@ -6,6 +6,7 @@
 
 class UBoxComponent;
 class UStaticMeshComponent;
+class UMaterialInterface;
 class AGetawaySpikes;
 class AGetawayCharacter;
 
@@ -55,6 +56,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Spikes", meta = (ClampMin = "5"))
 	float SpikeHeight = 35.f;
+
+	/**
+	 * What the points are made of. The pool is built in the constructor, so the plate's own Base
+	 * can be dressed from the Components panel but the cones cannot: this covers all of them at
+	 * once. Empty leaves the engine default.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Spikes")
+	TObjectPtr<UMaterialInterface> PointMaterial;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 
