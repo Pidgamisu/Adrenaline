@@ -1,6 +1,6 @@
 # Credits and asset licenses
 
-Every third-party asset pack, sound, font or tool shipped with Vaultborne gets a row here the day it is added.
+Every third-party asset pack, sound, font or tool shipped with Adrenaline gets a row here the day it is added.
 Check each license allows use in a commercial game on Steam, and whether it requires attribution.
 
 | Asset / pack | Folder | Source (link) | License | Attribution required? | Added |

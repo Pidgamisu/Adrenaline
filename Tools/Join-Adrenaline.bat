@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title Vaultborne - Join
+title Adrenaline - Join
 
 rem ---------------------------------------------------------------------------
 rem Connects to someone else's listen server. Copy this file into the packaged
@@ -23,7 +23,7 @@ if not exist "!GAME!" (
 
 echo.
 echo   ============================================
-echo     VAULTBORNE - joining
+echo     ADRENALINE - joining
 echo   ============================================
 echo.
 

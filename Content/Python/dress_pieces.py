@@ -16,13 +16,13 @@ Safe to run twice. Blueprints that already exist are reused, not replaced, so a 
 have changed by hand survives - EXCEPT the ones named in PIECES below, which are written every
 time. To keep a hand-picked material, clear it out of the table here.
 
-**Which colour goes where is decided here; what each colour IS lives in vaultborne_look.py.**
-Change the table below to move a colour onto a different piece, change vaultborne_look.py to
+**Which colour goes where is decided here; what each colour IS lives in adrenaline_look.py.**
+Change the table below to move a colour onto a different piece, change adrenaline_look.py to
 change the colour itself. Either way, re-run both. Logic stays in C++, the look lives in the
 Blueprint; the script only puts the first coat on.
 
 Needs BP_GetawayGameMode to exist. If it does not, run setup_tuning_blueprints.py first.
-Needs vaultborne_look.py to have been run, or /Game/Materials will be empty.
+Needs adrenaline_look.py to have been run, or /Game/Materials will be empty.
 """
 
 import unreal
@@ -47,7 +47,7 @@ WIRE_OVERLAY = None
 # section yet, and the pooled spikes and vortex bars.
 #
 # The palette is pink for architecture, cyan for anything that helps you, lime for anything that
-# kills you. The colours themselves live in vaultborne_look.py, not here.
+# kills you. The colours themselves live in adrenaline_look.py, not here.
 PIECES = [
     ("floor",    "BP_Piece_Floor",    "GetawayPiece",             {"mesh": "MI_VB_Floor"},    {}),
     ("wall",     "BP_Piece_Wall",     "GetawayPiece",             {"mesh": "MI_VB_Wall"},     {}),
@@ -78,12 +78,12 @@ _problems = []
 
 
 def log(message):
-    unreal.log("[Vaultborne dress] " + message)
+    unreal.log("[Adrenaline dress] " + message)
 
 
 def fail(message):
     _problems.append(message)
-    unreal.log_error("[Vaultborne dress] " + message)
+    unreal.log_error("[Adrenaline dress] " + message)
 
 
 def native_class(name):
@@ -271,7 +271,7 @@ def rewire_catalog(built):
 
 def run():
     if not assets.does_directory_exist(MATERIALS):
-        fail("%s does not exist. Run vaultborne_look.py first - it builds the materials this "
+        fail("%s does not exist. Run adrenaline_look.py first - it builds the materials this "
              "script hands out - then run this again." % MATERIALS)
         return
 

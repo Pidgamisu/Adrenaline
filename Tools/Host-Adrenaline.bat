@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title Vaultborne - Host
+title Adrenaline - Host
 
 rem ---------------------------------------------------------------------------
 rem Starts a listen server on the test course. Copy this file into the packaged
@@ -23,7 +23,7 @@ if not exist "!GAME!" (
 
 echo.
 echo   ============================================
-echo     VAULTBORNE - hosting
+echo     ADRENALINE - hosting
 echo   ============================================
 echo.
 echo   Read one of these addresses to your friends:

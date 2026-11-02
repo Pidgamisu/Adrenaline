@@ -2,7 +2,7 @@
 
 ## The game
 
-**Vaultborne** (working title was Getaway; the code, files and classes still use that name, see *Naming*).
+**Adrenaline** (working titles were Getaway, then Vaultborne; the code, files and classes still use the Getaway name, see *Naming*).
 
 A 3D, first-person take on **Ultimate Chicken Horse**: each round, players draft a piece from a random box, place it in a shared level, then everyone races to the objective. The twist is **deep, skill-based movement** (Source/Apex/Titanfall style), so pieces should change *how* you can move (wallrun surfaces, slide ramps, breakable panels, C4 pickups, crumbling bridges, bounce pads), not only block the way. Scoring follows Ultimate Chicken Horse: no points if everyone finishes, so players try to make the level hard but still beatable for themselves.
 
@@ -19,9 +19,9 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   Development is still the build to hand to playtesters. See `docs/multiplayer.md`.
 - **Round loop:** shared placement phase with a build clock, the run, Ultimate Chicken Horse scoring, and deaths (spikes, falling off the course).
 - **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes, jump pad, anti-gravity vortex.
-- **Art:** an art direction, not assets. Unlit pink on black with glowing wire edges, first pass
-  2026-11-02, not yet played. See `docs/look.md`. The point of it is that greybox *is* the look,
-  so meshes stop being a blocker.
+- **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid
+  band round its rim. Three passes 2026-11-02, **played and signed off at speed**. See
+  `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker.
 
 ## Where the details live
 
@@ -63,7 +63,7 @@ I'm new to Unreal C++ and I don't write code. The ideas and the feel are mine; y
 
 ## Naming
 
-The game is called **Vaultborne**. The display name is set in `Config/DefaultGame.ini`. The project file, the `Getaway` module, the `GetawayMovement` plugin and every `AGetaway…` / `UGetaway…` class keep the old name. **Don't rename any of them unless I ask.** A full rename needs CoreRedirects in `DefaultEngine.ini` (the maps store class paths), a Git commit first, and its own session.
+The game is called **Adrenaline**. The display name is set in `Config/DefaultGame.ini`. The project file, the `Getaway` module, the `GetawayMovement` plugin and every `AGetaway…` / `UGetaway…` class keep the old name. **Don't rename any of them unless I ask.** The `M_VB_…` / `MI_VB_…` material assets keep their prefix too, because the maps store their paths. A full rename of the code needs CoreRedirects in `DefaultEngine.ini` (the maps store class paths), a Git commit first, and its own session.
 
 ## Third-party assets
 
@@ -114,6 +114,14 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Dying puts you back at the start** (decided 2026-10-31, replacing "death ends your run for the round"). A fresh character at the PlayerStart after `DeathLingerTime`, your run state untouched, as many times as the run clock allows. Your C4 charges do not come back with you (confirmed 2026-10-31). The game mode's `bRespawnOnDeath` turns it off for the old Ultimate Chicken Horse behaviour. See `docs/spikes-and-death.md`.
 - **Local first, Steam later** (decided 2026-10-26). Build and test for local/LAN play now. Steamworks, online sessions and achievements wait until the game is fun locally.
 - **Client-authoritative multiplayer is fine for local play. Revisit it before Steam.** Each machine decides where its own player is, which makes cheating easy with strangers online. That is a deliberate trade-off for now, not something to fix unasked.
+- **The wall and breakable panel stay rotated 90° from the lab** (decided 2026-11-02, after
+  playing). A wall you place runs *away* from you rather than across your view, which makes it the
+  better wallrun surface - and this game is about wallrunning in a way the browser prototype was
+  not. Reversing it would be a swap of X and Y on the `wall` and `break` catalog entries. See
+  `docs/placement.md`.
+- **The unlit pink look is the look** (confirmed 2026-11-02, by playing it at speed). The edge band
+  is what carries shape and depth once the lights are off; pass one was flat without it. See
+  `docs/look.md` before changing any of it.
 
 ## Units and tuning
 
@@ -147,11 +155,11 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 
 1. More traps. Spikes were the first.
 2. The party box deals from the whole catalog. A per-round deck is still to do.
-3. ~~The placement ghost is drawn with debug lines, which don't exist in Shipping builds.~~ Done
-   2026-11-02: the ghost is real geometry on `MI_VB_Ghost`, and the four gameplay messages moved
-   from `AddOnScreenDebugMessage` onto `AGetawayHUD::ShowMessage`. **Not played yet.** The one thing
-   left that a Shipping build still loses: `AGetawayC4::PlayBlastEffects` falls back to
-   `DrawDebugSphere` when no Niagara `ExplosionEffect` is assigned, so a detonation is invisible in
-   Shipping until that slot is filled.
-4. Settle whether the wall and breakable panel should be rotated to match the lab (see *Still unverified* in `docs/placement.md`). It's a feel question for me.
-5. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.
+3. **A front end**: a menu map with Host, Join and an IP box, and Escape to leave in game. It is
+   what a friend needs instead of a `.bat` file, and what a Shipping build needs instead of the
+   console. Needs UMG in `GetawayMovement.Build.cs`. See `docs/multiplayer.md`.
+4. **Package it and play with somebody.** The packaging config is written and has never been run,
+   so the cook is unproved. See *Still unverified* in `docs/multiplayer.md`.
+5. A Niagara explosion effect for `BP_C4`. Without one the blast falls back to a debug sphere, which
+   is invisible in a Shipping build - the last loose end from the 2026-11-02 Shipping pass.
+6. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.

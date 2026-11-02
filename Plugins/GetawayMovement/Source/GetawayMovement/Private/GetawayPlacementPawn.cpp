@@ -1130,7 +1130,7 @@ bool AGetawayPlacementPawn::EnsureGhostMaterials()
 	if (!Base)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Getaway: no placement ghost material at '%s'. Run "
-			"Content/Python/vaultborne_look.py in the editor to build it. Falling back to the "
+			"Content/Python/adrenaline_look.py in the editor to build it. Falling back to the "
 			"engine default material, which is lit, so the ghost will look black."),
 			*GhostMaterial.ToString());
 		Base = UMaterial::GetDefaultMaterial(MD_Surface);

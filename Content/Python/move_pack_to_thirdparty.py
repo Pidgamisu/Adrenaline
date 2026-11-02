@@ -36,11 +36,11 @@ assets = unreal.EditorAssetLibrary
 
 
 def log(message):
-    unreal.log("[Vaultborne pack move] " + message)
+    unreal.log("[Adrenaline pack move] " + message)
 
 
 def fail(message):
-    unreal.log_error("[Vaultborne pack move] " + message)
+    unreal.log_error("[Adrenaline pack move] " + message)
 
 
 def world_paths(paths):

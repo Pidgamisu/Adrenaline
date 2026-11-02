@@ -1,5 +1,5 @@
 """
-Vaultborne's look: a black world, see-through faces, pink colour around every edge.
+Adrenaline's look: a black world, see-through faces, pink colour around every edge.
 
 Builds the master materials and the palette of instances the pieces wear:
 
@@ -131,12 +131,12 @@ _problems = []
 
 
 def log(message):
-    unreal.log("[Vaultborne look] " + message)
+    unreal.log("[Adrenaline look] " + message)
 
 
 def fail(message):
     _problems.append(message)
-    unreal.log_error("[Vaultborne look] " + message)
+    unreal.log_error("[Adrenaline look] " + message)
 
 
 def node(material, expression_class, x, y):

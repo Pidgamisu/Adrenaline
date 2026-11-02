@@ -28,11 +28,11 @@ tools = unreal.AssetToolsHelpers.get_asset_tools()
 
 
 def log(message):
-    unreal.log("[Vaultborne setup] " + message)
+    unreal.log("[Adrenaline setup] " + message)
 
 
 def fail(message):
-    unreal.log_error("[Vaultborne setup] " + message)
+    unreal.log_error("[Adrenaline setup] " + message)
 
 
 def native_class(name):

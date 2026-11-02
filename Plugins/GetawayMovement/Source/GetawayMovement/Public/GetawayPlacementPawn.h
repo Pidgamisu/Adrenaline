@@ -201,7 +201,7 @@ public:
 
 	/**
 	 * What the ghost is made of. `MI_VB_Ghost` is additive, two-sided and hollow-faced with an edge
-	 * band - a hologram already - and is built by `Content/Python/vaultborne_look.py` along with the
+	 * band - a hologram already - and is built by `Content/Python/adrenaline_look.py` along with the
 	 * rest of the palette. See *Where each part lives* in docs/look.md.
 	 *
 	 * A soft reference resolved on the first ghost frame rather than a constructor `FObjectFinder`,

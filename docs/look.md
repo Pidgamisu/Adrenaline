@@ -13,7 +13,8 @@ lights off had thrown away.
 The rim was the wrong idea; see below.
 
 **Pass three** (2026-11-02): the **edge band**, which is what the reference was showing all along
-- each face see-through in the middle with solid colour around its rim. Not yet played.
+- each face see-through in the middle with solid colour around its rim. **Played the same day and
+signed off, at speed** - see *Played and signed off* at the end.
 
 ## What the look is made of
 
@@ -80,7 +81,7 @@ A material with a dangling input either fails to compile or compiles to nonsense
 unlit game has no lighting to fall back on, the result is a completely black world rather than an
 obviously wrong-coloured one.
 
-`vaultborne_look.py`'s `wire()` now retries unnamed when a pin name does not match, and the
+`adrenaline_look.py`'s `wire()` now retries unnamed when a pin name does not match, and the
 script refuses to tell you to run the other two if anything failed.
 
 ## Why additive, and what it costs
@@ -100,7 +101,7 @@ That split is a gameplay decision as much as a visual one.
 
 | Part | Where | How you change it |
 |---|---|---|
-| The masters and every tuning number's default | `Content/Python/vaultborne_look.py` | Edit a number, run the script again |
+| The masters and every tuning number's default | `Content/Python/adrenaline_look.py` | Edit a number, run the script again |
 | Any one colour, live | the `MI_VB_*` instance's Details panel | Change it in the editor; re-running the script overwrites it |
 | Which piece wears which colour | the `PIECES` table in `Content/Python/dress_pieces.py` | Change a name, run that script again |
 | The course that is already built | `Content/Python/dress_level.py` | Run it on the open map, then repaint actors by hand |
@@ -189,17 +190,32 @@ the dial; left alone on purpose, because changing it affects everything.
 **A world-position grid has no idea how far away it is.** Far-off cells pack into fewer and fewer
 pixels and will alias. `GridStrength` at 0 is the blunt fix; a distance fade is the real one.
 
-## Still unverified
+## Played and signed off (2026-11-02)
 
-As of 2026-11-02, nothing since pass one has been played.
+**Pass three was played the day it was built, and it works - including at speed**, which was the
+whole question. The verdict was "the game looks good even when going fast". That is the thing pass
+one failed at: the look read as *flat* because turning the lights off threw away the depth cues,
+and the edge band was the answer. It is.
 
-- Whether see-through faces are readable enough to play against. Running into something you can
-  see straight through is the obvious risk, and the band is what is supposed to prevent it.
-- Whether `BorderWidth` 8 cm is a frame or a hairline at speed.
-- Whether pieces surface-mounted on a slope show the band creeping in from their real edge.
-- Whether the ramp, on the UV band, now looks out of family with everything else.
-- Whether bloom blows out where panes overlap, which is exactly where additive piles up.
-- Whether the interior grid helps or just adds noise now that the band carries the shape.
+Answered by playing, so treat the list that used to be here as history:
+
+- **See-through faces are readable enough to play against.** The band carries the shape. Running
+  into something you can see straight through was the headline risk and did not happen.
+- **`BorderWidth` 8 cm is a frame, not a hairline**, at 800 cm/s.
+- **The thin-bright-lines-on-black worry did not materialise.** No shimmer or crawl reported while
+  running, so TSR is not fighting the band and `r.AntiAliasingMethod` stays alone.
+- **Bloom does not blow out** where panes overlap, and **the interior grid helps** rather than
+  adding noise.
+
+Two close-up details were never specifically looked at, and are the only things left on this list:
+
+- Whether pieces surface-mounted on a slope show the band creeping in from their real edge. It is a
+  consequence of measuring to the bounding box, so it is real; the question is only whether it is
+  visible enough to care about.
+- Whether the ramp, on the UV band rather than the world one, looks out of family close up.
+
+Both are the kind of thing you notice standing still, not at 800 cm/s, which is presumably why
+neither came up.
 
 ## Next levers, if it still is not there
 

@@ -2,7 +2,7 @@
 Puts the unlit look on the level that is open: turns the lighting off and repaints every static
 mesh already standing in the map.
 
-Run it from the editor: Tools > Execute Python Script..., pick this file. Run vaultborne_look.py
+Run it from the editor: Tools > Execute Python Script..., pick this file. Run adrenaline_look.py
 first, or there will be no materials to hand out.
 
 Why it is needed at all. dress_pieces.py dresses the eleven piece *Blueprints*, which covers every
@@ -46,18 +46,18 @@ _problems = []
 
 
 def log(message):
-    unreal.log("[Vaultborne level] " + message)
+    unreal.log("[Adrenaline level] " + message)
 
 
 def fail(message):
     _problems.append(message)
-    unreal.log_error("[Vaultborne level] " + message)
+    unreal.log_error("[Adrenaline level] " + message)
 
 
 def material(name):
     path = "%s/%s" % (MATERIALS, name)
     if not assets.does_asset_exist(path):
-        fail("%s is missing. Run vaultborne_look.py first." % path)
+        fail("%s is missing. Run adrenaline_look.py first." % path)
         return None
     return assets.load_asset(path)
 

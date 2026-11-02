@@ -50,7 +50,9 @@ the clock off and goes back to waiting for Enter, which is how the phase was fir
 Ported from the lab's `placeBox()`, so it behaves the way the browser editor taught you: the piece
 sits **flush against the face you are aiming at**, and is snapped to a 50 cm grid (the lab's 0.5 m)
 on the other two axes. Rotation is in 90° steps and starts aligned to the way you are facing, so a
-wall always reads across your view. Aiming at nothing falls back to the ground plane. A piece that
+wall always reads the same way round relative to your view - **running away from you**, not across
+it as the lab's did; settled by playing on 2026-11-02, see the end of this file. Aiming at nothing
+falls back to the ground plane. A piece that
 would overlap existing geometry turns red and cannot be placed - and since 2026-10-23 so does one
 that would touch nothing at all; see *Everything has to touch something* at the end. Aim at a
 **sloped** face and the piece lies down on it rather than sitting square; see *Things lie down on
@@ -466,13 +468,16 @@ off* at the end of this file. It was written wondering whether 30 s is enough to
 spot and place three pieces, and whether the 1 s hand-spent beat reads as a hitch. Both turned out
 fine; both are single values on the game mode if that changes.
 
-One oddity to settle while play-testing: the **wall and breakable panel are rotated 90° from the
-lab**. The lab's wall at facing 0 lies *across* your view (its thin axis is the facing axis); here
-`Size` is 400x50x400, so the thin axis is Y and the wall runs *away* from you. The comment under
-*How placement positions a piece* claims the lab's behaviour. The directional pieces follow the lab
-(length along the facing), so if the wall should too, swap X and Y on the `wall` and `break` catalog
-entries. It was left alone because a wall along your view is arguably the better wallrun piece -
-that is a feel question, not a code one.
+**Settled by playing, 2026-11-02: the wall and panel stay as they are.** They are rotated 90° from
+the lab - the lab's wall at facing 0 lies *across* your view (its thin axis is the facing axis),
+while here `Size` is 400x50x400, so the thin axis is Y and the wall runs *away* from you. Asked
+whether to match the lab, the answer was that the rotation is good as it is, which is what the
+guess under *How placement positions a piece* hoped: **a wall running away from you is the better
+wallrun piece**, and this game is about wallrunning in a way the lab was not.
+
+If it ever needs reversing it is two catalog entries - swap X and Y on `wall` and `break`. The
+description under *How placement positions a piece* used to claim the lab's behaviour and has been
+corrected to say what the game actually does.
 
 ## The ghost is real geometry (2026-11-02)
 
@@ -528,7 +533,7 @@ placement ghost* in `docs/look.md` for the material side.
 
 ### The ghost material is content, so it is built by script
 
-`MI_VB_Ghost` is a new row in `Content/Python/vaultborne_look.py`'s palette - additive, cyan-edged,
+`MI_VB_Ghost` is a new row in `Content/Python/adrenaline_look.py`'s palette - additive, cyan-edged,
 `GridStrength` 0 so a cursor does not carry the world grid. **Run that script once in the editor or
 there is no ghost material.** The pawn holds it as a soft reference resolved at `BeginPlay`, not a
 constructor `FObjectFinder`, which would warn on every editor start until the script had been run.

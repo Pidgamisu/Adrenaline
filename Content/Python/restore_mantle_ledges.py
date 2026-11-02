@@ -47,11 +47,11 @@ CUBE_SIZE = 100.0  # the engine cube is 100 cm on a side, pivot in the middle
 
 
 def log(message):
-    unreal.log("[Vaultborne ledges] " + message)
+    unreal.log("[Adrenaline ledges] " + message)
 
 
 def fail(message):
-    unreal.log_error("[Vaultborne ledges] " + message)
+    unreal.log_error("[Adrenaline ledges] " + message)
 
 
 def find_by_label(actors, label):

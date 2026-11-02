@@ -228,12 +228,12 @@ Shipping build was compiled on 2026-11-02 to prove the guards hold.
 |---|---|
 | `Config/DefaultGame.ini` | a `ProjectPackagingSettings` block: Development, target `Getaway`, `TestCourse` as the map to cook, `Maps` / `Blueprints` / `Materials` always cooked, `__ExternalActors__` never cooked, editor content skipped |
 | `Getaway.uproject` | `PythonScriptPlugin` and `EditorScriptingUtilities` given `"TargetAllowList": [ "Editor" ]` |
-| `Tools/Host-Vaultborne.bat`, `Tools/Join-Vaultborne.bat` | double-click launchers, copied into the packaged build |
+| `Tools/Host-Adrenaline.bat`, `Tools/Join-Adrenaline.bat` | double-click launchers, copied into the packaged build |
 
 Three of those are worth a sentence each:
 
 - **`Maps`, `Blueprints` and `Materials` are cooked outright**, rather than trusting the map's
-  references. The piece Blueprints in `Content/Blueprints/Pieces/` and the Vaultborne materials are
+  references. The piece Blueprints in `Content/Blueprints/Pieces/` and the Adrenaline materials are
   reached through the game mode's catalog and through soft references, which the cooker does not
   reliably follow. Cheap insurance against a piece that looks right in the editor and spawns as a
   plain cube in the build. `Content/ThirdParty` is deliberately **not** on the list: a pack's demo
@@ -260,11 +260,11 @@ the game and `GetawayEditor` - already existed.
    **Development** is ticked under *Build Configuration*, and that *Build Target* says **Getaway**.
    Both now come from `DefaultGame.ini`, so they should already be right.
 3. **Platforms** - **Windows** - **Package Project**.
-4. Pick an output folder outside the project - `C:\Users\natha\Desktop\VaultborneBuild` is fine.
+4. Pick an output folder outside the project - `C:\Users\natha\Desktop\AdrenalineBuild` is fine.
    Never inside the project, or the next cook tries to cook the last one.
 5. It takes a while the first time (shaders). Watch the *Output Log* for `BUILD SUCCESSFUL`.
 6. The result is `<output>\Windows\Getaway.exe` plus a `Getaway` folder beside it. **The exe is
-   still called `Getaway.exe`** - the display name is Vaultborne but the binary keeps the module
+   still called `Getaway.exe`** - the display name is Adrenaline but the binary keeps the module
    name, as everything else does (see *Naming* in CLAUDE.md).
 7. Copy both files from `Tools/` into the folder that holds `Getaway.exe`.
 
@@ -273,8 +273,8 @@ build - a client and a server on different builds will refuse each other.
 
 ### Hosting and joining
 
-The host runs **Host-Vaultborne.bat**, reads the address it prints to everyone else, and the
-others run **Join-Vaultborne.bat** and type it in. Both ask for a name, which is passed as
+The host runs **Host-Adrenaline.bat**, reads the address it prints to everyone else, and the
+others run **Join-Adrenaline.bat** and type it in. Both ask for a name, which is passed as
 `?Name=` and is what the scoreboard draws (`AGetawayPlayerState::GetPlayerName`, truncated to 20
 characters by the engine in `AGameModeBase::InitNewPlayer`). Without it you are "Player 0".
 

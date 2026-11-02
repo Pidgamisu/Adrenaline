@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"EngineAssociation": "5.8",
 	"Category": "",
-	"Description": "Vaultborne - first-person movement party game.",
+	"Description": "Adrenaline - first-person movement party game.",
 	"Modules": [
 		{
 			"Name": "Getaway",
