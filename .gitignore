@@ -6,6 +6,11 @@ DerivedDataCache/
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 
+# Written by the cooker, not by us. Build/ itself is deliberately not ignored - it is where a
+# platform icon or a hand-made build setting would live - but these two are generated and churn
+# on every cook. They appeared the first time the project was packaged, 2026-11-02.
+Build/*/FileOpenOrder/
+
 # Visual Studio / Rider project files (regenerated from the .uproject)
 .vs/
 .idea/

@@ -13,10 +13,11 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
 - **Movement:** ported from the browser prototype and signed off.
 - **Input:** keyboard and mouse, plus a full controller map for both the run and the placement camera (not yet play-tested with a pad in hand). See `docs/controller.md`.
 - **Multiplayer:** client-authoritative, two players play-tested 2026-10-17.
-- **Playing with friends:** the project packages and hosts over direct IP with the launchers in
-  `Tools/`, set up 2026-11-02, **not yet packaged or played**. Shipping
-  builds no longer lose the placement ghost or the on-screen messages, though
-  Development is still the build to hand to playtesters. See `docs/multiplayer.md`.
+- **Playing with friends:** **packaged 2026-11-02** and it boots and plays - 946 MB in
+  `C:\Users\natha\Desktop\AdrenalineBuild`. The cook is clean: every material and piece Blueprint
+  is in, and no ThirdParty or editor content. **Two machines have still never connected**, and
+  nobody has looked at the packaged build on screen. Still Development, not Shipping. See
+  *It is packaged* in `docs/multiplayer.md`.
 - **Front end:** a menu with ADRENALINE over the course turning slowly, a name box, Host, an IP box
   and Join, and Quit; Escape in a game gives Resume / Leave to menu / Quit. Built 2026-11-02,
   **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
@@ -171,8 +172,9 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 3. ~~**A front end**: a menu with Host, Join and an IP box, and Escape to leave in game.~~ **Done
    2026-11-02**, and unplayed - see *The front end* in `docs/multiplayer.md`. What is left of it:
    nobody has looked at it, a pad cannot drive it, and there is no lobby or settings page.
-4. **Package it and play with somebody.** The packaging config is written and has never been run,
-   so the cook is unproved. See *Still unverified* in `docs/multiplayer.md`.
+4. **Play with somebody on a second machine.** Packaging is done and the cook is proved
+   (2026-11-02); what is left is two real computers, a firewall prompt, and how the movement feels
+   over a connection that is not the loopback. See *It is packaged* in `docs/multiplayer.md`.
 5. ~~A Niagara explosion effect for `BP_C4`. Without one the blast falls back to a debug sphere,
    which is invisible in a Shipping build.~~ **Done 2026-11-02, and not Niagara** - Niagara cannot
    be scripted at all, so it is `AGetawayBlast`: real additive geometry, a flash and glowing

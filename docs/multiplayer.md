@@ -304,15 +304,16 @@ By hand, the same thing is:
 
 ### Still unverified
 
-**None of this has been packaged or played.** The config is right by inspection, the game target
-compiles, and every setting name was checked against
-`Engine/Source/Developer/DeveloperToolSettings/Classes/Settings/ProjectPackagingSettings.h`. What
-nobody has done is press *Package Project* and then connect two machines. Specifically open:
+Written before anything had been packaged. **It was packaged on 2026-11-02** - see *It is
+packaged* at the end for what that proved and what it did not. The list below is as it stood;
+the first two are now answered.
 
-- **Whether the cook is clean.** A missing material or a piece that spawns as a bare cube is the
-  likely first fault, and the *Output Log* names it.
-- **Whether the ghost draws in a packaged Development build.** It should - debug draw is compiled in
-  outside Shipping - but it has only ever been seen in the editor.
+- ~~**Whether the cook is clean.** A missing material or a piece that spawns as a bare cube is the
+  likely first fault, and the *Output Log* names it.~~ **Clean.** Every `MI_VB_` material and
+  every piece Blueprint is in the package, and no ThirdParty or editor content came with them.
+- ~~**Whether the ghost draws in a packaged Development build.**~~ Its material is in the package
+  and loads without complaint, so it will. **Nobody has looked at it on screen**, though: the
+  packaged runs so far were all `-nullrhi`.
 - **Whether two separate machines connect**, as opposed to two PIE windows. Everything up to now,
   including the two-player sign-off on 2026-10-17, was one process, or three on the loopback.
 - **How it feels over a real connection.** Every play-test so far has had zero latency. The knobs
@@ -629,3 +630,91 @@ lobby, a player list and NAT punch-through together (*Local first, Steam later*)
 it means either the NULL subsystem's LAN beacon or a hand-rolled UDP broadcast, it only ever finds
 games on the same subnet - no use over Tailscale, which is the answer for playing with somebody in
 another city - and the IP box has to stay anyway for exactly that case.
+
+## It is packaged (2026-11-02)
+
+*Next steps* 4, half of it. **The cook has now been run and the packaged game boots and plays.**
+What has still not happened is two separate machines connecting to each other.
+
+### How it was packaged, without the editor
+
+The *Package Project* button is one way; this is the same thing from a terminal, which is
+repeatable and leaves a log to read:
+
+    "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ^
+      -project="C:\Users\natha\Documents\Unreal Projects\Getaway\Getaway.uproject" ^
+      -noP4 -platform=Win64 -target=Getaway -clientconfig=Development ^
+      -build -cook -stage -pak -archive ^
+      -archivedirectory="C:\Users\natha\Desktop\AdrenalineBuild" -prereqs -nocompileeditor
+
+Two deliberate choices. **No `-map`**, so the cook reads `MapsToCook` and
+`DirectoriesToAlwaysCook` out of `DefaultGame.ini` - that config was the thing being tested, and
+naming the map on the command line would have tested the command line instead. And **`-prereqs`**,
+which stages the VC redist installer that a friend's machine may need and that a zip of the folder
+would not otherwise contain.
+
+`Development` and target `Getaway` are not typed in twice: they come from `DefaultGame.ini`, so
+this is the same build the editor's button makes.
+
+**Result: `BUILD SUCCESSFUL`, exit 0, 946 MB, 57 files** in
+`C:\Users\natha\Desktop\AdrenalineBuild\Windows` - `Getaway.exe`, a 10 MB `Getaway-Windows.pak`
+and a 128 MB `Getaway-Windows.ucas` IoStore container, plus the two launchers copied in by hand.
+
+It took 39 seconds, which looks wrong and is not. The cook really did run - `Saved/Cooked/Windows`
+was created by that run - but every shader was already in the local Zen/DDC cache from a day of
+editor sessions. On a cold cache, or another machine, expect minutes rather than seconds for the
+same result.
+
+### What the cook proved
+
+Listed straight out of the containers with `UnrealPak <file> -List`, 2889 entries:
+
+- **All three masters and all fourteen `MI_VB_` instances** are in, `MI_VB_Ghost` and `M_VB_Pane`
+  among them - so the placement ghost and the explosion both have their materials. This was the
+  headline worry: those are reached through soft references and the game mode's catalog, which the
+  cooker does not reliably follow, which is why `DirectoriesToAlwaysCook` names the folders
+  outright.
+- **All eleven piece Blueprints**, plus `BP_Character`, `BP_GetawayGameMode` and
+  `BP_PlacementCamera`. No piece will spawn as a bare cube.
+- `TestCourse.umap` and the five `M_Course_` materials.
+- **No `Content/ThirdParty`, no `/Game/Python`, no `__ExternalActors__`.** The exclusions hold.
+  (`Content/__ExternalActors__` has since been deleted from the project outright, so that one line
+  in the ini is now belt and braces.)
+
+### What the packaged game does when you run it
+
+Both runs headless with `-nullrhi -unattended`, reading
+`AdrenalineBuild\Windows\Getaway\Saved\Logs\Getaway.log`:
+
+- **No options** gives the front end: `GetawayPlayerController_... is at the menu`, the LAN address
+  found (`this machine is 10.10.240.77`), and the level framed at exactly the numbers the editor
+  gives - `V(X=4450.00, Y=-9.00, Z=425.00)`, radius 7518, height 2857.
+- **`?Play=1?Name=Nathan`** deals a hand, runs the placement phase, swaps to `BP_Character_C` when
+  the build clock expires, and renames the player to `Nathan`.
+- **No warnings about materials, missing assets or failed loads in either log.**
+
+So the thing `docs/look.md` and this file were both worried about - that a Shipping-style package
+would lose the ghost, the messages or the explosion - does not happen, and the front end works
+outside the editor.
+
+### Still not done
+
+- **Two machines have never connected.** Everything so far has been one process, or two on the
+  loopback. This is the actual remaining unknown, and it needs a second computer and the firewall
+  prompt answered.
+- **Nobody has looked at the packaged build on screen.** Both runs above were `-nullrhi`, so the
+  menu, the pink, the ghost and the explosion have been proved to *load* in a package, not to
+  *look* right in one.
+- **Still `Development`, not `Shipping`.** Nothing known blocks the switch now that the explosion
+  is real geometry, but it has not been tried, and Development keeps the console as an escape
+  hatch for a friend whose join fails.
+- **The `.bat` launchers still have not been run**, and matter less now that the menu exists. They
+  also still read the IPv4 address by matching the English string "IPv4 Address" out of
+  `ipconfig`.
+
+### Handing it to somebody
+
+Zip the whole `Windows` folder - 946 MB - and make sure you are both on the same build; a client
+and a server from different builds refuse each other. Then *Hosting and joining* above applies,
+except that nobody needs the `.bat` files any more: the host reads their address off the menu,
+and the joiner types it into the menu's box.
