@@ -1,0 +1,11 @@
+# Tells the itch.io app which executable to launch.
+#
+# Without this, the app sees Getaway.exe *and* the two vc_redist installers that -prereqs stages,
+# and may offer an installer as the thing to play. Naming the action removes the guess.
+#
+# This file has to sit at the ROOT of the staged build, not in the project, so Tools/itch/push.ps1
+# copies it in before every push. See docs/itch.md.
+
+[[actions]]
+name = "play"
+path = "Getaway.exe"

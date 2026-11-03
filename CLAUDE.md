@@ -13,16 +13,24 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
 - **Movement:** ported from the browser prototype and signed off.
 - **Input:** keyboard and mouse, plus a full controller map for both the run and the placement camera (not yet play-tested with a pad in hand). See `docs/controller.md`.
 - **Multiplayer:** client-authoritative, two players play-tested 2026-10-17.
-- **Playing with friends:** **packaged 2026-11-02** and it boots and plays - 946 MB in
-  `C:\Users\natha\Desktop\AdrenalineBuild`. The cook is clean: every material and piece Blueprint
-  is in, and no ThirdParty or editor content. **Two machines have still never connected**, and
-  nobody has looked at the packaged build on screen. Still Development, not Shipping. See
-  *It is packaged* in `docs/multiplayer.md`.
+- **Playing with friends:** packaged 2026-11-02, and **switched to Shipping 2026-11-03** - 609 MB in
+  `C:\Users\natha\Desktop\AdrenalineShipping`, down from 946. The cook is clean: every material and
+  piece Blueprint is in, and no ThirdParty or editor content. **Played on screen for the first time
+  2026-11-03 and it all works** - the placement ghost, the HUD messages and the C4 explosion all
+  survive Shipping, so the thing that blocked a distributable build for weeks is closed. Shipping
+  writes **no log**, so a crash in a packaged build leaves nothing to read. **Two machines have
+  still never connected.** See *It is packaged* in `docs/multiplayer.md` and `docs/itch.md`.
+- **On itch.io:** <https://rpidgey.itch.io/adrenaline>, **a private draft**. The Shipping build is
+  uploaded and processed - build #2287901 on the `windows` channel, pushed with
+  `Tools/itch/push.ps1`, which patches so later versions upload in seconds. The page itself is
+  **empty**: no text, no cover image, no screenshots, no video. The text is all drafted in
+  `docs/itch-page.md`. See `docs/itch.md`.
 - **Front end:** a menu with ADRENALINE over the course turning slowly, a name box, Host, an IP box
   and Join, and Quit; Escape in a game gives Resume / Leave to menu / Quit. Built 2026-11-02,
   **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
-  and were scored by name - but Escape, Leave and Cancel have not been played, and no two separate
-  machines have connected. A join that fails now gives up after 10 s and says why, and the menu
+  and were scored by name. **Escape's Resume and Quit were played 2026-11-03**, in a Shipping build -
+  the first time Escape has ever been pressed outside the editor. **Leave to menu and Cancel still
+  have not been**, and no two separate machines have connected. A join that fails now gives up after 10 s and says why, and the menu
   shows your own address so others know what to type. **Player names work for the first time**:
   `?Name=` had always been discarded. There is still no lobby - and one would not have fixed any of
   this. See *The front end* in `docs/multiplayer.md`, and the two traps at the end of it: input
@@ -50,6 +58,9 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 | `docs/controller.md` | controller support: the button map, stick tuning, why a stick can't use the mouse look code |
 | `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named, giving a piece a material |
 | `docs/look.md` | the unlit pink look: materials, the palette and what each colour is allowed to mean, lighting, bloom |
+| `docs/itch.md` | the itch.io release: the Shipping build, butler, pushing a new version, the page |
+| `docs/itch-page.md` | the text for the itch.io page: tagline, description, tags, controls, pricing |
+| `docs/steam.md` | launching on Steam later: the fee, Valve's gates, Steam sessions, client authority |
 | `Plugins/GetawayMovement/README.md` | setup, controls and the full tuning table |
 | `Reference/getaway-lab.html` | the browser prototype: the reference for how movement should **feel** |
 
@@ -170,14 +181,28 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 1. More traps. Spikes were the first.
 2. The party box deals from the whole catalog. A per-round deck is still to do.
 3. ~~**A front end**: a menu with Host, Join and an IP box, and Escape to leave in game.~~ **Done
-   2026-11-02**, and unplayed - see *The front end* in `docs/multiplayer.md`. What is left of it:
-   nobody has looked at it, a pad cannot drive it, and there is no lobby or settings page.
+   2026-11-02, and played in a Shipping build 2026-11-03** - Escape's Resume and Quit both work, the
+   first time Escape has been pressed outside the editor. See *The front end* in
+   `docs/multiplayer.md`. What is left of it: **Leave to menu** and a failed join have not been
+   pressed, a pad cannot drive it, and there is no lobby or settings page.
 4. **Play with somebody on a second machine.** Packaging is done and the cook is proved
    (2026-11-02); what is left is two real computers, a firewall prompt, and how the movement feels
    over a connection that is not the loopback. See *It is packaged* in `docs/multiplayer.md`.
 5. ~~A Niagara explosion effect for `BP_C4`. Without one the blast falls back to a debug sphere,
    which is invisible in a Shipping build.~~ **Done 2026-11-02, and not Niagara** - Niagara cannot
    be scripted at all, so it is `AGetawayBlast`: real additive geometry, a flash and glowing
-   shards, in every build. The `ExplosionEffect` slot still overrides it. **Not yet looked at** -
-   see *The explosion* in `docs/look.md`. With this, nothing known blocks a Shipping package.
-6. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.
+   shards, in every build. The `ExplosionEffect` slot still overrides it. **Looked at and confirmed
+   working in a Shipping build 2026-11-03**, along with the placement ghost and the HUD messages -
+   see *The explosion* in `docs/look.md`.
+6. **Finish the itch.io page.** The Shipping build is uploaded to a private draft at
+   <https://rpidgey.itch.io/adrenaline>, but the page has no cover image, no screenshots and no
+   video, and none of the drafted text is in. **A short video of movement at speed is the
+   highest-value thing missing** - motion is the whole pitch, and no still can show a wallrun into a
+   slide into a C4 jump. See `docs/itch.md` and `docs/itch-page.md`.
+7. **Sound.** There is no audio in the project at all - no footsteps, no wallrun, no landing, no
+   explosion. `AGetawayC4` has an `ExplosionSound` slot and nothing fills it. For a game whose whole
+   appeal is movement, this is probably the biggest single improvement left per hour spent.
+8. **Logging in Shipping.** `bUseLoggingInShipping` is not set in `Source/Getaway.Target.cs`, so a
+   packaged build writes no log at all and a player who hits a crash has nothing to send you. One
+   line, and worth it before the page goes public.
+9. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.
