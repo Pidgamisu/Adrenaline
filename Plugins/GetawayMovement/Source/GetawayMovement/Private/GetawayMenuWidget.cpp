@@ -86,6 +86,26 @@ void UGetawayMenuWidget::BuildPanel()
 		}
 	}
 
+	// This machine's address, for the host to read out to everybody else. Hidden until somebody
+	// calls SetLocalAddress, and never built for the pause panel. It is here because the job used
+	// to be done by `Tools/Host-Adrenaline.bat` printing `ipconfig`, and once people host from the
+	// menu instead, nothing was telling the host what to tell their friends - which on 2026-11-02
+	// led to a join attempt against an address that was not this machine at all.
+	if (!bPause)
+	{
+		AddressHint = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("AddressHint"));
+		AddressHint->SetText(FText::GetEmpty());
+		AddressHint->SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 15.f));
+		AddressHint->SetColorAndOpacity(FSlateColor(EdgePink * 0.75f));
+		AddressHint->SetAutoWrapText(true);
+		AddressHint->SetVisibility(ESlateVisibility::Collapsed);
+		if (UVerticalBoxSlot* Placed = Cast<UVerticalBoxSlot>(Stack->AddChild(AddressHint)))
+		{
+			Placed->SetHorizontalAlignment(HAlign_Center);
+			Placed->SetPadding(FMargin(0.f, 0.f, 0.f, 20.f));
+		}
+	}
+
 	// The column of buttons and boxes, held to a fixed width so a long hint does not stretch it.
 	USizeBox* Sized = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PanelWidth"));
 	Sized->SetWidthOverride(PanelWidth);
@@ -108,11 +128,23 @@ void UGetawayMenuWidget::BuildPanel()
 		// Name first, because it applies to both of the two things under it. Without one the
 		// scoreboard calls you "Player 0" - the same ?Name= the two launchers in Tools/ ask for.
 		NameBox = AddTextBox(Column, TEXT("Your name"));
-		AddButton(Column, TEXT("HOST"))->OnClicked.AddDynamic(this, &UGetawayMenuWidget::OnHostClicked);
+		HostButton = AddButton(Column, TEXT("HOST"));
+		HostButton->OnClicked.AddDynamic(this, &UGetawayMenuWidget::OnHostClicked);
 
 		AddressBox = AddTextBox(Column, TEXT("Host's IP address"));
 		AddressBox->OnTextCommitted.AddDynamic(this, &UGetawayMenuWidget::OnAddressCommitted);
-		AddButton(Column, TEXT("JOIN"))->OnClicked.AddDynamic(this, &UGetawayMenuWidget::OnJoinClicked);
+		JoinButton = AddButton(Column, TEXT("JOIN"));
+		JoinButton->OnClicked.AddDynamic(this, &UGetawayMenuWidget::OnJoinClicked);
+
+		// Only up while a connection is being attempted. Without it, a host that never answers
+		// leaves the panel a dead end - which is exactly what happened on 2026-11-02.
+		UButton* Cancel = AddButton(Column, TEXT("CANCEL"));
+		Cancel->OnClicked.AddDynamic(this, &UGetawayMenuWidget::OnCancelClicked);
+		CancelRow = Cancel->GetParent();
+		if (CancelRow)
+		{
+			CancelRow->SetVisibility(ESlateVisibility::Collapsed);
+		}
 
 		AddButton(Column, TEXT("QUIT"))->OnClicked.AddDynamic(this, &UGetawayMenuWidget::OnQuitClicked);
 	}
@@ -217,6 +249,33 @@ void UGetawayMenuWidget::SetStatus(const FString& Text, bool bIsProblem)
 	StatusText->SetColorAndOpacity(FSlateColor(bIsProblem ? Problem : EdgePink));
 }
 
+void UGetawayMenuWidget::SetConnecting(bool bConnecting)
+{
+	if (HostButton) HostButton->SetIsEnabled(!bConnecting);
+	if (JoinButton) JoinButton->SetIsEnabled(!bConnecting);
+	if (AddressBox) AddressBox->SetIsEnabled(!bConnecting);
+	if (NameBox) NameBox->SetIsEnabled(!bConnecting);
+	if (CancelRow)
+	{
+		CancelRow->SetVisibility(bConnecting ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+}
+
+void UGetawayMenuWidget::SetLocalAddress(const FString& Address)
+{
+	if (!AddressHint) return;
+
+	if (Address.IsEmpty())
+	{
+		AddressHint->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	AddressHint->SetText(FText::FromString(
+		FString::Printf(TEXT("Your address is %s - that is what others type to join you"), *Address)));
+	AddressHint->SetVisibility(ESlateVisibility::Visible);
+}
+
 FString UGetawayMenuWidget::GetTypedAddress() const
 {
 	return AddressBox ? Trimmed(AddressBox->GetText()) : FString();
@@ -288,6 +347,14 @@ void UGetawayMenuWidget::OnQuitClicked()
 	if (AGetawayPlayerController* PC = Owner())
 	{
 		PC->QuitToDesktop();
+	}
+}
+
+void UGetawayMenuWidget::OnCancelClicked()
+{
+	if (AGetawayPlayerController* PC = Owner())
+	{
+		PC->CancelJoin(TEXT("Stopped waiting."));
 	}
 }
 

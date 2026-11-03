@@ -69,9 +69,41 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Getaway|Front end")
 	void HostGame(const FString& PlayerName);
 
-	/** Connect to a host. Address is what was typed - an IP, optionally with `:port`. */
-	UFUNCTION(BlueprintCallable, Category = "Getaway|Front end")
+	/**
+	 * Connect to a host. Address is what was typed - an IP, optionally with `:port`.
+	 *
+	 * Also an `Exec`, so it can be driven from the console as `JoinGame 10.10.240.77 Nathan`.
+	 * That is a better escape hatch than the engine's own `open <ip>`, because this path has the
+	 * give-up clock on it and will tell you when nothing answered; `open` just hangs.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "Getaway|Front end")
 	void JoinGame(const FString& Address, const FString& PlayerName);
+
+	/**
+	 * Stop waiting for a host and go back to the menu as it was, with `Why` on the status line.
+	 * Called by the Cancel button, by Escape, and by the join clock running out.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Front end")
+	void CancelJoin(const FString& Why);
+
+	/**
+	 * Seconds to wait for a host to answer before giving up and saying so.
+	 *
+	 * The engine will not do this for us. `UEngine::HandleNetworkFailure` ends in
+	 * `CallHandleDisconnectForFailure`, which only acts through `GetOnlineSession()` - and this
+	 * project deliberately has no online subsystem yet ("Local first, Steam later"), so there is
+	 * nothing there to take us back to a stable map. Left to the engine, a join that never
+	 * connects sits on "Connecting..." for ever. Found by playing, 2026-11-02.
+	 *
+	 * 10 s is long enough for a LAN and short enough not to feel hung. A real timeout from the
+	 * engine, if one arrives first, is reported instead of this.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Front end", meta = (ClampMin = "1"))
+	float JoinTimeout = 10.f;
+
+	/** True between pressing Join and either arriving, failing or cancelling. */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Front end")
+	bool IsConnecting() const { return bConnecting; }
 
 	/**
 	 * Back to the front end: absolute travel to GameMap with no options at all, which is what
@@ -104,6 +136,34 @@ private:
 	/** Remember the boxes so leaving a game and coming back does not mean typing them again. */
 	void RememberTyping();
 
+	/** Keep a name across the travel, so ApplyChosenName can ask for it on the other side. */
+	void RememberName(const FString& PlayerName);
+
+	/**
+	 * Ask to be called by the name typed into the menu, once we are in a game.
+	 *
+	 * Needed because `?Name=` on the travel URL is silently discarded - see the comment on the
+	 * implementation. Nothing in this project had noticed, because the `.bat` launchers that
+	 * relied on it had never been run.
+	 */
+	void ApplyChosenName();
+
+	/**
+	 * Watches a connection attempt a few times a second: reports an engine failure the moment one
+	 * is recorded, and gives up once `JoinTimeout` has passed.
+	 *
+	 * A repeating check rather than a single timer, because the engine's own failure never travels
+	 * us anywhere (see `JoinTimeout`) - so if we only waited for the deadline, a host that
+	 * actively refused us would still show "Connecting..." until the clock ran out.
+	 */
+	void TickConnecting();
+
 	UPROPERTY(Transient)
 	TObjectPtr<UGetawayMenuWidget> Menu;
+
+	bool bConnecting = false;
+	/** What was typed, kept so the give-up message can name it. */
+	FString ConnectingTo;
+	double ConnectStartedAt = 0.0;
+	FTimerHandle ConnectTimer;
 };

@@ -88,6 +88,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Getaway|Menu")
 	void SetStatus(const FString& Text, bool bIsProblem = true);
 
+	/**
+	 * Waiting on a host to answer: Host and Join go dead and a Cancel appears in their place, so
+	 * the panel is never a dead end while a connection is being attempted.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Menu")
+	void SetConnecting(bool bConnecting);
+
+	/**
+	 * Show this machine's own address above the buttons, for the host to read out. Empty hides
+	 * the line.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Menu")
+	void SetLocalAddress(const FString& Address);
+
 	/** What is typed in the two boxes, trimmed. Empty when the box has not been built. */
 	UFUNCTION(BlueprintPure, Category = "Getaway|Menu")
 	FString GetTypedAddress() const;
@@ -137,9 +151,17 @@ private:
 	UFUNCTION() void OnQuitClicked();
 	UFUNCTION() void OnResumeClicked();
 	UFUNCTION() void OnLeaveClicked();
+	UFUNCTION() void OnCancelClicked();
 	UFUNCTION() void OnAddressCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> AddressBox;
 	UPROPERTY(Transient) TObjectPtr<UEditableTextBox> NameBox;
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> StatusText;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> AddressHint;
+
+	/** Kept so SetConnecting can grey them out and show the Cancel. Only built in Main mode. */
+	UPROPERTY(Transient) TObjectPtr<UButton> HostButton;
+	UPROPERTY(Transient) TObjectPtr<UButton> JoinButton;
+	/** The Cancel button's pink frame, so hiding it collapses the row rather than leaving a gap. */
+	UPROPERTY(Transient) TObjectPtr<UWidget> CancelRow;
 };

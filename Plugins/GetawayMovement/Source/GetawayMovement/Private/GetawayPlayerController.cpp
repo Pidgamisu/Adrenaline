@@ -1,9 +1,13 @@
 #include "GetawayPlayerController.h"
 
+#include "GetawayGameState.h"
 #include "GetawayMenuSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/InputComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -70,11 +74,63 @@ void AGetawayPlayerController::BeginPlay()
 				*State->PeekFailure());
 		}
 	}
+
+	ApplyChosenName();
+}
+
+void AGetawayPlayerController::ApplyChosenName()
+{
+	// `?Name=` on the URL does not work, which is worth knowing because this project has believed
+	// it did since the Tools/ launchers were written. The client overwrites it: its login URL is
+	// rebuilt with the online subsystem's nickname, so a host launched with `?Name=HostNathan`
+	// still logs in as `?Name=RPidgey-9201E4034500...`. Watched happening on 2026-11-02 with two
+	// instances over the loopback.
+	//
+	// ServerChangeName is the supported way round it - the engine's own rename path, which runs
+	// locally on a listen-server host and as an RPC from a client.
+	if (!IsLocalController()) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// Nothing to name in the front end: there is no round and no scoreboard.
+	if (const AGetawayGameState* GS = World->GetGameState<AGetawayGameState>())
+	{
+		if (GS->GetPhase() == EGetawayPhase::Menu) return;
+	}
+
+	// What was asked for on the way in, or failing that whatever `?Name=` the URL carried - which
+	// is how `Tools/Host-Adrenaline.bat` asks for a name, and is still readable here even though
+	// the login overwrote it.
+	FString Chosen;
+	if (const UGetawayMenuSubsystem* State = MenuState())
+	{
+		Chosen = State->PlayerName;
+	}
+	if (Chosen.IsEmpty())
+	{
+		// The game mode's own copy of the options first: it is what the map was actually opened
+		// with. Only the server has a game mode, hence the URL as a second try.
+		if (const AGameModeBase* GM = World->GetAuthGameMode())
+		{
+			Chosen = UGameplayStatics::ParseOption(GM->OptionsString, TEXT("Name"));
+		}
+	}
+	if (Chosen.IsEmpty())
+	{
+		Chosen = UGameplayStatics::ParseOption(World->URL.ToString(), TEXT("Name"));
+	}
+	if (Chosen.IsEmpty()) return;
+
+	UE_LOG(LogTemp, Log, TEXT("Getaway: asking to be called '%s'"), *Chosen);
+	ServerChangeName(Chosen);
 }
 
 void AGetawayPlayerController::EndPlay(const EEndPlayReason::Type Reason)
 {
 	RememberTyping();
+	// The timer dies with the world, but the flag is read by TogglePauseMenu, so clear it too.
+	bConnecting = false;
 	if (Menu)
 	{
 		Menu->RemoveFromParent();
@@ -96,6 +152,12 @@ bool AGetawayPlayerController::IsMainMenuOpen() const
 
 void AGetawayPlayerController::ShowMainMenu()
 {
+	// The game mode calls this twice for the first player of a menu session - once from
+	// HandleStartingNewPlayer at login and once from StartMenu in BeginPlay - so everything below
+	// would otherwise be done twice, including taking the failure message off the subsystem and
+	// stealing focus back to the name box.
+	if (IsMainMenuOpen()) return;
+
 	OpenMenu(EGetawayMenuMode::Main);
 	if (!Menu) return;
 
@@ -106,6 +168,13 @@ void AGetawayPlayerController::ShowMainMenu()
 	// mean typing your name in again.
 	Menu->SetTypedName(State->PlayerName);
 	Menu->SetTypedAddress(State->LastAddress);
+
+	// Tell the host what their friends have to type. Nothing else in the game says this any more
+	// now that hosting goes through the menu rather than through Tools/Host-Adrenaline.bat.
+	const FString Mine = UGetawayMenuSubsystem::FindLanAddress();
+	Menu->SetLocalAddress(Mine);
+	UE_LOG(LogTemp, Log, TEXT("Getaway: the menu is up; this machine is %s"),
+		Mine.IsEmpty() ? TEXT("(no LAN address found)") : *Mine);
 
 	const FString Failure = State->TakeFailure();
 	if (!Failure.IsEmpty())
@@ -160,6 +229,14 @@ void AGetawayPlayerController::HideMenu()
 
 void AGetawayPlayerController::TogglePauseMenu()
 {
+	// Escape while waiting on a host stops waiting. Worth having as well as the Cancel button,
+	// because Escape is what anybody reaches for when something appears to have hung.
+	if (bConnecting)
+	{
+		CancelJoin(TEXT("Stopped waiting."));
+		return;
+	}
+
 	// Escape while the front end is up does nothing. There is no game underneath to go back to,
 	// and Quit is a click away.
 	if (IsMainMenuOpen()) return;
@@ -202,7 +279,14 @@ void AGetawayPlayerController::RememberTyping()
 
 	if (UGetawayMenuSubsystem* State = MenuState())
 	{
-		State->PlayerName = Menu->GetTypedName();
+		// Both guarded, so an empty box never erases something already known. That matters on the
+		// way out: EndPlay calls this during the travel, and without the guard a name set through
+		// HostGame or the console was wiped by the blank box a moment later.
+		const FString Name = Menu->GetTypedName();
+		if (!Name.IsEmpty())
+		{
+			State->PlayerName = Name;
+		}
 		const FString Address = Menu->GetTypedAddress();
 		if (!Address.IsEmpty())
 		{
@@ -211,9 +295,22 @@ void AGetawayPlayerController::RememberTyping()
 	}
 }
 
+void AGetawayPlayerController::RememberName(const FString& PlayerName)
+{
+	if (PlayerName.IsEmpty()) return;
+
+	if (UGetawayMenuSubsystem* State = MenuState())
+	{
+		State->PlayerName = PlayerName;
+	}
+}
+
 void AGetawayPlayerController::HostGame(const FString& PlayerName)
 {
 	RememberTyping();
+	// The argument, not just whatever is in the boxes: this is also reachable from Blueprint and
+	// from the console, where there is no widget to read.
+	RememberName(PlayerName);
 
 	// ?listen makes this a listen server somebody can join; ?Play=1 is what tells the game mode
 	// this is a game and not another visit to the menu. See *The front end* in
@@ -231,6 +328,12 @@ void AGetawayPlayerController::HostGame(const FString& PlayerName)
 void AGetawayPlayerController::JoinGame(const FString& Address, const FString& PlayerName)
 {
 	RememberTyping();
+	RememberName(PlayerName);
+	if (UGetawayMenuSubsystem* State = MenuState())
+	{
+		// So a failed attempt comes back to the menu with the address still in the box.
+		State->LastAddress = Address;
+	}
 
 	FString URL = Address;
 	if (!PlayerName.IsEmpty())
@@ -239,9 +342,77 @@ void AGetawayPlayerController::JoinGame(const FString& Address, const FString& P
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("Getaway: joining %s"), *URL);
+
+	// Start watching before travelling, not after: a connection that is refused outright can fail
+	// inside this frame.
+	bConnecting = true;
+	ConnectingTo = Address;
+	ConnectStartedAt = FPlatformTime::Seconds();
+	if (Menu)
+	{
+		Menu->SetConnecting(true);
+	}
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(ConnectTimer, this,
+			&AGetawayPlayerController::TickConnecting, 0.25f, /*bLoop=*/true);
+	}
+
 	// Absolute, so none of the menu session's own URL comes along - checked in URL.cpp: only
 	// TRAVEL_Relative and TRAVEL_Partial inherit a base URL's options.
 	ClientTravel(URL, TRAVEL_Absolute);
+}
+
+void AGetawayPlayerController::TickConnecting()
+{
+	if (!bConnecting) return;
+
+	// An engine-reported failure beats the clock: say what actually went wrong rather than
+	// "no answer", and say it as soon as it is known.
+	if (UGetawayMenuSubsystem* State = MenuState())
+	{
+		if (!State->PeekFailure().IsEmpty())
+		{
+			CancelJoin(State->TakeFailure());
+			return;
+		}
+	}
+
+	if (FPlatformTime::Seconds() - ConnectStartedAt >= JoinTimeout)
+	{
+		CancelJoin(FString::Printf(
+			TEXT("No answer from %s. Check the address, that they are in a game, and that they let the game through Windows Firewall. On this machine, use 127.0.0.1."),
+			*ConnectingTo));
+	}
+}
+
+void AGetawayPlayerController::CancelJoin(const FString& Why)
+{
+	if (!bConnecting) return;
+
+	bConnecting = false;
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		World->GetTimerManager().ClearTimer(ConnectTimer);
+	}
+
+	// Drop the half-open connection, or it keeps its socket and its own timeout running behind the
+	// menu and can land us in a game minutes after we gave up on it.
+	if (GEngine && World)
+	{
+		GEngine->CancelPending(World);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Getaway: gave up joining %s - %s"), *ConnectingTo, *Why);
+
+	if (Menu)
+	{
+		Menu->SetConnecting(false);
+		Menu->SetStatus(Why);
+	}
+	ConnectingTo.Empty();
 }
 
 void AGetawayPlayerController::LeaveToMenu()

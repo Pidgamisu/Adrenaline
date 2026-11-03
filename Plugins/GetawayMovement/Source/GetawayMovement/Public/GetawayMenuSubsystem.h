@@ -42,6 +42,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Getaway|Menu")
 	void SetFailure(const FString& Reason) { LastFailure = Reason; }
 
+	/**
+	 * This machine's own address, the one somebody else types into Join, or empty if there isn't
+	 * a sensible one. The menu shows it so the host can read it out - which is the job
+	 * `Tools/Host-Adrenaline.bat` used to do by grepping `ipconfig`, and nothing was doing once
+	 * people stopped launching through the `.bat` file.
+	 *
+	 * Link-local 169.254.x addresses are skipped: Windows hands them to every unplugged or virtual
+	 * adapter, and this machine has three of them to one real one. A private LAN address is
+	 * preferred over anything else, because that is what a friend in the same house needs.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Menu")
+	static FString FindLanAddress();
+
 	/* ---------------- What was typed into the menu ---------------- */
 
 	/** Kept so leaving a game and coming back does not mean typing your name in again. */

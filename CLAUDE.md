@@ -19,10 +19,13 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   Development is still the build to hand to playtesters. See `docs/multiplayer.md`.
 - **Front end:** a menu with ADRENALINE over the course turning slowly, a name box, Host, an IP box
   and Join, and Quit; Escape in a game gives Resume / Leave to menu / Quit. Built 2026-11-02,
-  **Host played 2026-11-02; Join, Escape and Leave not yet.** The startup gates and the camera
-  framing are proved by headless runs. There is still no lobby. See *The front end* in
-  `docs/multiplayer.md` - and the input trap at the end of it, which is the thing to re-read if
-  the mouse or keys ever go dead after a travel.
+  **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
+  and were scored by name - but Escape, Leave and Cancel have not been played, and no two separate
+  machines have connected. A join that fails now gives up after 10 s and says why, and the menu
+  shows your own address so others know what to type. **Player names work for the first time**:
+  `?Name=` had always been discarded. There is still no lobby - and one would not have fixed any of
+  this. See *The front end* in `docs/multiplayer.md`, and the two traps at the end of it: input
+  going dead after a travel, and the engine never bringing you back from a failed connection.
 - **Round loop:** shared placement phase with a build clock, the run, Ultimate Chicken Horse scoring, and deaths (spikes, falling off the course).
 - **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes, jump pad, anti-gravity vortex.
 - **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid

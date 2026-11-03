@@ -275,9 +275,15 @@ build - a client and a server on different builds will refuse each other.
 ### Hosting and joining
 
 The host runs **Host-Adrenaline.bat**, reads the address it prints to everyone else, and the
-others run **Join-Adrenaline.bat** and type it in. Both ask for a name, which is passed as
-`?Name=` and is what the scoreboard draws (`AGetawayPlayerState::GetPlayerName`, truncated to 20
-characters by the engine in `AGameModeBase::InitNewPlayer`). Without it you are "Player 0".
+others run **Join-Adrenaline.bat** and type it in. Both ask for a name and pass it as `?Name=`.
+
+**`?Name=` on its own never worked**, and this section claimed it did until 2026-11-02 - the
+launchers had never been run, so nobody had looked. The client rebuilds its own login URL with the
+online subsystem's nickname, so a game started with `?Name=HostNathan` logs in as
+`?Name=RPidgey-9201E4034500...` and the scoreboard shows that instead. It is now fixed in
+`AGetawayPlayerController::ApplyChosenName`, which asks again with `ServerChangeName` once it is
+in the game - and that reads `?Name=` off the game mode's options, so the launchers work too. See
+*Three more bugs, found by playing* at the end.
 
 By hand, the same thing is:
 
@@ -503,10 +509,12 @@ warnings.
   turning behind it. Whether 4 degrees per second reads as "slowly rotating" is a feel question.
 - **Whether the auto-framed camera picks a flattering shot.** The numbers are sensible; the view
   is unseen.
-- **Join has never been clicked**, and no two machines have connected through the menu. Host has
-  (2026-11-02), and that is what turned up the input bug above.
+- **Join has not been clicked in the menu by hand**, though the whole of the code path behind it
+  has now been run twice over the loopback - see *Three more bugs, found by playing* at the end.
+  **No two separate machines have connected through the menu.**
 - **Escape, Resume and Leave to menu have not been played**, only reasoned about - they could not
   be reached until Host worked, and Escape needs Standalone Game rather than PIE.
+- **The Cancel button has not been clicked**, only the clock it shares a code path with.
 - **Travel from Play-in-Editor into a listen server.** PIE is not the real thing here; a packaged
   build is the test.
 - **Anything packaged.** The project has still never been packaged - see *Still unverified* under
@@ -524,3 +532,100 @@ warnings.
   down with the world, and the other players' failure handler puts them back at their own menu
   with a message. Fine on a LAN among friends; worth revisiting with Steam.
 - **No resolution, volume or sensitivity settings**, and no key rebinding.
+
+### Three more bugs, found by playing (2026-11-02)
+
+"Joining doesn't work. It says connecting then gets stuck." Three separate faults behind it, and
+only one of them was the connection.
+
+#### 1. The address was not this machine
+
+The join was aimed at `204.77.151.204`, a public address. This machine's only real address is
+`10.10.240.77` on Wi-Fi; the rest are link-local `169.254.x` ones Windows hands to unplugged
+adapters. So the packets went out to the internet and nothing answered - correct behaviour, no bug
+in the game.
+
+The bug was that **nothing told the host what to tell their friends.** That job used to belong to
+`Tools/Host-Adrenaline.bat`, which greps `ipconfig` and prints it. Hosting from the menu skipped
+the `.bat` file entirely, and the menu said nothing.
+
+The menu now shows it: *"Your address is 10.10.240.77 - that is what others type to join you"*,
+from `UGetawayMenuSubsystem::FindLanAddress`, which reads the adapters through
+`ISocketSubsystem::GetLocalAdapterAddresses` and prefers a private LAN address, skipping loopback
+and `169.254.x`. That needed `Sockets` adding to `GetawayMovement.Build.cs`.
+
+**On one machine, join `127.0.0.1`.** The give-up message says so.
+
+#### 2. There was no way out, and never any feedback
+
+This is the one worth remembering, because it is a trap rather than a slip:
+
+**the engine will not take you back from a failed connection in this project.**
+`UEngine::HandleNetworkFailure` ends in `CallHandleDisconnectForFailure`, and that only acts
+through `GetGameInstance()->GetOnlineSession()` - which is null here, because *Local first, Steam
+later* means there is no online subsystem session yet. So the engine logs the failure and does
+nothing else: no travel, no message, and the panel sits on "Connecting..." for ever. The 60 second
+`InitialConnectTimeout` would not have helped either, because nothing was listening for it.
+
+Hence a watchdog of our own, `AGetawayPlayerController::TickConnecting`, checked four times a
+second while connecting:
+
+- an engine-reported failure is shown the moment it is recorded, so a wrong build or a refusal
+  reads correctly rather than as "no answer";
+- otherwise `JoinTimeout` (10 s, tunable) gives up, says what to check, and drops the half-open
+  connection with `GEngine->CancelPending` so it cannot land you in a game minutes later;
+- while connecting, **Host and Join grey out and a CANCEL appears**, and Escape cancels too - the
+  panel is never a dead end.
+
+#### 3. Nobody has ever had a name
+
+See *Hosting and joining* above: `?Name=` was silently discarded, for the host as well as for
+joiners, and had been since the launchers were written. Fixed by asking again from inside the game
+with `ServerChangeName`.
+
+Two smaller things fell out of chasing it, both in `AGetawayPlayerController`: `RememberTyping`
+would wipe a known-good name with an empty box when `EndPlay` ran during a travel, so both it and
+the address are now only overwritten by a non-empty box; and `ShowMainMenu` returns early if the
+panel is already up, since the game mode calls it twice for the first player and it was taking the
+failure message off the subsystem twice.
+
+`JoinGame` is also an `Exec` now, so `JoinGame 10.10.240.77 Nathan` works from the console. That is
+a better escape hatch than the engine's `open <ip>`, which has no give-up clock on it, and it is
+how all of this was tested without a mouse.
+
+#### What two instances on the loopback proved
+
+Run as two windowed processes, host first, joiner 22 seconds later:
+
+    UnrealEditor.exe "<project>.uproject" "/Game/Maps/TestCourse?listen?Play=1?Name=HostNathan" -game -windowed -resx=640 -resy=360
+    UnrealEditor.exe "<project>.uproject" /Game/Maps/TestCourse -game -windowed -resx=640 -resy=360 -ExecCmds="JoinGame 127.0.0.1 Sam"
+
+From the host's log, in order: the joiner was accepted, dealt their own hand and their own fly
+camera (`GetawayPlayerController_1 is building, with BP_PlacementCamera_C_1`), both swapped to
+characters, the round was scored **by name** -
+
+    Getaway:   HostNathan did not finish  +0  (0)
+    Getaway:   Sam did not finish  +0  (0)
+    Getaway: round 1 over (time)
+
+- and round 2 opened for both players. So joining, late joining, the shared round, scoring and the
+names all work together. No errors on either side.
+
+A bad address was checked the same way and gave up on the clock:
+
+    Getaway: joining 204.77.151.204?Name=Nathan
+    Getaway: gave up joining 204.77.151.204 - No answer from 204.77.151.204. Check the address, ...
+
+#### Would a lobby have helped?
+
+Asked at the time, and worth writing down: **no, not with this.** A lobby or LAN browser replaces
+*typing an address* - it would have stopped the wrong address being typed, which was fault 1 - but
+discovery ends by connecting to the game it found, in exactly the same way. Faults 2 and 3 would
+have been identical, and a browser that finds a game and then hangs for ever on "Connecting..." is
+the same dead end with extra steps.
+
+It is still worth doing one day, and the cheap moment is **with Steam**, where sessions give a real
+lobby, a player list and NAT punch-through together (*Local first, Steam later*). Done before then
+it means either the NULL subsystem's LAN beacon or a hand-rolled UDP broadcast, it only ever finds
+games on the same subnet - no use over Tailscale, which is the answer for playing with somebody in
+another city - and the IP box has to stay anyway for exactly that case.

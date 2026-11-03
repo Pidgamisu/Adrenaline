@@ -2,6 +2,8 @@
 
 #include "Engine/Engine.h"
 #include "Engine/NetDriver.h"
+#include "IPAddress.h"
+#include "SocketSubsystem.h"
 
 void UGetawayMenuSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -22,6 +24,54 @@ void UGetawayMenuSubsystem::Deinitialize()
 		GEngine->OnTravelFailure().Remove(TravelFailureHandle);
 	}
 	Super::Deinitialize();
+}
+
+FString UGetawayMenuSubsystem::FindLanAddress()
+{
+	ISocketSubsystem* Sockets = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+	if (!Sockets) return FString();
+
+	TArray<TSharedPtr<FInternetAddr>> Addresses;
+	if (!Sockets->GetLocalAdapterAddresses(Addresses)) return FString();
+
+	FString Fallback;
+	for (const TSharedPtr<FInternetAddr>& Addr : Addresses)
+	{
+		if (!Addr.IsValid()) continue;
+
+		// Without the port, which is always 7777 and is not something to read down a phone.
+		const FString Text = Addr->ToString(/*bAppendPort=*/false);
+
+		// IPv4 only: an IPv6 address is not something anybody is going to type into a box, and
+		// the launchers in Tools/ have always printed IPv4. Parsed into octets rather than matched
+		// on prefixes, so that 172.2.x.x is not mistaken for the private 172.16-172.31 block.
+		TArray<FString> Parts;
+		Text.ParseIntoArray(Parts, TEXT("."), /*InCullEmpty=*/false);
+		if (Parts.Num() != 4) continue;
+
+		int32 Octet[4] = { 0, 0, 0, 0 };
+		bool bNumeric = true;
+		for (int32 i = 0; i < 4; ++i)
+		{
+			if (Parts[i].IsEmpty() || !Parts[i].IsNumeric()) { bNumeric = false; break; }
+			Octet[i] = FCString::Atoi(*Parts[i]);
+			if (Octet[i] < 0 || Octet[i] > 255) { bNumeric = false; break; }
+		}
+		if (!bNumeric) continue;
+
+		if (Octet[0] == 127) continue;
+		// Windows gives one of these to every adapter with nothing plugged into it.
+		if (Octet[0] == 169 && Octet[1] == 254) continue;
+
+		const bool bPrivate = (Octet[0] == 10)
+			|| (Octet[0] == 192 && Octet[1] == 168)
+			|| (Octet[0] == 172 && Octet[1] >= 16 && Octet[1] <= 31);
+
+		if (bPrivate) return Text;
+		if (Fallback.IsEmpty()) Fallback = Text;
+	}
+
+	return Fallback;
 }
 
 FString UGetawayMenuSubsystem::TakeFailure()

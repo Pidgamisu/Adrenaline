@@ -19,7 +19,10 @@ public class GetawayMovement : ModuleRules
 			// fills in by hand: the menu is built entirely in C++, with no Widget Blueprint asset.
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			// Only so the menu can read this machine's own LAN address off its adapters and show
+			// it to the host. See UGetawayMenuSubsystem::FindLanAddress.
+			"Sockets"
 		});
 	}
 }
