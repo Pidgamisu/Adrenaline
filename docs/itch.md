@@ -231,17 +231,24 @@ what it was for, and the long-standing worry that a distributable build would lo
 **Escape was also played for the first time ever**, and Resume and Quit both work. Those had never
 been pressed outside the editor in any configuration, because the editor binds Escape to Stop.
 
-Not covered by this session, and still open: **Leave to menu** was not pressed, and a **failed join**
-was not tried.
+**Leave to menu and a failed join were played too, and both work.** That is the whole front end
+exercised: Resume, Leave to menu, Quit, and a join that fails reporting properly and letting you
+back out - in a Shipping build, where there is no console to recover with if any of them had hung.
+
+Leave was the one worth worrying about, because `docs/multiplayer.md` records input going dead after
+the Host travel and Leave is also a travel. Reading the code first showed why it is safe:
+`LeaveToMenu` calls `HideMenu` before travelling, and `HideMenu` ends in
+`ApplyInputMode(false)` - `FInputModeGameOnly`, which is the call that puts the viewport's
+`SetIgnoreInput` back to false. Host was vulnerable precisely because it travelled *with* a panel
+still up. Leave tears its panel down first, so the flag never crosses the travel.
+
+Still not clicked: the **Cancel** button itself, as opposed to the give-up clock it shares a code
+path with.
 
 ## Still unverified
 
-- **Leave to menu has still not been played.** Resume and Quit have; this one is the risky member of
-  the three, because `docs/multiplayer.md` warns that input can go dead after a travel. Until it is
-  pressed in a Shipping build, a player who leaves a round may be stuck with no console to rescue
-  them.
-- **A failed join has not been tried in Shipping.** The give-up clock and its error message are the
-  only way out now, and they have only ever been seen in a Development build.
+- **The Cancel button on a join has not been clicked**, only the give-up clock it shares a code path
+  with. The smallest open item left in the front end.
 - **Two machines have never connected.**
 - ~~**`butler login` has not been run and no itch.io project exists yet.**~~ **Both done 2026-11-03**:
   butler is authenticated (credentials at `C:\Users\natha\.config\itch\butler_creds`) and the

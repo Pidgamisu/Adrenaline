@@ -28,9 +28,10 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
 - **Front end:** a menu with ADRENALINE over the course turning slowly, a name box, Host, an IP box
   and Join, and Quit; Escape in a game gives Resume / Leave to menu / Quit. Built 2026-11-02,
   **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
-  and were scored by name. **Escape's Resume and Quit were played 2026-11-03**, in a Shipping build -
-  the first time Escape has ever been pressed outside the editor. **Leave to menu and Cancel still
-  have not been**, and no two separate machines have connected. A join that fails now gives up after 10 s and says why, and the menu
+  and were scored by name. **The whole front end was played 2026-11-03** in a Shipping build - the
+  first time Escape has ever been pressed outside the editor: Resume, Leave to menu, Quit and a join
+  that fails all work. Only the **Cancel** button is still unclicked, and no two separate machines
+  have connected. A join that fails now gives up after 10 s and says why, and the menu
   shows your own address so others know what to type. **Player names work for the first time**:
   `?Name=` had always been discarded. There is still no lobby - and one would not have fixed any of
   this. See *The front end* in `docs/multiplayer.md`, and the two traps at the end of it: input
@@ -181,10 +182,10 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 1. More traps. Spikes were the first.
 2. The party box deals from the whole catalog. A per-round deck is still to do.
 3. ~~**A front end**: a menu with Host, Join and an IP box, and Escape to leave in game.~~ **Done
-   2026-11-02, and played in a Shipping build 2026-11-03** - Escape's Resume and Quit both work, the
-   first time Escape has been pressed outside the editor. See *The front end* in
-   `docs/multiplayer.md`. What is left of it: **Leave to menu** and a failed join have not been
-   pressed, a pad cannot drive it, and there is no lobby or settings page.
+   2026-11-02, and fully played in a Shipping build 2026-11-03** - Resume, Leave to menu, Quit and a
+   join that fails all work, the first time Escape has been pressed outside the editor. See *The
+   front end* in `docs/multiplayer.md`. What is left of it: the **Cancel** button is unclicked, a pad
+   cannot drive it, and there is no lobby or settings page.
 4. **Play with somebody on a second machine.** Packaging is done and the cook is proved
    (2026-11-02); what is left is two real computers, a firewall prompt, and how the movement feels
    over a connection that is not the loopback. See *It is packaged* in `docs/multiplayer.md`.

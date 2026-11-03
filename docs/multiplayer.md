@@ -506,20 +506,32 @@ warnings.
 
 ### Still unverified
 
-- **How any of it looks.** Nobody has seen the panel, the pink frames, the title, or the course
-  turning behind it. Whether 4 degrees per second reads as "slowly rotating" is a feel question.
-- **Whether the auto-framed camera picks a flattering shot.** The numbers are sensible; the view
-  is unseen.
-- **Join has not been clicked in the menu by hand**, though the whole of the code path behind it
-  has now been run twice over the loopback - see *Three more bugs, found by playing* at the end.
-  **No two separate machines have connected through the menu.**
-- **Escape, Resume and Leave to menu have not been played**, only reasoned about - they could not
-  be reached until Host worked, and Escape needs Standalone Game rather than PIE.
-- **The Cancel button has not been clicked**, only the clock it shares a code path with.
+Most of this list was closed on 2026-11-03 by playing a Shipping package - see *Played and signed
+off* in `docs/itch.md`. What is actually left:
+
+- **No two separate machines have connected through the menu.** Join has now been clicked by hand
+  and a failure reported correctly, but every *success* so far has been one process, or two on the
+  loopback. This is the last big unknown in the whole project.
+- **The Cancel button has not been clicked**, only the give-up clock it shares a code path with.
+  A failed join was played on 2026-11-03 and reports properly, so the path is exercised; the button
+  is not.
 - **Travel from Play-in-Editor into a listen server.** PIE is not the real thing here; a packaged
   build is the test.
-- **Anything packaged.** The project has still never been packaged - see *Still unverified* under
-  *Playing with friends on a LAN*.
+- **Whether the auto-framed camera picks a flattering shot.** The menu has been seen now and nobody
+  complained, which is not the same as saying it is well composed.
+
+Closed on 2026-11-03, all by playing a packaged Shipping build:
+
+- ~~**How any of it looks.**~~ The panel, the pink frames, the title and the course turning behind
+  them have all been seen, outside the editor, and they work.
+- ~~**Escape, Resume and Leave to menu have not been played.**~~ All three played, plus Quit and a
+  failed join. **Leave was the one to worry about** - it is a travel, and the Host travel is where
+  the dead-input bug lived - and it is safe for a reason worth keeping: `LeaveToMenu` calls
+  `HideMenu` *before* travelling, and `HideMenu` ends in `ApplyInputMode(false)`, the very call that
+  puts the viewport's `SetIgnoreInput` back to false. Host broke because it travelled with a panel
+  still up; Leave tears its panel down first, so the flag never crosses.
+- ~~**Anything packaged.**~~ Packaged 2026-11-02, switched to Shipping and played 2026-11-03. See
+  `docs/itch.md`.
 
 ### What the front end does not do
 
