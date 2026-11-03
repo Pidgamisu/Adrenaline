@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/NetSerialization.h"
@@ -12,6 +12,7 @@ class UInputAction;
 class UInputMappingContext;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UPrimitiveComponent;
 class UProceduralMeshComponent;
 class UStaticMeshComponent;
 struct FInputActionValue;
@@ -349,7 +350,7 @@ private:
 		const FGetawayPieceDef& Def, FVector& OutCentre, FVector& OutLocalSize) const;
 
 	/** What a surface-mounted piece at this spot would be stuck to, or null for bare level geometry. */
-	AActor* FindHostAt(const FVector& Centre, const FRotator& Rotation, const FGetawayPieceDef& Def) const;
+	UPrimitiveComponent* FindHostAt(const FVector& Centre, const FRotator& Rotation, const FGetawayPieceDef& Def) const;
 
 	/**
 	 * Ask the server to place the piece. It looks the slot up in the hand it dealt and re-runs the

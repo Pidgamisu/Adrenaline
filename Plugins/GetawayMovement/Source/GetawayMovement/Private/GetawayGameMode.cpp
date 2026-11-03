@@ -1,4 +1,4 @@
-#include "GetawayGameMode.h"
+﻿#include "GetawayGameMode.h"
 
 #include "GetawayBreakable.h"
 #include "GetawayC4.h"
@@ -17,6 +17,7 @@
 #include "GetawayRamp.h"
 #include "GetawaySpikes.h"
 #include "GetawayVortex.h"
+#include "GetawayWindmill.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -82,6 +83,12 @@ AGetawayGameMode::AGetawayGameMode()
 	// speed and long enough that how far up you come out is a decision. It lifts straight up however
 	// it is placed, so it needs nothing aimed and nothing stuck to.
 	Catalog.Add(MakePiece(TEXT("vortex"), TEXT("Vortex"), FVector(300.f, 300.f, 500.f), AGetawayVortex::StaticClass()));
+	// A paddle wheel: four level plates orbiting a horizontal axle, so it is a lift you ride
+	// rather than a windmill you dodge. Directional, with the arrow along the axle, so it goes up
+	// facing you and R turns it side on. Not scaled: it builds itself from its own blade
+	// properties like the C4 pickup does, so Size here is only the ghost - and it has to stay
+	// equal to AGetawayWindmill::GetSweptSize(), which is 350 x 700 x 540 at the defaults.
+	Catalog.Add(MakePiece(TEXT("windmill"), TEXT("Windmill"), FVector(350.f, 700.f, 540.f), AGetawayWindmill::StaticClass(), false, true));
 }
 
 AGetawayGameState* AGetawayGameMode::State() const
@@ -481,6 +488,10 @@ void AGetawayGameMode::StartPlacement()
 	{
 		It->SetArmed(false);
 	}
+	for (TActorIterator<AGetawayWindmill> It(World); It; ++It)
+	{
+		It->SetArmed(false);
+	}
 	if (Rebuilt > 0)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Getaway: restored %d breakable(s) for the new round"), Rebuilt);
@@ -666,6 +677,10 @@ void AGetawayGameMode::BeginRun()
 		It->SetArmed(true);
 	}
 	for (TActorIterator<AGetawayVortex> It(World); It; ++It)
+	{
+		It->SetArmed(true);
+	}
+	for (TActorIterator<AGetawayWindmill> It(World); It; ++It)
 	{
 		It->SetArmed(true);
 	}

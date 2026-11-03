@@ -37,6 +37,15 @@ spikes are glued to.
   collapsing bridge ride it down and come back up when it respawns. That is why this is the one
   placed piece with **movement replication on** - an actor's attachment replication rides on it,
   and without it the spikes would only fall on the server's screen.
+- **They attach to the component, not to the host actor** (2026-11-03). `AttachToHost` takes a
+  `UPrimitiveComponent*`, and `AGetawayPlacementPawn::FindHostAt` keeps `Hit.GetComponent()` rather
+  than throwing it away for `Hit.GetActor()`. Attaching to an actor means attaching to its *root*,
+  which was invisible as a limitation while every host either moved as one piece or did not move at
+  all. The windmill broke that: its plates orbit inside a hub that never moves, so spikes stuck to a
+  plate hung in the air while the plate went round under them. `Host` is still the actor, because
+  the breakable events are on the actor. `AGetawayC4` already stuck to the component it hit, so this
+  only brings the placed pieces in line with the charge. `FRepAttachment::AttachComponent` carries
+  the exact component, so a client attaches to the same plate the server did.
 - **Nothing about the break goes over the wire.** `OnBroken` and `OnRestored` already fire on every
   machine, so each copy of the spikes reacts locally off its own copy of the panel. Only `Host`
   itself is replicated, and only so a client can find the panel to bind to - with an `OnRep`,

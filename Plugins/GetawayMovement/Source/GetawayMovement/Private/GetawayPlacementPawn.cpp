@@ -1,4 +1,4 @@
-#include "GetawayPlacementPawn.h"
+﻿#include "GetawayPlacementPawn.h"
 #include "GetawayBreakable.h"
 #include "GetawayGameMode.h"
 #include "GetawayGameState.h"
@@ -592,7 +592,7 @@ void AGetawayPlacementPawn::ServerPlacePiece_Implementation(int32 Slot, FVector_
 	}
 
 	// Worked out here rather than sent, so a client cannot nominate what its piece is glued to.
-	AActor* Host = FindHostAt(Centre, Turned, Def);
+	UPrimitiveComponent* Host = FindHostAt(Centre, Turned, Def);
 
 	if (AActor* Spawned = GM->PlacePiece(Def, Centre, Turned, PS, Local))
 	{
@@ -894,7 +894,7 @@ bool AGetawayPlacementPawn::TrimToSupport(const FVector& AimPoint, const FVector
 	return true;
 }
 
-AActor* AGetawayPlacementPawn::FindHostAt(const FVector& Centre, const FRotator& Rotation,
+UPrimitiveComponent* AGetawayPlacementPawn::FindHostAt(const FVector& Centre, const FRotator& Rotation,
 	const FGetawayPieceDef& Def) const
 {
 	const UWorld* World = GetWorld();
@@ -911,7 +911,10 @@ AActor* AGetawayPlacementPawn::FindHostAt(const FVector& Centre, const FRotator&
 	if (World->LineTraceSingleByChannel(Hit, Face + Out * 4.f, Face - Out * SupportReach,
 		ECC_Visibility, Params))
 	{
-		return Hit.GetActor();
+		// The component, not the actor. A piece can have moving parts inside a root that stands
+		// still - the windmill's plates do - and a surface-mounted piece has to ride the part it
+		// was actually stuck to. The caller takes the owning actor off it for the breakable events.
+		return Hit.GetComponent();
 	}
 	return nullptr;
 }

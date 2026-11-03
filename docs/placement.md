@@ -607,3 +607,225 @@ a pawn in `BeginPlay`.** Ask on the frame you need the answer.
 It compiles clean. **The fix itself has not been played** - the diagnosis explains the symptom
 exactly and the mechanism is checked against the engine's spawn path, but nobody has yet watched a
 second placement phase draw a cyan ghost.
+
+## The paddle wheel (added 2026-11-03)
+
+Asked for: *"lets add an object that's 4 walls rotating kind of like windmill blades you can stand
+on."* `AGetawayWindmill`, catalog id `windmill`, display name **Windmill**: four plates orbiting a
+horizontal axle, carrying you up and over.
+
+### The plates stay level, and that was the question
+
+Asked and answered before any code: a **true windmill**, whose blades tilt as the wheel turns, or a
+**paddle wheel**, whose plates orbit without turning like the cars of a ferris wheel. The answer was
+level plates, and the reasons are worth keeping:
+
+- A tilting blade stops being a floor the moment its top face passes the walkable angle, which is
+  about 44 degrees. That is a quarter turn of ride and then you slide off - a timing piece, not a
+  lift. Level plates are a floor the whole way round.
+- A tilting blade also turns **underfoot**, and the engine pipes a movement base's rotation into
+  your view: `UpdateBasedMovement` composes the base's delta rotation onto the pawn and then calls
+  `UpdateBasedRotation`, which moves the camera with it. Standing on a windmill blade would spin
+  your look. The way out is `bIgnoreBaseRotation` on the character movement component, and nothing
+  else in this game turns underfoot, so that would be a character-wide setting bought for one piece.
+- With level plates, a plate can only ever hand a rider a **translation**. There is no case where
+  the ride fights the camera, and no new character property at all. The character was not touched.
+
+So there is deliberately no `bBladesTilt`. If the tilting version is ever wanted it is a different
+piece, with that character setting as part of its price.
+
+### The shape
+
+Free-standing and **directional**: the placement arrow runs along the axle, so a wheel goes up
+facing you, plates climbing in front of you, and **R** turns it 90 degrees to sweep across your path
+instead. The plate at the bottom of the stroke sits 40 cm off the floor, which is a step up, so you
+walk onto it rather than having to aim at it.
+
+It is **not scaled to its catalog Size** - `bScaleToSize` is false, as for the C4 pickup. The piece
+builds itself in plain cm from its own properties, which is why none of its layout code has to
+divide an actor scale back out the way `AGetawayVortex::LayOutColumn` does. The catalog Size is
+therefore only the placement ghost, and it has to equal the box the turning wheel actually sweeps:
+`AGetawayWindmill::GetSweptSize()` is that box, and the catalog entry carries the same three numbers
+by hand. **At the defaults they are 350 x 700 x 540.** Retune `BladeReach`, `BladeWidth` or
+`BladeThickness` and the ghost starts lying about the footprint until the catalog is retyped to
+match. That is the one maintenance trap in the piece.
+
+| Part | What it is |
+|---|---|
+| `Mount` | The root. Never moves; the axle is its local +X |
+| `Wheel` | Turns. The hub and the spokes hang off it, so they are what visibly rotates |
+| `Hub` | A barrel lying along the axle. Cosmetic, no collision |
+| `Arm0..7` | Spokes, hub out to each plate. Cosmetic, pooled, **no collision on purpose** - the one place a spoke crosses is exactly where a rider stands |
+| `Blade0..7` | The plates. Movable blocking cubes, attached to `Mount` rather than `Wheel` so their orientation never changes |
+| `Contact0..7` | A box per plate, 12 cm bigger than it, query-only against pawns. What a sweep is noticed in |
+
+The contact boxes hang off `Mount` beside their plate rather than inside it, because a box parented
+to a scaled mesh is multiplied by that mesh's scale and its extent would stop being in cm.
+
+### Standing on one is the engine's own code
+
+A plate is a `Movable` blocking primitive, which is the whole of what
+`UCharacterMovementComponent::UpdateBasedMovement` asks for: it carries whoever is standing on a
+movable base by that base's transform delta, every frame, before anything in our movement component
+runs. `UGetawayMovementComponent` overrides `CalcVelocity`, `PhysCustom` and friends but **not**
+`PerformMovement`, so nothing in the Source-style movement had to learn about moving floors.
+
+Two pleasant consequences that fall out for free: `bImpartBaseVelocityZ/X/Y` default to true, so
+**jumping off a rising plate carries the plate's motion with you**, and bunny-hopping along a plate
+works exactly as it does on a floor.
+
+The wheel ticks in `TG_PrePhysics`, the group characters tick in, so the plates have moved before a
+rider's movement asks its base where it is.
+
+### The spin is derived, not replicated
+
+The wheel angle is a pure function of `AGetawayGameState::GetRunTime()`:
+
+```cpp
+return StartAngle + SpinRate * Elapsed;
+```
+
+`GetRunTime` is itself computed from the **replicated** run start time, so every machine lands on
+the same angle on the same frame, with nothing going over the wire and no drift to correct. This is
+not the same trick as `AGetawayVortex`'s spinning cage, which each machine runs on its own clock
+because it is cosmetic. Here the spin decides where the floor is, so it has to agree - and an
+*absolute* angle agrees in a way an accumulated one never does: a client that hitched, or joined
+late, is simply right on its next frame rather than having to catch up.
+
+It also hands us the whole round loop for nothing. `GetRunTime` returns 0 outside a run, so the
+wheel sits at `StartAngle` through placement - you build against a still wheel - and it freezes
+where it stood when the round ends. `bSpinOutsideRun` falls back to world time for a wheel dropped
+into a map by hand, which is the only case with no run to read.
+
+`SetArmed` is still wired into both of `AGetawayGameMode`'s arm/disarm loops beside the spikes, the
+pads and the vortex, because the **shove** does need gating; the spin gates itself.
+
+### Being hit by a plate
+
+Moving a component without sweeping does not push a character out of the way - it interpenetrates,
+and the character's own depenetration decides where they end up, which can be through the wall
+behind them. So each plate hands its own velocity to anybody its contact box has caught:
+
+- The velocity is `omega x r` about the axle. A plate never turns, so **every point on it moves at
+  the same velocity** and there is nothing to work out per contact point.
+- It is delivered through `UGetawayMovementComponent::ApplyBlast`, the same path as the jump pad and
+  the C4 blast, so it already knows how to drop you out of a wallrun or a mantle and off the ground.
+- **Only on the machine that owns that character**, like every other piece here. Client authority.
+- `ShoveScale` 1.3 by default: 1 is exactly the plate's speed, which reads as being shoved along by
+  it, above that it bats you, and 0 leaves the plates as plain blocking geometry.
+- A rising plate catching you under the arm throws you up; a descending one drives you down. Both
+  fall out of the same line and both seem right.
+
+**Rider or victim** is two tests, not one. The movement base is the honest answer while you are
+standing on a plate; a height test along the plate's own up axis covers the frames around a jump,
+when the base has been cleared but you are still inside the contact box. Without the second test,
+hopping on a plate would bat you sideways.
+
+It **never kills you.** Only spikes and falling do that - though a plate throwing you off the course
+certainly can, and that is the piece's best trap.
+
+### Tuning it
+
+All in the Details panel under **Getaway|Windmill**, on `BP_Piece_Windmill`:
+
+| Property | Default | What it does |
+|---|---|---|
+| `BladeCount` | 4 | Plates round the axle. 2 is a see-saw with a long wait, 6 a near-continuous escalator |
+| `BladeReach` | 250 | Wheel radius, so also the lift: 500 cm bottom of the stroke to the top |
+| `BladeLength` / `BladeWidth` / `BladeThickness` | 350 / 200 / 40 | The plate: along the axle, across it, thick |
+| `SpinRate` | 60 | Degrees a second. A turn every 6 s, 3 s to ride bottom to top. **Negative reverses it** |
+| `StartAngle` | 0 | Where it stands while nobody is running. 0 puts a plate at the top |
+| `bSpinOutsideRun` | off | On: turns on world time with no round on, for a wheel placed by hand |
+| `ShoveScale` | 1.3 | How much of a plate's velocity a sweep hands you. 0 turns the shove off |
+| `ShoveRetrigger` | 0.5 | Seconds before the wheel can hit the same player again |
+| `ShoveViewPunch` / `ShoveShake` | 1.2 / 0.35 | Camera kick on being hit |
+| `ArmThickness` / `HubRadius` / `HubWidth` | 24 / 55 / 140 | The frame |
+| `BladeMaterial` / `ArmMaterial` | from the script | Cover all the pooled plates and spokes at once |
+
+### A new piece did not reach the game by itself (hit, then fixed, 2026-11-03)
+
+It happened immediately, so here is the whole of it. **Adding a catalog entry in C++ was not
+enough.** `BP_GetawayGameMode` holds an *overridden* copy of `Catalog` - `dress_pieces.py` writes
+that array when it rewires every entry's Actor Class - and an overridden property stops tracking
+C++. The windmill was in `AGetawayGameMode`'s constructor, the Blueprint still held the eleven
+older entries, and the piece was never dealt. `BP_Piece_Windmill` existed and looked right in the
+Content Browser, which made it look like a dealing bug rather than a catalog one.
+
+The check added with the piece did catch it, in the Output Log:
+
+> Error: [Adrenaline dress] BP_GetawayGameMode's Catalog has no 'windmill' entry, so that piece
+> will never be dealt.
+
+**The fix is in the script, not in a click.** `rewire_catalog` now reads the array from
+`AGetawayGameMode`'s own class defaults - the C++ values - copies each entry, sets its Actor Class,
+and writes the result to the Blueprint. The Blueprint's catalog is rebuilt from C++ on every run,
+so a new piece reaches the party box as soon as the C++ is built and the script is run once. No
+Reset to Default, nothing to remember.
+
+Two consequences worth knowing:
+
+- **Everything that decides what a piece is - id, display name, size, directional, surface mounted,
+  scaled - now lives in C++ and only in C++.** Editing those fields in the Blueprint's Catalog array
+  is pointless; the next run of the script overwrites them. **Actor Class** is the one field the
+  Blueprint owns, and the script sets that too.
+- **A piece must keep its row in the script's `PIECES` table even if the row dresses nothing**, or
+  the rewire leaves that entry pointing at the raw C++ class instead of its Blueprint. That is why
+  the hand-dressed spikes row is `{}, {}` rather than deleted.
+
+### Spikes and pads ride a plate (added 2026-11-03)
+
+Asked for straight after the wheel was played: *"can we make it so spikes and pieces that attach to
+it move with the piece its attached to?"* They did not, and the reason was one discarded value
+rather than anything missing.
+
+`AGetawayPlacementPawn::FindHostAt` traces back out of the face a surface-mounted piece was stuck to
+and returned `Hit.GetActor()`; `AttachToHost` then called `AttachToActor`, which attaches to that
+actor's **root component**. For every host there had ever been - a wall, a floor, a breakable panel,
+a collapsing bridge - the root *is* the thing that moves, so nothing was ever wrong with it. The
+windmill is the first piece whose moving parts are children of a root that stands still, so spikes
+stuck to a plate attached to the hub and hung in the air while the plate orbited out from under them.
+
+The fix is to keep the component. `FindHostAt` returns `Hit.GetComponent()`, and both
+`AGetawaySpikes::AttachToHost` and `AGetawayJumpPad::AttachToHost` take a `UPrimitiveComponent*` and
+call `AttachToComponent`. `Host` stays the owning actor, taken off the component, because that is
+what the breakable `OnBroken` / `OnRestored` binding needs.
+
+- **Nothing new goes over the wire.** `FRepAttachment` already carries `AttachComponent` alongside
+  `AttachParent`, and `AActor::OnRep_AttachmentReplication` attaches the root to that exact
+  component when it is set (checked in `Actor.cpp`, and the server fills it from
+  `RootComponent->GetAttachParent()` in `ActorReplication.cpp`). Both pieces already had movement
+  replication on for the collapsing bridge, which is the same mechanism.
+- **`AGetawayC4` was already doing this** - a thrown charge sticks to the component it hit - so a
+  charge stuck to a plate went round with it before any of this. This only brings the placed pieces
+  in line with the charge.
+- **Every existing host behaves exactly as before.** On a piece whose root is its only moving part,
+  the component the trace hits *is* that root, so the attachment is identical to what it was.
+- **The trim still applies.** Spikes are 400 x 400 and a plate is 350 x 200, so the bed is trimmed
+  to the plate it is backed by rather than refused - which is the behaviour surface mounting already
+  had, and it means a plate comes out fully spiked.
+- **What still does not ride:** a free-standing piece resting on a plate. Attaching those would be a
+  different decision - a floor placed on a plate would become part of the wheel - and it was not
+  asked for.
+
+Built clean. **Not played.**
+
+### Still unverified
+
+- ~~**Nothing about it has been played.**~~ **Played 2026-11-03, and it works** - *"everything
+  works"*. The based-movement bet came off: a plate carries you with no change to the movement
+  component at all. The first attempt that day never got a wheel into a hand, which was the catalog
+  trap above, not the piece.
+- **How a ride feels at the top of the stroke**, where a level plate is moving sideways as fast as it
+  is moving up. 60 degrees a second is a first guess.
+- **Being batted by a plate.** `ShoveScale` 1.3 is a guess, and the rider-or-victim height test is
+  the part most likely to want a different number than 8 cm.
+- **Two machines.** The spin is derived from the replicated run clock on purpose, which is the right
+  shape, but no wheel has turned on two machines at once - and a rider's position is their own
+  machine's business, so a plate that disagreed by a few degrees would show up as somebody standing
+  slightly off their plate.
+- **A piece placed inside the swept circle** is swept through by a plate rather than stopping it.
+  Placement only tests the ghost against where the plates are standing at `StartAngle`.
+- **Free-standing pieces resting on a plate do not ride it.** A floor or a crate dropped onto a
+  plate is placed in the world where the plate happens to be, and the wheel sweeps out from under
+  it. Only *surface-mounted* pieces attach, because attaching is what surface mounting is - and
+  spikes and jump pads on a plate do ride, as of 2026-11-03; see the section below.

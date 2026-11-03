@@ -106,6 +106,19 @@ one older one:
 | `SurfaceMaterial` | `AGetawayRamp` | The wedge is a `UProceduralMeshComponent`. A procedural mesh has no material slot until its section exists, and the section is only built by `BuildWedge` on spawn, so there is nothing to set at Blueprint-edit time. Applied after `CreateMeshSection_LinearColor`, which is the only order that works. |
 | `PointMaterial` | `AGetawaySpikes` | Covers the whole pooled bed of cones in one field instead of 16 components. Applied in `LayOutPoints`. |
 | `BarMaterial` | `AGetawayVortex` | Same for the cage's bars. Applied in `LayOutColumn`. A translucent or glowing material is the one that reads right - you have to be able to see the course through the cage. |
+| `BladeMaterial`, `ArmMaterial` | `AGetawayWindmill` | The paddle wheel pools eight plates and eight spokes, so the Components panel cannot reach them one by one; these two cover the lot. Applied in `LayOutWheel`. The hub is a named component and is dressed there as usual. |
+
+**The script wins over the Details panel, for every piece named in its table.** That is what it is
+for - it writes the materials in `PIECES` every run - but it means a look set by hand in
+`BP_Piece_*` is gone the next time it runs. It took the spikes that way on 2026-11-03. To keep a
+hand-picked look, empty that piece's two dictionaries in `PIECES` (the spikes are `{}, {}` now) and
+leave the row itself in place: the row is also what points the catalog entry at the Blueprint, so
+deleting it hands that piece back to the raw C++ class.
+
+**The script also rebuilds `BP_GetawayGameMode`'s whole Catalog from the C++ class defaults** every
+run, which is how a piece added in C++ reaches the party box at all (see *A new piece did not reach
+the game by itself* in `docs/placement.md`). So a piece's id, size and flags are C++ values only -
+editing them in the Blueprint's Catalog array does not last.
 | `ScrapMaterial` | `AGetawayBreakable` | Older. The scraps are `NewObject`ed when the panel bursts, so they exist on no Blueprint. Falls back to the mesh's own material when empty. |
 
 All four are set unconditionally, so clearing one in the Details panel puts the engine default back

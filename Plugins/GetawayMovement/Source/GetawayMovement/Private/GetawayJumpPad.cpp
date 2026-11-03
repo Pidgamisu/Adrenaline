@@ -1,4 +1,4 @@
-#include "GetawayJumpPad.h"
+﻿#include "GetawayJumpPad.h"
 
 #include "GetawayBreakable.h"
 #include "GetawayCharacter.h"
@@ -206,17 +206,22 @@ void AGetawayJumpPad::LaunchLocal(AGetawayCharacter* Who)
 
 /* ============================================================ stuck to something */
 
-void AGetawayJumpPad::AttachToHost(AActor* InHost)
+void AGetawayJumpPad::AttachToHost(UPrimitiveComponent* InHost)
 {
 	if (!HasAuthority()) return;
 
-	Host = InHost;
+	// The actor is what the breakable events hang off; the component is what the pad rides.
+	Host = InHost ? InHost->GetOwner() : nullptr;
 	BindToHost();
-	if (Host)
+	if (InHost)
 	{
+		// To the component that was hit rather than the host's root, so a pad on a windmill plate
+		// goes round with the plate. See the note on AGetawaySpikes::AttachToHost.
+		//
 		// Keeping the world transform matters: placement already worked out exactly where the pad
-		// sits, and attaching must not move it - the pad's rotation *is* its launch direction.
-		AttachToActor(Host, FAttachmentTransformRules::KeepWorldTransform);
+		// sits, and attaching must not move it - the pad's rotation *is* its launch direction, and
+		// the direction it launches you has to keep pointing out of the face it is stuck to.
+		AttachToComponent(InHost, FAttachmentTransformRules::KeepWorldTransform);
 	}
 }
 

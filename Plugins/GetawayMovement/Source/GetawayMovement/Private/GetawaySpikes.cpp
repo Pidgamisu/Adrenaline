@@ -1,4 +1,4 @@
-#include "GetawaySpikes.h"
+﻿#include "GetawaySpikes.h"
 
 #include "GetawayBreakable.h"
 #include "GetawayCharacter.h"
@@ -151,18 +151,24 @@ void AGetawaySpikes::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 /* ============================================================ stuck to something */
 
-void AGetawaySpikes::AttachToHost(AActor* InHost)
+void AGetawaySpikes::AttachToHost(UPrimitiveComponent* InHost)
 {
 	if (!HasAuthority()) return;
 
-	Host = InHost;
+	// The actor is what the breakable events hang off; the component is what the spikes ride.
+	Host = InHost ? InHost->GetOwner() : nullptr;
 	BindToHost();
-	if (Host)
+	if (InHost)
 	{
+		// To the component that was actually hit, not to the host's root - the windmill's plates
+		// orbit inside a hub that never moves, so its root would hold the spikes still while the
+		// plate left without them.
+		//
 		// Keeping the world transform matters: placement already worked out exactly where the plate
-		// sits, and attaching must not move it. The attachment itself replicates, so a host that
-		// moves carries the spikes on every machine without their transform going over the wire.
-		AttachToActor(Host, FAttachmentTransformRules::KeepWorldTransform);
+		// sits, and attaching must not move it. The attachment itself replicates - AttachComponent
+		// in FRepAttachment carries the exact component - so a host that moves carries the spikes on
+		// every machine without their transform going over the wire.
+		AttachToComponent(InHost, FAttachmentTransformRules::KeepWorldTransform);
 	}
 }
 

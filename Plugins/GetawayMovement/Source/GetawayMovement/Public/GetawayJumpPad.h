@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -128,11 +128,12 @@ public:
 
 	/**
 	 * Stick this pad to whatever it was placed on. Server only; the host replicates so every
-	 * machine hooks itself up the same way. Same deal as AGetawaySpikes: a host that moves carries
-	 * the pad, and breaking a breakable host takes the pad with it - so the panel under a pad is
-	 * the answer to a route built on one.
+	 * machine hooks itself up the same way. Same deal as AGetawaySpikes, including taking the
+	 * component rather than the actor so a windmill plate carries the pad: a host that moves
+	 * carries the pad, and breaking a breakable host takes the pad with it - so the panel under a
+	 * pad is the answer to a route built on one.
 	 */
-	void AttachToHost(AActor* InHost);
+	void AttachToHost(UPrimitiveComponent* InHost);
 
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	AActor* GetHost() const { return Host; }

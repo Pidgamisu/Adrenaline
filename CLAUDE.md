@@ -37,7 +37,13 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   this. See *The front end* in `docs/multiplayer.md`, and the two traps at the end of it: input
   going dead after a travel, and the engine never bringing you back from a failed connection.
 - **Round loop:** shared placement phase with a build clock, the run, Ultimate Chicken Horse scoring, and deaths (spikes, falling off the course).
-- **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes, jump pad, anti-gravity vortex.
+- **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes,
+  jump pad, anti-gravity vortex, paddle wheel (the Windmill, added 2026-11-03: four level
+  plates orbiting a horizontal axle that carry you up and over, and bat you off if you are
+  standing in the way). **Played 2026-11-03 and it works.** Spikes and jump pads stuck to a plate
+  ride round with it, which took attaching a surface-mounted piece to the **component** it was
+  placed on rather than to the host actor's root - see *Spikes and pads ride a plate* in
+  `docs/placement.md`. **That part is built but not played.**
 - **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid
   band round its rim. Three passes 2026-11-02, **played and signed off at speed**. See
   `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker -

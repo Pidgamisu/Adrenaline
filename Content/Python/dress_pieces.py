@@ -14,7 +14,13 @@ docs/blueprint-tuning.md.
 
 Safe to run twice. Blueprints that already exist are reused, not replaced, so a material you
 have changed by hand survives - EXCEPT the ones named in PIECES below, which are written every
-time. To keep a hand-picked material, clear it out of the table here.
+time. To keep a hand-picked material, clear it out of the table here, but leave the row: the
+row is also what points the catalog entry at the Blueprint. The spikes are kept that way.
+
+It also rebuilds BP_GetawayGameMode's Catalog from AGetawayGameMode's class defaults each run,
+which is the only way a piece added to the C++ catalog ever reaches the party box - a Blueprint
+that has been written once stops tracking C++. Everything about a piece except its Actor Class
+therefore lives in C++; editing size or flags in the Blueprint's Catalog array will not last.
 
 **Which colour goes where is decided here; what each colour IS lives in adrenaline_look.py.**
 Change the table below to move a colour onto a different piece, change adrenaline_look.py to
@@ -61,13 +67,23 @@ PIECES = [
     ("bridge",   "BP_Piece_Bridge",   "GetawayCollapsingBridge",  {"mesh": "MI_VB_Bridge"},   {}),
     ("c4",       "BP_Piece_C4Pickup", "GetawayC4Pickup",          {"pad": "MI_VB_Dark",
                                                                    "charge": "MI_VB_Pickup"}, {}),
-    ("spikes",   "BP_Piece_Spikes",   "GetawaySpikes",            {"base": "MI_VB_Dark"},
-                                                                  {"point_material": "MI_VB_Danger"}),
+    # Dressed by hand, so this script leaves it alone: on 2026-11-03 a run of this script put the
+    # table back over a look that had been set in the editor, and the row is empty so that cannot
+    # happen again. The row itself has to stay, or the catalog would point the spikes at the raw
+    # C++ class instead of this Blueprint. Was: {"base": "MI_VB_Dark"}, {"point_material":
+    # "MI_VB_Danger"} - put those back here to hand the spikes to the script again.
+    ("spikes",   "BP_Piece_Spikes",   "GetawaySpikes",            {}, {}),
     ("jumppad",  "BP_Piece_JumpPad",  "GetawayJumpPad",           {"base": "MI_VB_Dark",
                                                                    "piston": "MI_VB_Pickup"}, {}),
     ("vortex",   "BP_Piece_Vortex",   "GetawayVortex",            {"base": "MI_VB_Dark",
                                                                    "cap": "MI_VB_Dark"},
                                                                   {"bar_material": "MI_VB_Vortex"}),
+    # The plates are architecture you stand on, so pink, and the brighter of the two floor pinks
+    # because they are moving and have to be read at a glance. The hub and the spokes are the dark
+    # frame they hang off, which is also the one thing that visibly turns.
+    ("windmill", "BP_Piece_Windmill", "GetawayWindmill",          {"hub": "MI_VB_Dark"},
+                                                                  {"blade_material": "MI_VB_Ledge",
+                                                                   "arm_material": "MI_VB_Dark"}),
 ]
 
 assets = unreal.EditorAssetLibrary
@@ -232,23 +248,45 @@ def rewire_catalog(built):
         return
 
     defaults = unreal.get_default_object(gamemode_class)
-    catalog = defaults.get_editor_property("catalog")
+
+    # **Read the catalog from C++, not from the Blueprint.** The moment this script writes the
+    # array, BP_GetawayGameMode holds its own copy and stops tracking C++, so a piece added to
+    # AGetawayGameMode later is simply not in it and is never dealt - which is exactly what
+    # happened to the windmill on 2026-11-03. Reseeding from the class defaults every run means a
+    # new piece reaches the party box as soon as the C++ is built, with nothing to click.
+    #
+    # Everything that decides what a piece IS - its id, size, and whether it is directional,
+    # surface mounted or scaled - therefore lives in C++ and only in C++. The one thing this
+    # script changes is Actor Class.
+    native_gamemode = native_class("GetawayGameMode")
+    catalog = (unreal.get_default_object(native_gamemode).get_editor_property("catalog")
+               if native_gamemode is not None else None)
     if not catalog:
-        fail("BP_GetawayGameMode's Catalog is empty, which should not happen. Nothing rewired.")
+        fail("AGetawayGameMode's own Catalog came back empty, so there is nothing to rewire. "
+             "Is the C++ built?")
         return
 
     # Matched on Id, not on position: an entry added to the C++ catalog later would shift every
     # index below it, and silently dressing the wrong piece is worse than dressing none.
     entries = []
     changed = 0
-    for entry in catalog:
+    seen = set()
+    for source in catalog:
+        # A copy. These structs belong to the C++ class defaults and must not be edited in place.
+        entry = source.copy()
         entry_id = str(entry.get_editor_property("id"))
+        seen.add(entry_id)
         if entry_id in built:
             entry.set_editor_property("actor_class", built[entry_id])
             changed += 1
         else:
             log("catalog entry '%s' has no Blueprint in this script; left as it is." % entry_id)
         entries.append(entry)
+
+    for missing in sorted(set(built) - seen):
+        fail("AGetawayGameMode's C++ Catalog has no '%s' entry, so that piece cannot be dealt. "
+             "Add it to the catalog in AGetawayGameMode, build, and run this again - or take the "
+             "row out of PIECES in this script." % missing)
 
     defaults.set_editor_property("catalog", entries)
     unreal.BlueprintEditorLibrary.compile_blueprint(gamemode_bp)

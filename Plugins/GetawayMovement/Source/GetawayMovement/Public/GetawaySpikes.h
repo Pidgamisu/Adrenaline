@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -81,11 +81,18 @@ public:
 	 * Stick these spikes to whatever they were placed on. Server only; the host replicates so every
 	 * machine can hook itself up the same way.
 	 *
-	 * They are attached to it, so a host that moves - a collapsing bridge - carries them down and
-	 * brings them back up with it. And if the host is a breakable, smashing the panel takes the
-	 * spikes with it: you can clear a spiked wall by breaking the wall.
+	 * They are attached to it, so a host that moves - a collapsing bridge, a windmill plate -
+	 * carries them with it and brings them back. And if the host is a breakable, smashing the panel
+	 * takes the spikes with it: you can clear a spiked wall by breaking the wall.
+	 *
+	 * **Takes the component, not the actor** (2026-11-03). A piece whose moving part is a child
+	 * component - the windmill, whose plates orbit inside a hub that never moves - would otherwise
+	 * hand over an actor whose root is the still bit, and the spikes would hang in the air while the
+	 * plate went round under them. `Host` is still the actor, because that is what the breakable
+	 * events are on. This is the same bargain AGetawayC4 already makes when a charge sticks to
+	 * something.
 	 */
-	void AttachToHost(AActor* InHost);
+	void AttachToHost(UPrimitiveComponent* InHost);
 
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	AActor* GetHost() const { return Host; }
