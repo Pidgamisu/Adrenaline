@@ -1,12 +1,12 @@
 #include "GetawayC4.h"
 
+#include "GetawayBlast.h"
 #include "GetawayBreakable.h"
 #include "GetawayCharacter.h"
 #include "GetawayMovementComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -49,6 +49,8 @@ AGetawayC4::AGetawayC4()
 	Light->SetIntensity(1500.f);
 	Light->SetAttenuationRadius(120.f);
 	Light->SetCastShadows(false);
+
+	BlastEffectClass = AGetawayBlast::StaticClass();
 
 	// A thrown charge is spawned by the server and streamed out, rather than simulated separately
 	// on each machine: the arc is short, and two machines integrating it independently would put
@@ -263,9 +265,17 @@ void AGetawayC4::PlayBlastEffects(const FVector& P)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ExplosionEffect, P);
 	}
-	else
+	else if (UClass* Class = BlastEffectClass ? BlastEffectClass.Get() : nullptr)
 	{
-		DrawDebugSphere(World, P, BlastRadius * 0.5f, 20, FColor(255, 170, 80), false, 0.25f, 0, 4.f);
+		// Real geometry rather than the DrawDebugSphere this used to be: debug draw is compiled
+		// out of Shipping and Test, so a packaged build showed nothing at all. See AGetawayBlast.
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (AGetawayBlast* Blast = World->SpawnActor<AGetawayBlast>(Class, P, FRotator::ZeroRotator, Params))
+		{
+			// So the flash matches this charge's reach rather than a number typed into the class.
+			Blast->SizeToBlast(BlastRadius);
+		}
 	}
 	if (ExplosionSound)
 	{

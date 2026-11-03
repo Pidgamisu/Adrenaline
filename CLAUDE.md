@@ -30,7 +30,9 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
 - **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes, jump pad, anti-gravity vortex.
 - **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid
   band round its rim. Three passes 2026-11-02, **played and signed off at speed**. See
-  `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker.
+  `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker -
+  which is also why the placement ghost and the C4 explosion are both built geometry rather than
+  debug draw or Niagara.
 
 ## Where the details live
 
@@ -171,6 +173,9 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
    nobody has looked at it, a pad cannot drive it, and there is no lobby or settings page.
 4. **Package it and play with somebody.** The packaging config is written and has never been run,
    so the cook is unproved. See *Still unverified* in `docs/multiplayer.md`.
-5. A Niagara explosion effect for `BP_C4`. Without one the blast falls back to a debug sphere, which
-   is invisible in a Shipping build - the last loose end from the 2026-11-02 Shipping pass.
+5. ~~A Niagara explosion effect for `BP_C4`. Without one the blast falls back to a debug sphere,
+   which is invisible in a Shipping build.~~ **Done 2026-11-02, and not Niagara** - Niagara cannot
+   be scripted at all, so it is `AGetawayBlast`: real additive geometry, a flash and glowing
+   shards, in every build. The `ExplosionEffect` slot still overrides it. **Not yet looked at** -
+   see *The explosion* in `docs/look.md`. With this, nothing known blocks a Shipping package.
 6. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.

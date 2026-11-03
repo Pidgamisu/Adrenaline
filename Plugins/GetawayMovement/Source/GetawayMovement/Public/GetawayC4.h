@@ -35,9 +35,23 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
 	TObjectPtr<UPointLightComponent> Light;
 
-	/** Optional explosion effect. With none set, a debug sphere flashes instead (editor and development builds only). */
+	/**
+	 * Optional Niagara explosion. Set one on `BP_C4` and it wins; leave it empty and
+	 * `BlastEffectClass` below is spawned instead.
+	 *
+	 * It used to be that an empty slot meant `DrawDebugSphere`, which is compiled out of Shipping
+	 * and Test builds - so a detonation in a packaged Shipping build was simply invisible. That is
+	 * why this is no longer the only way to see a blast.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects")
 	TObjectPtr<UNiagaraSystem> ExplosionEffect;
+
+	/**
+	 * The built-in explosion: real geometry, so it draws in every build. Cleared, and with no
+	 * `ExplosionEffect` either, a detonation is silent and invisible.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects")
+	TSubclassOf<class AGetawayBlast> BlastEffectClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects")
 	TObjectPtr<USoundBase> ExplosionSound;

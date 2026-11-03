@@ -6,6 +6,7 @@
 #include "Components/InputComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -121,6 +122,17 @@ void AGetawayPlayerController::ApplyChosenName()
 		Chosen = UGameplayStatics::ParseOption(World->URL.ToString(), TEXT("Name"));
 	}
 	if (Chosen.IsEmpty()) return;
+
+	// Reject the engine's own default, which is not a name anybody chose. Every URL picks up
+	// `?Name=Player` on its own: `FURL::LoadURLConfig` copies the whole `[DefaultPlayer]` ini
+	// section in as options, and `BaseGame.ini` sets `Name=Player` there. Without this, an unnamed
+	// player is renamed to "Player" and two of them are indistinguishable - worse than the
+	// engine's own fallback, which at least appends a player id. Spotted in a log on 2026-11-02.
+	//
+	// Read from the ini rather than hardcoded, since that is where the value actually lives.
+	FString IniDefaultName;
+	GConfig->GetString(TEXT("DefaultPlayer"), TEXT("Name"), IniDefaultName, GGameIni);
+	if (!IniDefaultName.IsEmpty() && Chosen.Equals(IniDefaultName, ESearchCase::IgnoreCase)) return;
 
 	UE_LOG(LogTemp, Log, TEXT("Getaway: asking to be called '%s'"), *Chosen);
 	ServerChangeName(Chosen);

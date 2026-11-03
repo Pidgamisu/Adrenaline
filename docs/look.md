@@ -226,3 +226,98 @@ neither came up.
    and down that an empty void does not. The reference is pure black; surf maps never are.
 3. **A real-world-width band**, deriving face size in the material.
 4. **Scrolling or pulsing emissive** on panes, which is very surf and nearly free.
+
+## The explosion (2026-11-02)
+
+`AGetawayBlast`: an additive flash that swells and fades, plus a handful of glowing cubes thrown
+out of it. *Next steps* 5, and the last thing keeping the packaging config on Development.
+
+### Why it is not Niagara
+
+CLAUDE.md asked for a Niagara explosion. It is geometry instead, decided 2026-11-02:
+
+- **Niagara cannot be scripted.** The only Blueprint or Python exposed API in the `NiagaraEditor`
+  module is script-upgrade plumbing (`UpgradeNiagaraScriptResults.h`); there is nothing for
+  building an emitter stack. A system can only be authored by hand in the editor, so it could
+  never be built, seen or verified from here - only described as click steps and iterated on
+  blind.
+- **Niagara's stock sprite material is lit and ordinary translucent**, so a default system would
+  have looked like stock Unreal in a game with no lights, and would have needed its own unlit
+  additive sprite material before it looked like anything.
+- **Geometry already is the look.** This is the same move the placement ghost made the same day:
+  `DrawDebugSphere` out, real components in. It costs no asset, it is in every build, and every
+  number is a `UPROPERTY`.
+
+**The Niagara slot is untouched and still wins.** `ExplosionEffect` on `BP_C4` overrides this
+entirely, so a real system can replace it later without deleting anything.
+
+### What it is made of
+
+Both parts are dynamic instances of **`M_VB_Pane`** - unlit, additive, two-sided. Additive is
+what makes a blast safe to draw: it never occludes, so it cannot hide the floor you are about to
+land on, and it needs no sorting, so overlapping shards simply add up. `GridStrength` is set to 0
+on both, because the world grid belongs to the level, not to a flash going off inside it - the
+same thing `MI_VB_Ghost` does.
+
+**The flash** is `/Engine/BasicShapes/Sphere`, swelling from `FlashStartRadius` to `FlashRadius`
+on an ease-out while `Brightness` falls off squared. It is sized by the charge, not by the class:
+`AGetawayC4` calls `SizeToBlast(BlastRadius)` and the flash fills `FlashRadiusFraction` (0.55) of
+the real blast - under 1 deliberately, because the edge of a light is the last thing you see and
+the blast itself has no edge.
+
+**`FlashFaceOpacity` is 0.55, against 0.04 everywhere else in the palette, and that is not a
+mistake.** The edge band is what carries shape on a box, but a sphere only touches its own
+bounding box at six points, so there is almost nothing for a band measured off that box to grip.
+On a flash the *face* is the effect. If a sphere ever needs a band, `BandMode` 1 gives it the UV
+one, the same way the ramp's wedge works.
+
+**The shards** are 16 cubes stepped by hand - a plain ballistic arc with a tumble, no physics,
+because they are cosmetic and must not touch anything. They are cubes on purpose: the band is
+exact for a box at any quarter turn, and `ShardBorderWidth` 10 on a 14 cm cube covers the whole
+thing, so a shard reads as a spark rather than as a tiny hollow crate. `ShardUpwardBias` tilts
+the spray up so half of them do not vanish into the floor on frame one.
+
+They are separate components rather than one instanced mesh, and that is forced: an
+`UInstancedStaticMeshComponent` reports the bounds of the whole component to the material, not of
+each instance, so `ObjectBounds` would be the bounding box of the entire spray and the band maths
+would collapse. One component per shard is what keeps each one's band correct.
+
+### Cyan, not pink
+
+The blast is cyan, which follows the colour rule rather than breaking it: pink is architecture,
+and cyan is the colour of things that help you. C4 is a rocket jump and a way through a wall, and
+`MI_VB_Pickup` is already cyan for the same reason. `FaceColour` and `EdgeColour` are both
+editable if it reads wrong against the pink.
+
+### One trap worth not repeating
+
+**`/Engine/BasicShapes/Sphere` was not referenced anywhere in this project**, so a runtime
+`LoadObject` by path would have returned null in a packaged build - the flash would have been
+missing from the exact kind of build this class exists to fix, and only there. Both meshes are
+now `ConstructorHelpers::FObjectFinder` hard references, which is what gets them cooked. Same
+reason `AGetawayC4` finds its own cube that way.
+
+### What was verified, and how
+
+By summoning one in the real game - `-ExecCmds="summon GetawayBlast"` on a `?Play=1` session -
+and reading a log probe:
+
+    BLASTPROBE built: flash=yes shards=16 radius=330 mat=ok
+    BLASTPROBE done after 0.75s
+
+So the sphere and cube meshes resolve, all 16 shards build, `/Game/Materials/M_VB_Pane` loads
+(no fall back to the lit default material), and the actor tidies itself up on time. The probe was
+removed afterwards; `summon GetawayBlast` is still the quickest way to see one without throwing a
+charge.
+
+Both build targets compile and link with no errors and no warnings.
+
+### Still unverified
+
+- **How it looks.** Nobody has seen it. Whether the flash reads as a bang, whether 16 shards at
+  14 cm is too few or too many, and whether cyan sits right against the pink are all feel
+  questions, and every one of them is a field in the Details panel of `BP_C4`'s blast class.
+- **How it looks through a wall.** Additive never occludes, so a blast behind a panel will show
+  through it. That is deliberate and might still be wrong.
+- **Whether it is enough to move packaging to Shipping.** The guards are right by inspection and
+  nothing in the effect is debug draw, but nothing has been packaged yet at all.
