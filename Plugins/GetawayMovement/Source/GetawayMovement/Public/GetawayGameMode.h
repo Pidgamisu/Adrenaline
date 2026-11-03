@@ -6,6 +6,7 @@
 #include "GetawayPiece.h"
 #include "GetawayGameMode.generated.h"
 
+class AGetawayMenuCamera;
 class AGetawayPlacementPawn;
 class AGetawayPlayerState;
 
@@ -58,6 +59,45 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Round")
 	TSubclassOf<AGetawayPlacementPawn> PlacementPawnClass;
+
+	/* ---------------- The front end ---------------- */
+
+	/**
+	 * Open in the menu rather than in a round: ADRENALINE over the course turning slowly, with
+	 * Host, Join and Quit. This is what a packaged build does when you double-click it, and what
+	 * pressing Play in the editor does too.
+	 *
+	 * **Untick it while you are working on something that is not the menu** and Play goes straight
+	 * into placement as it did before the front end existed.
+	 *
+	 * It only has any effect on a game that is nobody's client and nobody's server - see
+	 * ShouldShowMenu. The two launchers in `Tools/` and the two-player test in docs/multiplayer.md
+	 * both start a listen server, so neither of them ever sees the menu whatever this says.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Front end")
+	bool bStartInMenu = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Front end")
+	TSubclassOf<AGetawayMenuCamera> MenuPawnClass;
+
+	/**
+	 * Should this session be the front end? True when `bStartInMenu` is on, nothing is connected
+	 * either way (`NM_Standalone`), and the URL this world was opened with carries no `Play`
+	 * option.
+	 *
+	 * That last part is how the Host button gets back out of the menu: it travels to this same map
+	 * with `?listen?Play=1`, and both halves of that independently say "this is a game".
+	 */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Front end")
+	bool ShouldShowMenu() const;
+
+	/** Put every player in the menu: the orbiting camera, and the panel over the top of it. */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Front end")
+	void StartMenu();
+
+	/** Give one player the menu camera and the panel. Used for a late arrival too. */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Front end")
+	void StartMenuFor(APlayerController* PC);
 
 	/* ---------------- The run clock ---------------- */
 

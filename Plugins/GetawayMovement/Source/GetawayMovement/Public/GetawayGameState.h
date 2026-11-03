@@ -13,6 +13,15 @@ enum class EGetawayPhase : uint8
 	Placement,
 	/** Running the level as AGetawayCharacter. */
 	Run,
+	/**
+	 * The front end: nobody is playing, the course turns slowly behind the menu panel and the
+	 * player holds an AGetawayMenuCamera.
+	 *
+	 * Deliberately last in the enum rather than first, where it reads better. The values are
+	 * replicated and are also saved into Blueprint defaults and into the map, so Placement has to
+	 * stay 0 and Run has to stay 1 or anything already stored shifts underneath us.
+	 */
+	Menu,
 };
 
 /**

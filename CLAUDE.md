@@ -14,9 +14,15 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
 - **Input:** keyboard and mouse, plus a full controller map for both the run and the placement camera (not yet play-tested with a pad in hand). See `docs/controller.md`.
 - **Multiplayer:** client-authoritative, two players play-tested 2026-10-17.
 - **Playing with friends:** the project packages and hosts over direct IP with the launchers in
-  `Tools/`, set up 2026-11-02, **not yet packaged or played**. No menu and no lobby yet. Shipping
-  builds no longer lose the placement ghost or the on-screen messages (see *Next steps* 3), though
+  `Tools/`, set up 2026-11-02, **not yet packaged or played**. Shipping
+  builds no longer lose the placement ghost or the on-screen messages, though
   Development is still the build to hand to playtesters. See `docs/multiplayer.md`.
+- **Front end:** a menu with ADRENALINE over the course turning slowly, a name box, Host, an IP box
+  and Join, and Quit; Escape in a game gives Resume / Leave to menu / Quit. Built 2026-11-02,
+  **Host played 2026-11-02; Join, Escape and Leave not yet.** The startup gates and the camera
+  framing are proved by headless runs. There is still no lobby. See *The front end* in
+  `docs/multiplayer.md` - and the input trap at the end of it, which is the thing to re-read if
+  the mouse or keys ever go dead after a travel.
 - **Round loop:** shared placement phase with a build clock, the run, Ultimate Chicken Horse scoring, and deaths (spikes, falling off the course).
 - **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes, jump pad, anti-gravity vortex.
 - **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid
@@ -31,7 +37,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 |---|---|
 | `docs/test-course.md` | `/Game/Maps/TestCourse`, its layout and what each obstacle tests |
 | `docs/placement.md` | the placement phase, build clock, catalog, piece positioning, directional pieces, the objective |
-| `docs/multiplayer.md` | replication, client authority, running the two-player test in the editor, packaging and LAN play with friends |
+| `docs/multiplayer.md` | replication, client authority, running the two-player test in the editor, packaging and LAN play with friends, the menu and Escape |
 | `docs/round-loop.md` | phases, scoring, shared placement, syncing breakables, bridge, C4 and pickups |
 | `docs/spikes-and-death.md` | spikes, surface-mounted pieces, dying, breakables |
 | `docs/falling-slopes-cleanup.md` | fall deaths, the "everything touches something" rule, pieces on slopes, between-round cleanup |
@@ -145,7 +151,9 @@ Or double-click `Getaway.uproject` and let the editor rebuild when it asks.
 
 ## Testing
 
-`/Game/Maps/TestCourse` is the startup map, so pressing Play drops you into it. `bStartInPlacement` on the game mode is on, so Play opens the placement camera; press Enter to run straight away. Two-player testing: see `docs/multiplayer.md`.
+`/Game/Maps/TestCourse` is the startup map, so pressing Play drops you into it. Since the front end landed, **Play opens the menu**; click Host to get into a round. Untick `bStartInMenu` on `BP_GetawayGameMode` to go straight into placement, which is what you want while working on anything that is not the menu. `bStartInPlacement` is on, so that drops you into the placement camera; press Enter to run straight away.
+
+**Escape only works outside Play-in-Editor** - the editor binds it to Stop and gets it first. Use Play ▸ Standalone Game to test the menu and Escape. Two-player testing: see `docs/multiplayer.md`.
 
 ## Source control
 
@@ -155,9 +163,9 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 
 1. More traps. Spikes were the first.
 2. The party box deals from the whole catalog. A per-round deck is still to do.
-3. **A front end**: a menu map with Host, Join and an IP box, and Escape to leave in game. It is
-   what a friend needs instead of a `.bat` file, and what a Shipping build needs instead of the
-   console. Needs UMG in `GetawayMovement.Build.cs`. See `docs/multiplayer.md`.
+3. ~~**A front end**: a menu with Host, Join and an IP box, and Escape to leave in game.~~ **Done
+   2026-11-02**, and unplayed - see *The front end* in `docs/multiplayer.md`. What is left of it:
+   nobody has looked at it, a pad cannot drive it, and there is no lobby or settings page.
 4. **Package it and play with somebody.** The packaging config is written and has never been run,
    so the cook is unproved. See *Still unverified* in `docs/multiplayer.md`.
 5. A Niagara explosion effect for `BP_C4`. Without one the blast falls back to a debug sphere, which

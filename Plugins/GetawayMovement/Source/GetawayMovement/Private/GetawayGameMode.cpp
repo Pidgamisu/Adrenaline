@@ -9,8 +9,10 @@
 #include "GetawayGameState.h"
 #include "GetawayHUD.h"
 #include "GetawayJumpPad.h"
+#include "GetawayMenuCamera.h"
 #include "GetawayPiece.h"
 #include "GetawayPlacementPawn.h"
+#include "GetawayPlayerController.h"
 #include "GetawayPlayerState.h"
 #include "GetawayRamp.h"
 #include "GetawaySpikes.h"
@@ -45,6 +47,10 @@ AGetawayGameMode::AGetawayGameMode()
 	DefaultPawnClass = AGetawayCharacter::StaticClass();
 	HUDClass = AGetawayHUD::StaticClass();
 	PlacementPawnClass = AGetawayPlacementPawn::StaticClass();
+	MenuPawnClass = AGetawayMenuCamera::StaticClass();
+
+	// The front end: the menu panel, Escape, and the only place in the plugin that travels.
+	PlayerControllerClass = AGetawayPlayerController::StaticClass();
 
 	// The round used to live entirely here, where no client can see it. These two are what the
 	// players actually read: the shared phase and clocks, and their own hand, run and score.
@@ -102,14 +108,20 @@ void AGetawayGameMode::InitGameState()
 	// rather than assuming placement and correcting itself a frame later.
 	if (AGetawayGameState* GS = State())
 	{
-		GS->SetPhase(bStartInPlacement ? EGetawayPhase::Placement : EGetawayPhase::Run);
+		GS->SetPhase(ShouldShowMenu()
+			? EGetawayPhase::Menu
+			: (bStartInPlacement ? EGetawayPhase::Placement : EGetawayPhase::Run));
 	}
 }
 
 void AGetawayGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	if (bStartInPlacement)
+	if (ShouldShowMenu())
+	{
+		StartMenu();
+	}
+	else if (bStartInPlacement)
 	{
 		StartPlacement();
 	}
@@ -117,6 +129,80 @@ void AGetawayGameMode::BeginPlay()
 	{
 		GS->SetPhase(EGetawayPhase::Run);
 		GS->BeginRunClock();
+	}
+}
+
+bool AGetawayGameMode::ShouldShowMenu() const
+{
+	if (!bStartInMenu) return false;
+
+	// A listen server or a dedicated server is a game somebody can already be in, so it is never
+	// the front end. This is what keeps the two launchers in Tools/ and the two-player test in
+	// docs/multiplayer.md working exactly as they did: both of them open the map with ?listen.
+	if (GetNetMode() != NM_Standalone) return false;
+
+	// And the Host button's own `?Play=1`, for a game that is being hosted but has nobody in it
+	// yet - the frame or two before the net driver is up, where the net mode is still standalone.
+	return !UGameplayStatics::HasOption(OptionsString, TEXT("Play"));
+}
+
+void AGetawayGameMode::StartMenu()
+{
+	if (AGetawayGameState* GS = State())
+	{
+		GS->SetPhase(EGetawayPhase::Menu);
+	}
+
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (APlayerController* PC = Cast<APlayerController>(It->Get()))
+		{
+			StartMenuFor(PC);
+		}
+	}
+}
+
+void AGetawayGameMode::StartMenuFor(APlayerController* PC)
+{
+	UWorld* World = GetWorld();
+	if (!World || !PC) return;
+
+	// No tracking list, unlike the placement cameras: a menu session is standalone with one player
+	// in it, and the camera is thrown away the moment Host or Join travels out of here. Where it
+	// spawns does not matter either - AGetawayMenuCamera measures the level and flies its own
+	// circle from BeginPlay.
+	//
+	// It does have to cope with being called twice for the same player, though, because it is:
+	// HandleStartingNewPlayer runs for the first player *before* the game mode's BeginPlay, so
+	// that player gets here once on login and again from StartMenu. Without this the second call
+	// would throw away a perfectly good camera and build another.
+	AGetawayMenuCamera* Camera = Cast<AGetawayMenuCamera>(PC->GetPawn());
+	if (!Camera)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		UClass* Class = MenuPawnClass ? MenuPawnClass.Get() : AGetawayMenuCamera::StaticClass();
+		Camera = World->SpawnActor<AGetawayMenuCamera>(
+			Class, FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		if (!Camera) return;
+
+		if (APawn* Old = PC->GetPawn())
+		{
+			PC->UnPossess();
+			Old->Destroy();
+		}
+		PC->Possess(Camera);
+
+		UE_LOG(LogTemp, Log, TEXT("Getaway: %s is at the menu, with %s"), *PC->GetName(), *Camera->GetName());
+	}
+
+	// The game mode puts the panel up, rather than the controller working it out for itself. The
+	// phase is replicated, so a controller asking the game state in BeginPlay would be reading it
+	// before the first update has landed - the same ordering trap as
+	// AGetawayPlacementPawn::EnsureGhostMaterials.
+	if (AGetawayPlayerController* Ours = Cast<AGetawayPlayerController>(PC))
+	{
+		Ours->ShowMainMenu();
 	}
 }
 
@@ -614,6 +700,15 @@ void AGetawayGameMode::HandleStartingNewPlayer_Implementation(APlayerController*
 {
 	// Spawns and possesses the default pawn, i.e. a runner.
 	Super::HandleStartingNewPlayer_Implementation(NewPlayer);
+
+	// Nobody is playing: this is the front end, so swap the runner for the orbiting camera and put
+	// the panel up. Reached on the first player of a menu session, since BeginPlay runs before any
+	// player exists.
+	if (GetPhase() == EGetawayPhase::Menu)
+	{
+		StartMenuFor(NewPlayer);
+		return;
+	}
 
 	// A player who joins while everyone else is building should be building too, not standing on the
 	// start line. This is also what gets the second PIE player a placement camera at all: BeginPlay

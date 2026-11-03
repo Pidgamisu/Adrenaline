@@ -88,6 +88,14 @@ void AGetawayHUD::DrawHUD()
 	Super::DrawHUD();
 	if (!Canvas || !GEngine) return;
 
+	// The front end draws none of this: no crosshair over the menu, no speedometer for a camera on
+	// a rail, and no scoreboard for a round nobody is playing. Checked before the crosshair rather
+	// than after, because the crosshair is the one thing that is drawn unconditionally below.
+	{
+		const AGetawayGameState* MenuGS = GetWorld() ? GetWorld()->GetGameState<AGetawayGameState>() : nullptr;
+		if (MenuGS && MenuGS->GetPhase() == EGetawayPhase::Menu) return;
+	}
+
 	const float CX = Canvas->ClipX * 0.5f;
 	const float CY = Canvas->ClipY * 0.5f;
 	DrawRect(FLinearColor::White, CX - 2.f, CY - 2.f, 4.f, 4.f);

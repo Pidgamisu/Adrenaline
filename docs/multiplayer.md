@@ -207,9 +207,10 @@ Nothing in this project had ever been packaged before this, so most of the work 
 **Package Development builds.** `Config/DefaultGame.ini` now pins `BuildConfiguration=PPBC_Development`
 on purpose, not out of laziness:
 
-- The **console survives**, and with no menu yet the console is how you join a game: a friend whose
-  `.bat` file fails can still open it and type `open 192.168.1.42` by hand. That is the escape hatch
-  for everything in here, and it is the reason this stays on Development until there is a front end.
+- The **console survives**, which was how you joined a game before there was a menu: a friend whose
+  `.bat` file fails can still open it and type `open 192.168.1.42` by hand. The front end landed on
+  2026-11-02 so this is no longer the reason to stay on Development, but it is still a useful
+  escape hatch to hand a playtester. See *The front end* at the end.
 - A **C4 detonation is still invisible in Shipping**: `AGetawayC4::PlayBlastEffects` falls back to
   `DrawDebugSphere` when `BP_C4` has no Niagara `ExplosionEffect` assigned, and debug draw is
   compiled out. Filling that slot is the last of *Next steps* 3.
@@ -319,9 +320,11 @@ nobody has done is press *Package Project* and then connect two machines. Specif
 
 Known and left alone on purpose, because step 1 was meant to be config only:
 
-- **No way to leave.** Alt+F4 is it. Escape does nothing. Step 2 (the menu) adds *Leave*.
-- **No feedback while connecting.** A failed join is a black screen and then the window closing,
-  with no reason given. Step 3 hooks `NetworkFailure` / `TravelFailure`.
+- ~~**No way to leave.** Alt+F4 is it. Escape does nothing.~~ **Fixed 2026-11-02** by the front
+  end: Escape brings up *Resume* / *Leave to menu* / *Quit*. See *The front end* below.
+- ~~**No feedback while connecting.** A failed join is a black screen and then the window closing,
+  with no reason given.~~ **Fixed 2026-11-02**: `UGetawayMenuSubsystem` hooks `NetworkFailure` and
+  `TravelFailure` and the menu says what went wrong. See *The front end* below.
 - **Everyone spawns at one `PlayerStart`** and the engine shoves them apart. Drop a second one
   beside the first - *Place Actors* panel, search `PlayerStart`, drag it into the viewport next to
   the existing one, same Z, about a metre to the side. `FindPlayerStart` picks an unoccupied one per
@@ -332,3 +335,192 @@ Known and left alone on purpose, because step 1 was meant to be config only:
 - **A client could place a piece anywhere in the level.** The server checks that you own the piece
   and that it fits, but not where you placed it from. Fine among friends, not fine on Steam - see
   *Deliberately not done* above.
+
+## The front end (2026-11-02)
+
+Step 2 of playing with other people: **a menu you launch into, and a way back out of a game**.
+This is what a friend needs instead of a `.bat` file, and what a Shipping build needs instead of
+the console.
+
+ADRENALINE over the course turning slowly, with a name box, **Host**, an IP box, **Join** and
+**Quit**. In a game, **Escape** brings up the same panel with **Resume**, **Leave to menu** and
+**Quit**.
+
+### There is no menu map
+
+The menu runs in `/Game/Maps/TestCourse`, the map you play in, with `AGetawayMenuCamera` possessed
+instead of a player. The background is therefore the real course rather than a copy of it that
+would drift out of date, and nothing new has to be cooked. Decided 2026-11-02, over duplicating
+the map into a `MainMenu.umap`.
+
+It is a third `EGetawayPhase`, `Menu`, **deliberately last in the enum** - the values are
+replicated and also stored in Blueprint defaults, so `Placement` has to stay 0 and `Run` 1.
+
+### What tells a menu session from a game session
+
+`AGetawayGameMode::ShouldShowMenu()`: `bStartInMenu`, **and** the net mode is `NM_Standalone`,
+**and** the URL this world was opened with carries no `Play` option.
+
+| How it starts | What happens |
+|---|---|
+| Double-click `Getaway.exe`, or **Play** in the editor | no options, standalone, so the **menu** |
+| **Host**, which travels to `TestCourse?listen?Play=1?Name=...` | listen server, so **placement** |
+| **Join**, or `Join-Adrenaline.bat` | a client, and a client has no game mode: it takes the server's phase |
+| `Host-Adrenaline.bat` (`?listen`) | listen server, so **placement**, exactly as before |
+| PIE *Play As Listen Server* (the two-player test) | listen server, so **placement**, exactly as before |
+
+So **both launchers in `Tools/` and the two-player test above are untouched by this**, whatever
+`bStartInMenu` says. And `bStartInMenu` on `BP_GetawayGameMode` turns the menu off for fast
+iteration when the menu is not what you are working on.
+
+`Play=1` is belt and braces next to `listen`: it covers the frame or two during a host's travel
+where the net mode is still standalone.
+
+Two things checked in the UE 5.8 source rather than assumed:
+`UGameplayStatics::OpenLevel` appends its options after a `?` (`GameplayStatics.cpp`), and `FURL`
+inherits a base URL's options **only** for `TRAVEL_Relative` and `TRAVEL_Partial`
+(`URL.cpp:159-175`) - which is why absolute travel back to a bare `/Game/Maps/TestCourse` really
+does arrive with no `Play` option, and lands in the menu.
+
+### What was added
+
+| Where | What |
+|---|---|
+| `AGetawayMenuCamera` | the orbiting background camera; measures the level and flies its own circle |
+| `UGetawayMenuWidget` | the panel, built entirely in C++ - no Widget Blueprint |
+| `AGetawayPlayerController` | Escape, and the only code in the plugin that travels |
+| `UGetawayMenuSubsystem` | why the last join failed, and what you typed, across a level change |
+| `AGetawayGameMode` | `bStartInMenu`, `MenuPawnClass`, `ShouldShowMenu`, `StartMenu` / `StartMenuFor`, and `PlayerControllerClass` |
+| `AGetawayHUD` | draws nothing at all in the `Menu` phase |
+| `GetawayMovement.Build.cs` | `UMG`, `Slate`, `SlateCore` |
+
+#### The panel is C++ and there is no `.uasset`
+
+`UUserWidget::Initialize` creates a `WidgetTree` even for a native class, so a widget with no
+Widget Blueprint behind it works - but the tree has to be in place before
+`UUserWidget::RebuildWidget` reads `WidgetTree->RootWidget`. That rules out `NativeConstruct`,
+which runs after. It is built in an override of `RebuildWidget` itself, which also means the
+caller can set `Mode` between `CreateWidget` and `AddToViewport`; the two modes build different
+trees.
+
+Buttons are a `UBorder` filled pink with 2 px of padding and the button on top, which gives the
+edge band of `docs/look.md` with no texture and no font asset. The status line is the one
+deliberate break from the palette: a failed join is amber, because it has to read as a problem
+rather than as architecture.
+
+#### Escape is a plain key binding, not an input action
+
+Both pawns call `Subsystem->ClearAllMappings()` when they are possessed, so an Enhanced Input
+mapping context registered on the controller would be wiped the moment the player got a pawn. The
+controller's own `InputComponent->BindKey` sits below the pawn on the input stack and survives
+every possession.
+
+**Escape does not work in Play-in-Editor, and no code can fix that.** The editor binds Escape to
+*Stop* (`DebuggerCommands.cpp:358`) and `UGameViewportClient::InputKey` consults the editor's
+bindings *before* the player controller (`GameViewportClient.cpp:776`). Test it with
+**Play > Standalone Game**, or in a packaged build.
+
+#### Nothing pauses
+
+`SetPause` is server-only and meaningless in a multiplayer race, so the Escape panel goes up and
+the round carries on underneath it. One behaviour in single player and multiplayer both.
+
+#### Two bugs the headless run caught
+
+Both found by booting the game with `UnrealEditor-Cmd.exe ... -game -nullrhi` and reading the log,
+which is worth doing again for anything in here:
+
+- **The menu camera framed TestCourse at a radius of 15.5 km.**
+  `AGameplayDebuggerCategoryReplicator` carries a rendering component whose bounds are a 10 km cube
+  centred on the origin so that debug draw is never culled, and it exists in every non-Shipping
+  build. `IgnoreActorsBiggerThan` (50 m) leaves it, and anything else of that family - a sky
+  sphere, an unbound post-process volume - out of the measurement.
+- **`FInputModeUIOnly` refused to focus the panel**: "Attempting to focus Non-Focusable widget".
+  A `UUserWidget` takes `bIsFocusable` at construction and ignores it after, so
+  `SetIsFocusable(true)` has to happen before `AddToViewport`.
+
+And one judgement call that is not a bug: the camera's height started as a fraction of how tall
+the level is, which put it 8 m up looking at a 97 m ribbon edge-on from ground level. A race
+course is long and flat, so `HeightFraction` is a fraction of the **orbit radius** instead, which
+gives the same gentle look down whatever shape the level is.
+
+#### And the one that mattered, found by playing: no input after Host
+
+**Pressing Host got you into placement unable to look or press anything.** This is the trap to
+remember if anything else here regresses, because it is invisible to inspection and it survives
+a level change:
+
+`FInputModeUIOnly::ApplyInputMode` calls `SetIgnoreInput(true)` and
+`SetMouseCaptureMode(NoCapture)` on the **`UGameViewportClient`** (`PlayerController.cpp`), and the
+viewport client belongs to the **game instance, not to the world**. So putting the menu up marks
+the viewport "ignore all input", travel tears the world down and builds a new one, and the flag is
+still set on the other side. Nothing in the engine puts it back: `bShowMouseCursor` lives on the
+player controller and does reset, which is why the cursor vanished and the game still took nothing.
+
+The fix is in `AGetawayPlayerController::BeginPlay`: a fresh controller asserts
+`FInputModeGameOnly` **unless a panel is already up**. That covers Host, Join, Leave and a failed
+join in one place, rather than every call site remembering to undo it.
+
+The "unless" is load-bearing, not defensive. In a menu session `ShowMainMenu` really does run
+first - `HandleStartingNewPlayer` fires at login, before the world's `BeginPlay` - so without the
+guard the controller would immediately take the mouse away from the menu it had just opened. Both
+orders were watched with a log on `UGameViewportClient::IgnoreInput()`:
+
+    INPUTPROBE arrived: ignoring input = TRUE, menu open = TRUE     <- the menu, left alone
+    Browse: /Game/Maps/TestCourse?listen?Play=1
+    INPUTPROBE arrived: ignoring input = TRUE, menu open = false    <- the bug, after Host
+    INPUTPROBE after fix: ignoring input = false
+
+That was produced without a mouse, by starting the real game at the menu and handing it
+`-ExecCmds="open /Game/Maps/TestCourse?listen?Play=1"` - which is the exact URL the Host button
+travels to, and the deferred command runs after the menu has gone up. Worth reusing: it reproduces
+the whole Host path in one command line.
+
+    UnrealEditor.exe "<project>.uproject" /Game/Maps/TestCourse -game -windowed -resx=640 -resy=360
+      -nosound -nosplash -ExecCmds="open /Game/Maps/TestCourse?listen?Play=1" -ABSLOG=<file>
+
+### What was verified, and how
+
+By running the real game headless, three times, with no errors in any log:
+
+- **no options** gave the menu, the camera possessed, and the level framed at
+  `V(X=4450, Y=-9, Z=425)`, radius 7518, height 2857 - about 20 degrees above the horizontal.
+- **`?Play=1`** gave placement, the round dealt and run exactly as before.
+- **`?listen`** gave placement, so the launchers and the two-player test are provably unaffected.
+
+And by running the real game in a window and travelling the Host URL from the menu, which is the
+whole of the Host path: menu, framed, `Browse: /Game/Maps/TestCourse?listen?Play=1`, placement,
+run - with the viewport handing input back on arrival, and no errors or Slate warnings in the log.
+
+**Host itself was played on 2026-11-02** and got into a game.
+
+Both build targets - `GetawayEditor` and `Getaway` - compile and link with no errors and no
+warnings.
+
+### Still unverified
+
+- **How any of it looks.** Nobody has seen the panel, the pink frames, the title, or the course
+  turning behind it. Whether 4 degrees per second reads as "slowly rotating" is a feel question.
+- **Whether the auto-framed camera picks a flattering shot.** The numbers are sensible; the view
+  is unseen.
+- **Join has never been clicked**, and no two machines have connected through the menu. Host has
+  (2026-11-02), and that is what turned up the input bug above.
+- **Escape, Resume and Leave to menu have not been played**, only reasoned about - they could not
+  be reached until Host worked, and Escape needs Standalone Game rather than PIE.
+- **Travel from Play-in-Editor into a listen server.** PIE is not the real thing here; a packaged
+  build is the test.
+- **Anything packaged.** The project has still never been packaged - see *Still unverified* under
+  *Playing with friends on a LAN*.
+
+### What the front end does not do
+
+- **A pad cannot drive the menu.** Every obvious button is already spoken for - `Special_Left` is
+  back-to-placement on the character, `Special_Right` is done-building in placement - so picking
+  one is a decision, and moving between buttons with a stick is its own pass. See
+  `docs/controller.md`.
+- **No lobby, no player list, no settings.** Host opens the round straight away, which the round
+  loop already copes with: `HandleStartingNewPlayer` deals a late joiner their own hand.
+- **A host leaving drops everybody.** Absolute travel off a listen server takes the net driver
+  down with the world, and the other players' failure handler puts them back at their own menu
+  with a message. Fine on a LAN among friends; worth revisiting with Steam.
+- **No resolution, volume or sensitivity settings**, and no key rebinding.
