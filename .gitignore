@@ -11,6 +11,13 @@ Plugins/*/Intermediate/
 # on every cook. They appeared the first time the project was packaged, 2026-11-02.
 Build/*/FileOpenOrder/
 
+# Written by the editor the first time an asset editor is opened, 2026-11-03. It is 57 KB of
+# AdvancedPreviewScene.SharedProfiles - the lighting setup for the little preview viewport in the
+# material and mesh editors. It holds no project setting, changes nothing in the game or the cook,
+# and churns whenever the editor feels like it. If a real [CookSettings] or editor preference ever
+# needs to be checked in, delete this line and commit the file deliberately.
+Config/DefaultEditor.ini
+
 # Visual Studio / Rider project files (regenerated from the .uproject)
 .vs/
 .idea/
