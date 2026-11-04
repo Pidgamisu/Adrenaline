@@ -150,6 +150,48 @@ Result:
 The √ is the thing to look for: it means the build processed without errors. The page was still a
 draft throughout, confirmed by a 404 to an anonymous HEAD request before and after.
 
+### Pushing an update (2026-11-03, version 2)
+
+The map was edited in the editor, so the build had to be remade before pushing. **Updating a
+release is two commands, in that order** - package, then push:
+
+1. Close the editor, then run the `BuildCookRun` command in *The build* above. **Cooking is a full
+   cook, not incremental**, and that is the engine's own default - `BaseEditor.ini` in the engine
+   folder carries `[CookSettings] CookIncrementalDefaultIncremental=false`, and nothing in this
+   project overrides it. So all 548 packages are recooked every time and a changed `.umap` is
+   certain to be in. It took **88 seconds** end to end, because the C++ was already built - a map
+   change costs a cook and a stage, not a compile.
+2. `.\Tools\itch\push.ps1 -Target rpidgey/adrenaline`.
+
+**The patching is the payoff.** The upload re-used 39.49% of the old build and sent 368 MiB fresh,
+which itch stored as a **129 MiB patch - a 78.76% saving** against the 609 MiB folder. butler
+printed `last build is 2287901, downloading its signature`, which is it fetching what is already up
+there to diff against. Processing finished inside 15 seconds this time, not 75.
+
+    +---------+-----------+----------------------------+---------+
+    | CHANNEL |  UPLOAD   |           BUILD            | VERSION |
+    +---------+-----------+----------------------------+---------+
+    | windows | #20255107 | √ #2293004 (from #2287901) |       2 |
+    +---------+-----------+----------------------------+---------+
+
+`(from #2287901)` is the patch chain - a player on version 1 downloads the 129 MiB diff, not the
+whole game again.
+
+**The page was public by this point.** An anonymous HEAD request returned **200**, not the 404 it
+gave at creation. Nothing records when it changed. The consequence: a push is now a *publish* - the
+build is downloadable by anyone the moment processing ends, with no second click. **Run the HEAD
+check before every push**; that is exactly what it is for.
+
+### A trap: running the package command from a bash shell
+
+`RunUAT.bat` failed instantly with `'C:\Program' is not recognized as an internal or external
+command`, even with the path quoted, when launched from a POSIX shell - the quoting does not survive
+the hand-off into `cmd`. **Run it from PowerShell with the call operator**:
+
+    & "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ...
+
+Same for `push.ps1`. Nothing is wrong with the project when this happens; it is the shell.
+
 ## Telling the itch app which exe to run
 
 The staged `Windows` folder has `Getaway.exe` and, because of `-prereqs`, two VC redist installers.
@@ -253,8 +295,11 @@ path with.
 - ~~**`butler login` has not been run and no itch.io project exists yet.**~~ **Both done 2026-11-03**:
   butler is authenticated (credentials at `C:\Users\natha\.config\itch\butler_creds`) and the
   project is <https://rpidgey.itch.io/adrenaline>.
-- ~~**Nothing has been uploaded.**~~ **Done 2026-11-03** - see *The first push* above. Build
-  `#2287901` is live on the `windows` channel of a still-private page.
+- ~~**Nothing has been uploaded.**~~ **Done 2026-11-03** - see *The first push* above, and
+  *Pushing an update* for version 2. Build `#2293004` is live on the `windows` channel, and the
+  page is **public**, so that build is downloadable by anyone right now.
+- **Nobody has downloaded and run a build from the page.** Every look at a packaged build so far
+  has been the folder on this machine, not an install pulled from itch.
 - **Whether the itch app honours `.itch.toml` is still unknown.** It needs the draft installed
   through the app itself, which nobody has done. butler's `Scanning launch targets...` line is
   encouraging but not proof.

@@ -20,11 +20,13 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   survive Shipping, so the thing that blocked a distributable build for weeks is closed. Shipping
   writes **no log**, so a crash in a packaged build leaves nothing to read. **Two machines have
   still never connected.** See *It is packaged* in `docs/multiplayer.md` and `docs/itch.md`.
-- **On itch.io:** <https://rpidgey.itch.io/adrenaline>, **a private draft**. The Shipping build is
-  uploaded and processed - build #2287901 on the `windows` channel, pushed with
-  `Tools/itch/push.ps1`, which patches so later versions upload in seconds. The page itself is
-  **empty**: no text, no cover image, no screenshots, no video. The text is all drafted in
-  `docs/itch-page.md`. See `docs/itch.md`.
+- **On itch.io:** <https://rpidgey.itch.io/adrenaline>, and **the page is public** - an anonymous
+  HEAD request returns 200, where it returned 404 when the project was made. So a push is now a
+  publish: the build goes downloadable the moment it processes. Build **#2293004 (version 2)** is
+  live on the `windows` channel, pushed 2026-11-03 after a map edit; patching made it a 129 MB
+  upload rather than 609. Updating a release is two commands, package then push - see *Pushing an
+  update* in `docs/itch.md`. The page itself is still **empty**: no text, no cover image, no
+  screenshots, no video. The text is all drafted in `docs/itch-page.md`.
 - **Front end:** a menu with ADRENALINE over the course turning slowly, a name box, Host, an IP box
   and Join, and Quit; Escape in a game gives Resume / Leave to menu / Quit. Built 2026-11-02,
   **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
@@ -216,9 +218,10 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
    shards, in every build. The `ExplosionEffect` slot still overrides it. **Looked at and confirmed
    working in a Shipping build 2026-11-03**, along with the placement ghost and the HUD messages -
    see *The explosion* in `docs/look.md`.
-6. **Finish the itch.io page.** The Shipping build is uploaded to a private draft at
-   <https://rpidgey.itch.io/adrenaline>, but the page has no cover image, no screenshots and no
-   video, and none of the drafted text is in. **A short video of movement at speed is the
+6. **Finish the itch.io page.** The Shipping build is uploaded and the page is **public** at
+   <https://rpidgey.itch.io/adrenaline>, but it has no cover image, no screenshots and no video,
+   and none of the drafted text is in - so anyone who finds it now sees a blank page with a
+   download on it. **A short video of movement at speed is the
    highest-value thing missing** - motion is the whole pitch, and no still can show a wallrun into a
    slide into a C4 jump. See `docs/itch.md` and `docs/itch-page.md`.
 7. **Sound.** There is no audio in the project at all - no footsteps, no wallrun, no landing, no
