@@ -8,6 +8,28 @@
 class UNetDriver;
 
 /**
+ * One address this machine can be reached on, and what it is good for.
+ *
+ * There is normally more than one - a home LAN address, plus one for every mesh-VPN adapter - and
+ * which of them a friend needs depends entirely on where that friend is sitting. The game cannot
+ * know that, so it shows all of them and says what each one looks like. See *Reading out the right
+ * address* in docs/multiplayer.md.
+ */
+USTRUCT(BlueprintType)
+struct FGetawayLocalAddress
+{
+	GENERATED_BODY()
+
+	/** The address itself, without the port. */
+	UPROPERTY(BlueprintReadOnly, Category = "Getaway|Menu")
+	FString Address;
+
+	/** What it is for, in a few words, or empty when there is nothing useful to say about it. */
+	UPROPERTY(BlueprintReadOnly, Category = "Getaway|Menu")
+	FString Note;
+};
+
+/**
  * The two things the front end has to remember across a level change: why the last join failed,
  * and what you typed into the menu's boxes.
  *
@@ -43,17 +65,22 @@ public:
 	void SetFailure(const FString& Reason) { LastFailure = Reason; }
 
 	/**
-	 * This machine's own address, the one somebody else types into Join, or empty if there isn't
-	 * a sensible one. The menu shows it so the host can read it out - which is the job
-	 * `Tools/Host-Adrenaline.bat` used to do by grepping `ipconfig`, and nothing was doing once
-	 * people stopped launching through the `.bat` file.
+	 * Every address somebody else could type into Join, best guess first, or empty if there isn't
+	 * a sensible one at all. The menu lists them so the host can read the right one out - which is
+	 * the job `Tools/Host-Adrenaline.bat` used to do by printing the lot from `ipconfig`, and
+	 * nothing was doing once people stopped launching through the `.bat` file.
+	 *
+	 * **All of them, not just the best one.** This used to return a single address and prefer a
+	 * private LAN one, which is exactly wrong once a mesh VPN is installed to play with somebody in
+	 * another city: the VPN address is the one that friend needs, and the 192.168 address that got
+	 * returned instead is of no use to them whatsoever. Only the person reading the address out
+	 * knows where their friend is, so the choice belongs to them.
 	 *
 	 * Link-local 169.254.x addresses are skipped: Windows hands them to every unplugged or virtual
-	 * adapter, and this machine has three of them to one real one. A private LAN address is
-	 * preferred over anything else, because that is what a friend in the same house needs.
+	 * adapter, and this machine has three of them to one real one. Loopback is skipped too.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Getaway|Menu")
-	static FString FindLanAddress();
+	static TArray<FGetawayLocalAddress> FindLocalAddresses();
 
 	/* ---------------- What was typed into the menu ---------------- */
 

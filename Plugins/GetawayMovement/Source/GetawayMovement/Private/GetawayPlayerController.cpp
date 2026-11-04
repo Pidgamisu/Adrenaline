@@ -183,10 +183,21 @@ void AGetawayPlayerController::ShowMainMenu()
 
 	// Tell the host what their friends have to type. Nothing else in the game says this any more
 	// now that hosting goes through the menu rather than through Tools/Host-Adrenaline.bat.
-	const FString Mine = UGetawayMenuSubsystem::FindLanAddress();
-	Menu->SetLocalAddress(Mine);
-	UE_LOG(LogTemp, Log, TEXT("Getaway: the menu is up; this machine is %s"),
-		Mine.IsEmpty() ? TEXT("(no LAN address found)") : *Mine);
+	// All of them, because a machine with a mesh VPN running has one address for a friend in the
+	// same house and a different one for a friend in another city, and this code cannot tell which
+	// is wanted. See *Reading out the right address* in docs/multiplayer.md.
+	const TArray<FGetawayLocalAddress> Mine = UGetawayMenuSubsystem::FindLocalAddresses();
+	Menu->SetLocalAddresses(Mine);
+
+	FString Listed;
+	for (const FGetawayLocalAddress& One : Mine)
+	{
+		if (!Listed.IsEmpty()) Listed += TEXT(", ");
+		Listed += One.Address;
+		if (!One.Note.IsEmpty()) Listed += FString::Printf(TEXT(" [%s]"), *One.Note);
+	}
+	UE_LOG(LogTemp, Log, TEXT("Getaway: the menu is up; this machine is reachable on %s"),
+		Listed.IsEmpty() ? TEXT("(no address found)") : *Listed);
 
 	const FString Failure = State->TakeFailure();
 	if (!Failure.IsEmpty())

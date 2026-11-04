@@ -78,7 +78,7 @@ The work:
   the whole plan, and it is what makes it a Steam game rather than a LAN game with a Steam icon.
   Nobody buys a multiplayer game on Steam and then asks their friend for an IP address.
 - The menu already has the right shape for it - Host, a box, Join - so this is replacing what those
-  buttons *do*, not redesigning the front end. `UGetawayMenuSubsystem::FindLanAddress` and the
+  buttons *do*, not redesigning the front end. `UGetawayMenuSubsystem::FindLocalAddresses` and the
   address display become dead weight and come out.
 
 ### 3. Client authority has to be revisited

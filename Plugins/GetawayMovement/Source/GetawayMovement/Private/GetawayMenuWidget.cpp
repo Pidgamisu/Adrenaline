@@ -87,7 +87,7 @@ void UGetawayMenuWidget::BuildPanel()
 	}
 
 	// This machine's address, for the host to read out to everybody else. Hidden until somebody
-	// calls SetLocalAddress, and never built for the pause panel. It is here because the job used
+	// calls SetLocalAddresses, and never built for the pause panel. It is here because the job used
 	// to be done by `Tools/Host-Adrenaline.bat` printing `ipconfig`, and once people host from the
 	// menu instead, nothing was telling the host what to tell their friends - which on 2026-11-02
 	// led to a join attempt against an address that was not this machine at all.
@@ -261,18 +261,43 @@ void UGetawayMenuWidget::SetConnecting(bool bConnecting)
 	}
 }
 
-void UGetawayMenuWidget::SetLocalAddress(const FString& Address)
+void UGetawayMenuWidget::SetLocalAddresses(const TArray<FGetawayLocalAddress>& Addresses)
 {
 	if (!AddressHint) return;
 
-	if (Address.IsEmpty())
+	if (Addresses.IsEmpty())
 	{
 		AddressHint->SetVisibility(ESlateVisibility::Collapsed);
 		return;
 	}
 
-	AddressHint->SetText(FText::FromString(
-		FString::Printf(TEXT("Your address is %s - that is what others type to join you"), *Address)));
+	const int32 Shown = FMath::Min(Addresses.Num(), FMath::Max(1, MaxAddressLines));
+
+	FString Text;
+	if (Shown == 1)
+	{
+		// One address needs no list and nothing to choose between.
+		Text = FString::Printf(TEXT("Your address is %s - that is what others type to join you"),
+			*Addresses[0].Address);
+		if (!Addresses[0].Note.IsEmpty())
+		{
+			Text += FString::Printf(TEXT(" (%s)"), *Addresses[0].Note);
+		}
+	}
+	else
+	{
+		Text = TEXT("Others type one of these to join you:");
+		for (int32 i = 0; i < Shown; ++i)
+		{
+			Text += TEXT("\n") + Addresses[i].Address;
+			if (!Addresses[i].Note.IsEmpty())
+			{
+				Text += FString::Printf(TEXT("  (%s)"), *Addresses[i].Note);
+			}
+		}
+	}
+
+	AddressHint->SetText(FText::FromString(Text));
 	AddressHint->SetVisibility(ESlateVisibility::Visible);
 }
 

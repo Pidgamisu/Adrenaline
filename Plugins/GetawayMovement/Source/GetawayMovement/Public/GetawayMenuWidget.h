@@ -2,6 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+// For FGetawayLocalAddress, which SetLocalAddresses takes by value inside a TArray, so a forward
+// declaration is not enough for the header tool.
+#include "GetawayMenuSubsystem.h"
 #include "GetawayMenuWidget.generated.h"
 
 class AGetawayPlayerController;
@@ -82,6 +85,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Menu|Look", meta = (ClampMin = "160"))
 	float PanelWidth = 440.f;
 
+	/**
+	 * How many of this machine's addresses the line above the buttons will list. Three covers a
+	 * home network plus a mesh VPN plus one oddity; a machine with half a dozen virtual adapters
+	 * would otherwise push the buttons down the screen.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Menu|Look", meta = (ClampMin = "1"))
+	int32 MaxAddressLines = 3;
+
 	/* ---------------- What it says ---------------- */
 
 	/** Put a line under the buttons: why a join failed, or what is missing. */
@@ -96,11 +107,15 @@ public:
 	void SetConnecting(bool bConnecting);
 
 	/**
-	 * Show this machine's own address above the buttons, for the host to read out. Empty hides
-	 * the line.
+	 * List this machine's addresses above the buttons, for the host to read the right one out. An
+	 * empty array hides the line.
+	 *
+	 * Several, rather than one, because only the host knows whether their friend is in the next
+	 * room or in another city, and the answer decides which address is the useful one. See
+	 * `UGetawayMenuSubsystem::FindLocalAddresses`.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Getaway|Menu")
-	void SetLocalAddress(const FString& Address);
+	void SetLocalAddresses(const TArray<FGetawayLocalAddress>& Addresses);
 
 	/** What is typed in the two boxes, trimmed. Empty when the box has not been built. */
 	UFUNCTION(BlueprintPure, Category = "Getaway|Menu")

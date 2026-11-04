@@ -569,6 +569,42 @@ and `169.254.x`. That needed `Sockets` adding to `GetawayMovement.Build.cs`.
 
 **On one machine, join `127.0.0.1`.** The give-up message says so.
 
+#### Reading out the right address (2026-11-03)
+
+The fix above was right for a friend in the same house and **wrong for a friend in another city**,
+which came up the moment one was asked about.
+
+`FindLanAddress` returned a single address and preferred a private one - `10.x`, `192.168.x`,
+`172.16-31.x` - returning the first it found. A mesh VPN is the answer for playing with somebody
+far away (see *Hosting and joining* above), and the address Radmin, Tailscale or Hamachi hands you
+is **not** in those ranges, so it could only ever land in the `Fallback` slot, which is used only
+when nothing private was found. This machine has a `10.10.240.77` home address, so the menu would
+have confidently displayed that - useless to anybody outside the house - and the VPN address it
+should have shown would never appear at all.
+
+So it now lists them all, rather than choosing:
+
+- `UGetawayMenuSubsystem::FindLanAddress` became **`FindLocalAddresses`**, returning
+  `TArray<FGetawayLocalAddress>` - an address plus a short note on what it is for. Loopback and
+  `169.254.x` are still skipped, duplicates are dropped, and the order is VPN first, then local,
+  then anything else. VPN first because a machine only has one if somebody installed it on purpose,
+  and the reason to do that is a friend who is not in the house.
+- `UGetawayMenuWidget::SetLocalAddress` became **`SetLocalAddresses`**. One address reads as before;
+  several get *"Others type one of these to join you:"* and a line each, capped by
+  `MaxAddressLines` (3).
+- The log line on the controller now names every address found rather than one.
+
+**The labels are guesses from the address range**, and that is the known soft spot. Radmin is
+always `26.x`, Hamachi `25.x`, and Tailscale uses the carrier-grade NAT block `100.64.0.0/10`, so
+those three can be named with confidence. **ZeroTier picks its own range** and usually lands in
+`10.x`, where it gets called a local address - on this machine, indistinguishable from the real Wi-Fi
+one. That is survivable precisely because nothing is chosen for you: a mislabelled address is still
+on the list, and the person reading it out knows what they installed. Do not "fix" this by going
+back to picking one.
+
+`Tools/Host-Adrenaline.bat` already printed every IPv4 address from `ipconfig` and needed no change
+- it was briefly the better tool for this job than the menu that replaced it.
+
 #### 2. There was no way out, and never any feedback
 
 This is the one worth remembering, because it is a trap rather than a slip:
