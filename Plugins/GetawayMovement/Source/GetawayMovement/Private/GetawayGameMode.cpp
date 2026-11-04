@@ -58,16 +58,24 @@ AGetawayGameMode::AGetawayGameMode()
 	GameStateClass = AGetawayGameState::StaticClass();
 	PlayerStateClass = AGetawayPlayerState::StaticClass();
 
+	// Every effect there is. It is a Blueprint default so one can be retired without a rebuild;
+	// *when* one lands is EffectEveryNthRound, and what each one does is on AGetawayCharacter.
+	EffectPool = { EGetawayEffect::DoubleJump, EGetawayEffect::Loaded, EGetawayEffect::LowGravity };
+
 	Catalog.Add(MakePiece(TEXT("floor"), TEXT("Floor"), FVector(400.f, 400.f, 50.f), AGetawayPiece::StaticClass()));
 	Catalog.Add(MakePiece(TEXT("wall"), TEXT("Wall"), FVector(400.f, 50.f, 400.f), AGetawayPiece::StaticClass()));
 	Catalog.Add(MakePiece(TEXT("ledge"), TEXT("Ledge"), FVector(200.f, 200.f, 130.f), AGetawayPiece::StaticClass()));
-	Catalog.Add(MakePiece(TEXT("break"), TEXT("Breakable panel"), FVector(300.f, 50.f, 400.f), AGetawayBreakable::StaticClass()));
-	Catalog.Add(MakePiece(TEXT("crate"), TEXT("Crate"), FVector(100.f, 100.f, 100.f), AGetawayBreakable::StaticClass()));
+	// The panel, the crate and the bridge were retuned by hand on 2026-11-03 (the panel out to a
+	// full wall, the crate up to a 2 m block, the bridge back to 1000). The numbers that actually
+	// play are the ones in BP_GetawayGameMode, which overrides this whole array - these are kept
+	// equal to it so the two do not disagree.
+	Catalog.Add(MakePiece(TEXT("break"), TEXT("Breakable panel"), FVector(400.f, 50.f, 400.f), AGetawayBreakable::StaticClass()));
+	Catalog.Add(MakePiece(TEXT("crate"), TEXT("Crate"), FVector(200.f, 200.f, 200.f), AGetawayBreakable::StaticClass()));
 	// Directional pieces run their length along X, which is the way the placement arrow points: the
 	// ramp rises that way and the bridge drops that way. The lab's ramp is 4 x 6 on the floor, so it
 	// is 600 along the rise and 400 across it.
 	Catalog.Add(MakePiece(TEXT("ramp"), TEXT("Ramp"), FVector(600.f, 400.f, 200.f), AGetawayRamp::StaticClass(), true, true));
-	Catalog.Add(MakePiece(TEXT("bridge"), TEXT("Collapsing bridge"), FVector(1200.f, 400.f, 60.f), AGetawayCollapsingBridge::StaticClass(), true, true));
+	Catalog.Add(MakePiece(TEXT("bridge"), TEXT("Collapsing bridge"), FVector(1000.f, 400.f, 60.f), AGetawayCollapsingBridge::StaticClass(), true, true));
 	// The pickup builds its own meshes, so it is placed at its own size; Size is only the ghost.
 	Catalog.Add(MakePiece(TEXT("c4"), TEXT("C4 pickup"), FVector(110.f, 110.f, 110.f), AGetawayC4Pickup::StaticClass(), false));
 	// Surface mounted: the same three numbers as a wall, read as a plate - 400 x 400 across the
@@ -417,6 +425,38 @@ void AGetawayGameMode::StartPlacementFor(APlayerController* PC)
 		*PC->GetName(), *Pawn->GetName(), PS ? PS->GetHandCount() : 0);
 }
 
+EGetawayEffect AGetawayGameMode::PickEffectForRound(int32 Round)
+{
+	if (!bRoundEffects || EffectPool.IsEmpty()) return EGetawayEffect::None;
+
+	// Round 1 is plain and every second round after it carries an effect. An effect is a change
+	// from the way the round before played, so the first round has nothing to be a change from.
+	const int32 Every = FMath::Max(1, EffectEveryNthRound);
+	if (Round <= 0 || Round % Every != 0) return EGetawayEffect::None;
+
+	// Drawn from what is left once last time's is set aside, so two effect rounds running are never
+	// the same thing twice - unless the pool holds nothing else, when a repeat is the only honest
+	// answer going.
+	TArray<EGetawayEffect> Choices;
+	for (const EGetawayEffect Option : EffectPool)
+	{
+		if (Option == EGetawayEffect::None) continue;
+		if (bNoRepeatEffect && Option == LastEffect) continue;
+		Choices.Add(Option);
+	}
+	if (Choices.IsEmpty())
+	{
+		for (const EGetawayEffect Option : EffectPool)
+		{
+			if (Option != EGetawayEffect::None) Choices.Add(Option);
+		}
+	}
+	if (Choices.IsEmpty()) return EGetawayEffect::None;
+
+	LastEffect = Choices[FMath::RandRange(0, Choices.Num() - 1)];
+	return LastEffect;
+}
+
 void AGetawayGameMode::StartPlacement()
 {
 	UWorld* World = GetWorld();
@@ -434,6 +474,14 @@ void AGetawayGameMode::StartPlacement()
 	GS->SetRoundOver(false);
 	GS->ClearRunDeadline();
 	FinishersThisRound = 0;
+
+	// Settled before a thing is dealt or placed, because knowing you will have low gravity this
+	// round is meant to change what you build, not only how you run it. Both players read the one
+	// value off the game state, so they cannot be given different effects.
+	const EGetawayEffect Effect = PickEffectForRound(GS->GetRoundNumber());
+	GS->SetActiveEffect(Effect);
+	UE_LOG(LogTemp, Log, TEXT("Getaway: round %d effect: %s"), GS->GetRoundNumber(),
+		(Effect == EGetawayEffect::None) ? TEXT("none") : *AGetawayGameState::GetEffectName(Effect));
 
 	int32 Players = 0;
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)

@@ -25,6 +25,32 @@ enum class EGetawayPhase : uint8
 };
 
 /**
+ * The round's effect: one thing that is true for everybody this round, settled before anyone
+ * builds.
+ *
+ * There is exactly one at a time and they do not stack - the value is overwritten every placement
+ * phase and set back to None on a plain round, so nothing can carry over. It lives on
+ * AGetawayGameState because both players get the same one and both have to be able to read it;
+ * what an effect actually *does* is AGetawayCharacter::ApplyRoundEffect, on the machine that owns
+ * the character.
+ *
+ * Add to the end only. The values are replicated and are saved into the game mode Blueprint's
+ * effect pool, so renumbering shifts what is already stored underneath us.
+ */
+UENUM(BlueprintType)
+enum class EGetawayEffect : uint8
+{
+	/** A plain round: nothing granted, every value at its tuned default. */
+	None,
+	/** A jump in the air, which the tuned default does not give you. */
+	DoubleJump,
+	/** You start the run carrying one charge of C4, and can hold only the one. */
+	Loaded,
+	/** Everybody floats: higher jumps, slower falls, and a C4 launch that throws you further. */
+	LowGravity,
+};
+
+/**
  * What everybody can see about the round: which phase it is, when the clocks run out, and how the
  * round ended.
  *
@@ -60,6 +86,23 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	bool IsRoundOver() const { return bRoundOver; }
 
+	/* ---------------- The round's effect ---------------- */
+
+	/** What everybody has this round. None on a plain round. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	EGetawayEffect GetActiveEffect() const { return ActiveEffect; }
+
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool HasActiveEffect() const { return ActiveEffect != EGetawayEffect::None; }
+
+	/** Short name for the HUD, in capitals: "DOUBLE JUMP". Empty for None. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	static FString GetEffectName(EGetawayEffect Effect);
+
+	/** The one-line explanation that sits under the name. Empty for None. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	static FString GetEffectBlurb(EGetawayEffect Effect);
+
 	/* ---------------- The build clock ---------------- */
 
 	/** True while a build clock is actually running. */
@@ -69,6 +112,16 @@ public:
 	/** Seconds left to build. 0 when there is no clock. */
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	float GetPlacementTimeLeft() const;
+
+	/**
+	 * Seconds since the build phase opened, whether or not it is timed. 0 outside placement.
+	 *
+	 * Counted up from the start rather than down to the end because what reads it is the effect
+	 * banner, which wants the first two seconds of the phase - and that has to work with
+	 * PlacementTime 0, where there is no end to count down to at all.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetPlacementElapsed() const;
 
 	/* ---------------- The run clock ---------------- */
 
@@ -111,6 +164,7 @@ public:
 	void ClearRunDeadline();
 	void SetRoundOver(bool bOver);
 	void BumpRound() { ++RoundNumber; }
+	void SetActiveEffect(EGetawayEffect InEffect);
 	void ReportFinishTime(float Seconds);
 
 private:
@@ -123,9 +177,20 @@ private:
 	UPROPERTY(Replicated)
 	bool bRoundOver = false;
 
+	/**
+	 * This round's effect. Replicated rather than worked out locally from the round number, so a
+	 * client never has to know the rule and the game mode stays the only thing that decides.
+	 */
+	UPROPERTY(Replicated)
+	EGetawayEffect ActiveEffect = EGetawayEffect::None;
+
 	/** Server time the build clock runs out. Negative means placement is untimed. */
 	UPROPERTY(Replicated)
 	float PlacementEndServerTime = -1.f;
+
+	/** Server time the build phase opened. Set every round, even when placement is untimed. */
+	UPROPERTY(Replicated)
+	float PlacementStartServerTime = -1.f;
 
 	UPROPERTY(Replicated)
 	float RunStartServerTime = 0.f;

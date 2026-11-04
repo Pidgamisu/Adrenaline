@@ -197,6 +197,16 @@ public:
 	void SetJumpHeld(bool bHeld) { bJumpHeld = bHeld; }
 	void SetCrouchHeld(bool bHeld) { bCrouchHeld = bHeld; }
 
+	/**
+	 * Set how many air jumps this character gets, and hand them over right away.
+	 *
+	 * It exists for the round effect, which is applied in AGetawayCharacter::BeginPlay - by which
+	 * time this component has already begun play and taken its own copy of AirJumps into
+	 * AirJumpsLeft, so writing the property alone would leave you with the jumps you had a frame
+	 * ago (none, at the tuned default) until the next time you landed.
+	 */
+	void SetAirJumps(int32 Count);
+
 	/** Add a velocity kick, e.g. from a C4 blast. Lifts you off the ground if it points upward. */
 	UFUNCTION(BlueprintCallable, Category = "Getaway")
 	void ApplyBlast(const FVector& DeltaVelocity);

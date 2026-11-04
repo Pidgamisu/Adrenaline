@@ -44,6 +44,12 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   ride round with it, which took attaching a surface-mounted piece to the **component** it was
   placed on rather than to the host actor's root - see *Spikes and pads ride a plate* in
   `docs/placement.md`. **That part is built but not played.**
+- **Effects:** a layer on top of the round, built and **played 2026-11-03 - all three work**.
+  Every other round (1 plain, 2 with, 3 plain) both players are given the same effect before
+  anybody builds: double jump, one C4, or 60% gravity. One at a time, gone at the end of the round.
+  The effect lands big in the middle of the screen as the build phase opens, holds 2 s and then
+  travels to the top left corner, where it stays for the round; **that part is not played.** See
+  `docs/effects.md`.
 - **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid
   band round its rim. Three passes 2026-11-02, **played and signed off at speed**. See
   `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker -
@@ -60,6 +66,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 | `docs/placement.md` | the placement phase, build clock, catalog, piece positioning, directional pieces, the objective |
 | `docs/multiplayer.md` | replication, client authority, running the two-player test in the editor, packaging and LAN play with friends, the menu and Escape |
 | `docs/round-loop.md` | phases, scoring, shared placement, syncing breakables, bridge, C4 and pickups |
+| `docs/effects.md` | round effects: the every-other-round rule, the three effects, where each part lives |
 | `docs/spikes-and-death.md` | spikes, surface-mounted pieces, dying, breakables |
 | `docs/falling-slopes-cleanup.md` | fall deaths, the "everything touches something" rule, pieces on slopes, between-round cleanup |
 | `docs/controller.md` | controller support: the button map, stick tuning, why a stick can't use the mouse look code |
@@ -116,9 +123,13 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Mantle:** stays in. Keeps 75% of your run-up speed (it doesn't stop you) and does a small camera jiggle.
 - **No kick/punch button.** Breaking things is done by hitting them at speed (slide or jump into them) or with C4.
 - **Climbing beats breaking** (decided 2026-11-01): a breakable whose top you could mantle is
-  climbed, not burst, so a crate is a step up as well as a wall to smash. `bMantleOverSmash` on the
-  movement component turns it off. Panels, crate stacks and anything else outside the mantle window
-  still break on contact at speed.
+  climbed, not burst. `bMantleOverSmash` on the movement component turns it off. Panels and anything
+  else outside the mantle window still break on contact at speed.
+  **A crate is not one of them any more** (settled 2026-11-03): the crate was retuned to 200 cm
+  cubed, which puts its top above `MantleMaxHeight` 170, so a crate smashes rather than being
+  climbed. Asked and left that way deliberately - a 2 m block reads as a wall, not a step.
+  Raising `MantleMaxHeight` past 200 on `BP_Character` would hand climbing back, and make
+  everything else that tall climbable with it. Don't.
 - **C4:**
   - Carry up to two charges at a time, G to throw, F to detonate.
   - **C4 is a collectable resource** (decided 2026-10-15, replacing "charges return when they detonate"): a thrown
@@ -149,6 +160,10 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   better wallrun surface - and this game is about wallrunning in a way the browser prototype was
   not. Reversing it would be a swap of X and Y on the `wall` and `break` catalog entries. See
   `docs/placement.md`.
+- **Effects are an every-other-round layer** (decided 2026-11-03, played the same day). Both
+  players always get the *same* effect, it is dealt and shown before anybody builds so it changes
+  what you place, only one is live at a time, and it dies with the round. Round 1 is always plain.
+  `bRoundEffects` off plays the game as it was. See `docs/effects.md`.
 - **The unlit pink look is the look** (confirmed 2026-11-02, by playing it at speed). The edge band
   is what carries shape and depth once the lights are off; pass one was flat without it. See
   `docs/look.md` before changing any of it.

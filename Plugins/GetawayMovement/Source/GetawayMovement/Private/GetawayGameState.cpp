@@ -17,7 +17,9 @@ void AGetawayGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AGetawayGameState, Phase);
 	DOREPLIFETIME(AGetawayGameState, RoundNumber);
 	DOREPLIFETIME(AGetawayGameState, bRoundOver);
+	DOREPLIFETIME(AGetawayGameState, ActiveEffect);
 	DOREPLIFETIME(AGetawayGameState, PlacementEndServerTime);
+	DOREPLIFETIME(AGetawayGameState, PlacementStartServerTime);
 	DOREPLIFETIME(AGetawayGameState, RunStartServerTime);
 	DOREPLIFETIME(AGetawayGameState, RunEndServerTime);
 	DOREPLIFETIME(AGetawayGameState, bGraceRunning);
@@ -48,11 +50,47 @@ void AGetawayGameState::SetRoundOver(bool bOver)
 	}
 }
 
+/* ============================================================ the round's effect */
+
+void AGetawayGameState::SetActiveEffect(EGetawayEffect InEffect)
+{
+	ActiveEffect = InEffect;
+}
+
+FString AGetawayGameState::GetEffectName(EGetawayEffect Effect)
+{
+	switch (Effect)
+	{
+	case EGetawayEffect::DoubleJump: return TEXT("DOUBLE JUMP");
+	case EGetawayEffect::Loaded:     return TEXT("LOADED");
+	case EGetawayEffect::LowGravity: return TEXT("LOW GRAVITY");
+	default:                         return FString();
+	}
+}
+
+FString AGetawayGameState::GetEffectBlurb(EGetawayEffect Effect)
+{
+	switch (Effect)
+	{
+	case EGetawayEffect::DoubleJump: return TEXT("jump again in mid-air");
+	case EGetawayEffect::Loaded:     return TEXT("you start with one C4");
+	case EGetawayEffect::LowGravity: return TEXT("everybody floats");
+	default:                         return FString();
+	}
+}
+
 /* ============================================================ the build clock */
 
 void AGetawayGameState::BeginPlacementClock(float Seconds)
 {
+	PlacementStartServerTime = Now();
 	PlacementEndServerTime = (Seconds > 0.f) ? Now() + Seconds : -1.f;
+}
+
+float AGetawayGameState::GetPlacementElapsed() const
+{
+	if (Phase != EGetawayPhase::Placement || PlacementStartServerTime < 0.f) return 0.f;
+	return FMath::Max(0.f, Now() - PlacementStartServerTime);
 }
 
 bool AGetawayGameState::IsPlacementTimed() const

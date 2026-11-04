@@ -58,6 +58,20 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Messages", meta = (ClampMin = "0.05"))
 	float MessageFadeTime = 0.5f;
 
+	/* ---------------- The round's effect ---------------- */
+
+	/**
+	 * Seconds the effect sits big in the middle of the screen as the run starts, before it moves up
+	 * out of the way. It is the one thing you have to read before you set off, so it is in front of
+	 * your face rather than off in a corner - and then it gets out of your face.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "0"))
+	float EffectBannerTime = 2.f;
+
+	/** Seconds it takes to travel up to its corner. 0 snaps it there. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "0"))
+	float EffectMoveTime = 0.35f;
+
 private:
 	/** Drawn before either early return below, so the lines show during placement too. */
 	void DrawMessages(float CX, float CY);
@@ -66,6 +80,14 @@ private:
 
 	void DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const AGetawayGameState* GS, float CX);
 	void DrawRunClock(const AGetawayGameState* GS, float CX);
+	/**
+	 * The round's effect: big in the middle of the screen, then up to the top left corner.
+	 *
+	 * `Elapsed` is how long the thing being announced has been going - the build phase, in practice.
+	 * Negative means it has already arrived, which is how the run draws the resting line without
+	 * playing the arrival a second time.
+	 */
+	void DrawEffectBanner(const AGetawayGameState* GS, float CX, float CY, float Elapsed, float RestX);
 	void DrawScoreboard(const AGetawayGameState* GS, const AGetawayPlayerState* Mine);
 	void DrawRoundBanner(const AGetawayGameState* GS, const AGetawayPlayerState* Mine, float CX);
 

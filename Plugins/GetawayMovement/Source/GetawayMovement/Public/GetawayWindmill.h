@@ -133,12 +133,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Windmill", meta = (ClampMin = "0"))
 	float ShoveRetrigger = 0.5f;
 
-	/** Camera kick on being hit, in degrees and shake units. */
+	/** Camera kick on being hit, in degrees. The hit still punches your view. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Windmill", meta = (ClampMin = "0"))
 	float ShoveViewPunch = 1.2f;
 
+	/**
+	 * Camera shake on being hit, in shake units. **0 on purpose** (2026-11-03, after playing): a
+	 * plate can catch you more than once in a pass, and the shake read as the screen wobbling
+	 * rather than as being hit - which the view punch says better on its own. Put a number back
+	 * here to have it.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Windmill", meta = (ClampMin = "0"))
-	float ShoveShake = 0.35f;
+	float ShoveShake = 0.f;
 
 	/* ---------------- Look ---------------- */
 

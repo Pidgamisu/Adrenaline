@@ -60,6 +60,31 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Round")
 	TSubclassOf<AGetawayPlacementPawn> PlacementPawnClass;
 
+	/* ---------------- The round's effect ---------------- */
+
+	/**
+	 * Every other round, both players are given the same effect before anybody builds: a double
+	 * jump, a charge of C4, low gravity. One at a time, the same for everybody, and gone at the end
+	 * of the round. Off plays the game as it was before effects existed.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Effects")
+	bool bRoundEffects = true;
+
+	/**
+	 * An effect lands on every Nth round, so 2 leaves round 1 plain, gives round 2 an effect, round
+	 * 3 plain again. 1 means every round has one.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "1"))
+	int32 EffectEveryNthRound = 2;
+
+	/** What can be drawn. Filled with all three in the constructor; drop one here to retire it. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Effects")
+	TArray<EGetawayEffect> EffectPool;
+
+	/** Never the same effect two effect rounds running, while the pool has something else to offer. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Effects")
+	bool bNoRepeatEffect = true;
+
 	/* ---------------- The front end ---------------- */
 
 	/**
@@ -268,6 +293,12 @@ private:
 
 	/** Deal one player a fresh hand from the catalog, without repeats while it is big enough. */
 	void DealHandFor(AGetawayPlayerState* PS);
+
+	/** This round's effect, or None on a plain round. Server only; the game state carries it. */
+	EGetawayEffect PickEffectForRound(int32 Round);
+
+	/** The last effect actually dealt, so bNoRepeatEffect has something to compare against. */
+	EGetawayEffect LastEffect = EGetawayEffect::None;
 
 	/** Phase, run clock and objectives, done once however many players trigger the switch. */
 	void BeginRun();

@@ -92,6 +92,12 @@ bool UGetawayMovementComponent::NearGround(float Distance) const
 		UpdatedComponent->GetCollisionObjectType(), MoveQueryParams());
 }
 
+void UGetawayMovementComponent::SetAirJumps(int32 Count)
+{
+	AirJumps = FMath::Max(0, Count);
+	AirJumpsLeft = AirJumps;
+}
+
 void UGetawayMovementComponent::QueueJump()
 {
 	JumpQueuedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;

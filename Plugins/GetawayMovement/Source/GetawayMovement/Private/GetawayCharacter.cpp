@@ -2,6 +2,7 @@
 #include "GetawayBreakable.h"
 #include "GetawayC4.h"
 #include "GetawayFinish.h"
+#include "GetawayGameState.h"
 #include "GetawayGameMode.h"
 #include "GetawayHUD.h"
 #include "GetawayMovementComponent.h"
@@ -153,6 +154,10 @@ void AGetawayCharacter::BeginPlay()
 	EyeAboveFeet = StandingEyeHeight;
 	CurrentFOV = BaseFOV;
 	ChargesHeld = FMath::Clamp(StartingCharges, 0, MaxCharges);
+
+	// After the charges rather than before them, because a Loaded round overrides both the charge
+	// you start with and how many you may hold.
+	ApplyRoundEffect();
 
 #if !UE_BUILD_SHIPPING
 	// A headless client has no hands, so it cannot run a course. -GetawayFinishAfter=<seconds>
@@ -892,6 +897,55 @@ void AGetawayCharacter::UpdateBody()
 	{
 		Body->SetRelativeScale3D(Want);
 	}
+}
+
+/* ============================================================ the round's effect */
+
+void AGetawayCharacter::ApplyRoundEffect()
+{
+	// The effect is on the game state, which replicates, so this reads the same on every machine -
+	// and both players are on the same effect by construction, because there is only the one value.
+	// Each machine applies it to its own character and to nobody else's: a proxy's movement
+	// component is switched off and its position is streamed, so there is nothing there to tune.
+	const UWorld* World = GetWorld();
+	const AGetawayGameState* GS = World ? World->GetGameState<AGetawayGameState>() : nullptr;
+	const EGetawayEffect Effect = GS ? GS->GetActiveEffect() : EGetawayEffect::None;
+	if (Effect == EGetawayEffect::None) return;
+
+	switch (Effect)
+	{
+	case EGetawayEffect::DoubleJump:
+		if (UGetawayMovementComponent* Move = GetGetawayMovement())
+		{
+			// Max, so an effect round can never hand you *fewer* jumps than normal if the tuned
+			// default is ever raised off zero.
+			Move->SetAirJumps(FMath::Max(Move->AirJumps, EffectAirJumps));
+		}
+		break;
+
+	case EGetawayEffect::Loaded:
+		// Both halves of it: the charge you start with, and the one-charge hand that goes with it.
+		// The cap matters because a C4 pickup anybody placed in an earlier round is still standing.
+		MaxCharges = FMath::Max(1, EffectC4MaxCharges);
+		ChargesHeld = FMath::Clamp(EffectC4Charges, 0, MaxCharges);
+		break;
+
+	case EGetawayEffect::LowGravity:
+		if (UCharacterMovementComponent* Move = GetCharacterMovement())
+		{
+			// Multiplied rather than set, so it stays relative to whatever the character is tuned
+			// to. The C4 launch reads GravityScale too, which is why a rocket jump goes further.
+			Move->GravityScale *= EffectGravityScale;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	// Nothing is said here on purpose. AGetawayHUD::DrawRunEffect puts the effect in the middle of
+	// the screen as the run starts and then moves it up out of the way, and a crosshair message
+	// saying the same thing would land in the same place at the same moment.
 }
 
 void AGetawayCharacter::Notify(const FString& Text, float Seconds, const FLinearColor& Colour, int32 Key) const

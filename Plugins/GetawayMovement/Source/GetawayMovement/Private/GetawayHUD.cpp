@@ -161,6 +161,57 @@ void AGetawayHUD::DrawHUD()
 			? TEXT("RB throw C4  |  RT detonate  |  View gives up the run")
 			: TEXT("G throw C4  |  F detonate  |  Backspace gives up the run"),
 		Dim, 24.f, 50.f, Small, 1.f);
+
+	// The run only keeps it in the corner: it was announced in the middle of the screen as the build
+	// phase opened, and playing that again as you set off would be telling you the same thing twice.
+	DrawEffectBanner(GS, CX, CY, -1.f, 24.f);
+}
+
+/* ============================================================ the round's effect */
+
+void AGetawayHUD::DrawEffectBanner(const AGetawayGameState* GS, float CX, float CY, float Elapsed, float RestX)
+{
+	// Big in the middle of the screen for a couple of seconds, then it travels up to the corner and
+	// sits there for the rest of the round. Both halves matter: you cannot miss what everybody has
+	// been given, and you are not left reading it over the top of the game.
+	if (!GS || !GS->HasActiveEffect()) return;
+
+	// The large font for the name, which spends two seconds at twice the size of anything else on
+	// screen: the small one does not have the pixels for it and goes soft when it is blown up.
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Small = GEngine->GetSmallFont();
+	const EGetawayEffect Effect = GS->GetActiveEffect();
+	const FString Name = AGetawayGameState::GetEffectName(Effect);
+
+	// Timed off a replicated clock rather than a local one, so it holds for the same two seconds on
+	// both machines, it cannot drift, and nothing has to tell the HUD when a round started. Negative
+	// Elapsed means it is already up in the corner.
+	const float Move = FMath::Max(0.f, EffectMoveTime);
+	const float Held = FMath::Max(0.f, EffectBannerTime);
+	const float T = (Elapsed < 0.f) ? 1.f
+		: ((Move > 0.f) ? FMath::Clamp((Elapsed - Held) / Move, 0.f, 1.f) : (Elapsed >= Held ? 1.f : 0.f));
+	// Eased, so it leaves the middle of the screen gently rather than snapping away from your eye.
+	const float A = FMath::InterpEaseInOut(0.f, 1.f, T, 2.f);
+
+	const float Scale = FMath::Lerp(1.9f, 1.f, A);
+	float W = 0.f, H = 0.f;
+	GetTextSize(Name, W, H, Big, Scale);
+	// Measured at the size it is being drawn at this frame, so the travel reads as one movement
+	// rather than as a jump at the end.
+	const float X = FMath::Lerp(CX - W * 0.5f, RestX, A);
+	const float Y = FMath::Lerp(CY - 110.f, 76.f, A);
+
+	DrawText(Name, Warn, X, Y, Big, Scale);
+
+	// The explanation is for the moment you are reading it and no longer, so it fades out with the
+	// move and the name travels on alone.
+	if (A < 1.f)
+	{
+		const FString Blurb = AGetawayGameState::GetEffectBlurb(Effect);
+		FLinearColor Colour = Dim;
+		Colour.A = 1.f - A;
+		Centred(Blurb, Small, FMath::Lerp(1.4f, 1.1f, A), CX, Y + H + 8.f, Colour);
+	}
 }
 
 /* ============================================================ the scoreboard */
@@ -236,6 +287,11 @@ void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const A
 		Centred(bImDone ? TEXT("you are done - the clock is for the others") : TEXT("build time"),
 			Small, 1.1f, CX, 64.f, bImDone ? Go : Dim);
 	}
+
+	// This round's effect, announced as the build phase opens: in the middle of the screen where you
+	// cannot miss it, then up to the corner so it is out of the way while you build. It is said here
+	// rather than at the start of the run because it is meant to change what you place.
+	DrawEffectBanner(GS, CX, Canvas->ClipY * 0.5f, GS ? GS->GetPlacementElapsed() : -1.f, 40.f);
 
 	// The dealt hand, with the slot you are holding picked out. It is yours alone: everyone drafts
 	// their own three pieces now, so what you see here is nobody else's business.

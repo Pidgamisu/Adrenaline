@@ -61,8 +61,9 @@ slopes* at the end.
 ### The catalog
 
 Eleven pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
-Z-up): floor 400x400x50, wall 400x50x400, ledge 200x200x130, breakable panel 300x50x400, crate
-100x100x100, ramp 600x400x200, collapsing bridge 1200x400x60, and the C4 pickup. The ninth is
+Z-up), three of them retuned by hand since: floor 400x400x50, wall 400x50x400, ledge 200x200x130,
+breakable panel 400x50x400, crate 200x200x200, ramp 600x400x200, collapsing bridge 1000x400x60, and
+the C4 pickup. The ninth is
 **spikes** (400x400x50), added 2026-10-19, which has no lab equivalent and was the first
 surface-mounted piece - see *Spikes, and death*. The tenth is the **jump pad** (200x200x50),
 added 2026-10-27, surface mounted the same way - see *The jump pad* below. The eleventh is the
@@ -70,6 +71,16 @@ added 2026-10-27, surface mounted the same way - see *The jump pad* below. The e
 below. The party box deals `HandSize` (3) of them at random without repeats.
 
 Edit the catalog on a Blueprint child of `GetawayGameMode` - it is `EditDefaultsOnly`.
+
+**The sizes that play are `BP_GetawayGameMode`'s, not the C++ ones.** The Blueprint stores the whole
+`Catalog` array, so its copy wins outright and a size changed in C++ never reaches the game. The two
+are kept equal by hand; the C++ constructor is documentation at this point.
+
+**Changing a size in the Details panel needs Compile *and* Save.** It is stored in the `.uasset`,
+and a C++ rebuild reinstances the Blueprint and silently drops anything unsaved - which is how the
+panel, crate and bridge sizes were lost once on 2026-11-03 and had to be typed in again. The
+retune: panel 300 -> **400** wide (a full wall rather than three quarters of one), crate 100 ->
+**200** cubed, bridge 1200 -> **1000** long.
 
 ### Directional pieces (added 2026-10-15)
 
@@ -401,8 +412,11 @@ prediction is re-made every frame, so a crate that turns out not to be climbable
 ceiling you only see from close) breaks on the frame the mantle test starts failing.
 
 What still breaks a breakable: hitting it without holding forward into it, sliding into it,
-anything whose top is outside `MantleMinHeight..MantleMaxHeight` - the 400 cm panel always, a stack
-of two crates at 200 - and C4. `bMantleOverSmash` on the movement component turns the whole thing
+anything whose top is outside `MantleMinHeight..MantleMaxHeight` - the 400 cm panel always, and
+since the crate went to 200 cm on 2026-11-03, **a single crate too**: its top sits above
+`MantleMaxHeight` 170, so a crate is now a wall you smash rather than a step you climb. Raising
+`MantleMaxHeight` past 200 on `BP_Character` would hand it back, at the cost of making everything
+else that tall climbable as well. And C4. `bMantleOverSmash` on the movement component turns the whole thing
 off for the old behaviour.
 
 ### Fixed: a surface-mounted piece the ghost said yes to (2026-11-01)
@@ -738,7 +752,7 @@ All in the Details panel under **Getaway|Windmill**, on `BP_Piece_Windmill`:
 | `bSpinOutsideRun` | off | On: turns on world time with no round on, for a wheel placed by hand |
 | `ShoveScale` | 1.3 | How much of a plate's velocity a sweep hands you. 0 turns the shove off |
 | `ShoveRetrigger` | 0.5 | Seconds before the wheel can hit the same player again |
-| `ShoveViewPunch` / `ShoveShake` | 1.2 / 0.35 | Camera kick on being hit |
+| `ShoveViewPunch` / `ShoveShake` | 1.2 / **0** | Camera kick on being hit. The shake is 0 since 2026-11-03: a plate can catch you twice in a pass and it read as the screen wobbling rather than as being hit |
 | `ArmThickness` / `HubRadius` / `HubWidth` | 24 / 55 / 140 | The frame |
 | `BladeMaterial` / `ArmMaterial` | from the script | Cover all the pooled plates and spokes at once |
 

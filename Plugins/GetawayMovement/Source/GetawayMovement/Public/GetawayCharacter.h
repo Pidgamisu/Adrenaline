@@ -262,6 +262,39 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Getaway|C4")
 	int32 AddCharges(int32 Count);
 
+	/* ---------------- Round effects ---------------- */
+
+	/*
+	 * What each of the round's effects is worth. *Which* effect is on is chosen by the game mode and
+	 * replicated on AGetawayGameState; these say what it means, and they live here because the
+	 * character is the thing that applies it - on the machine that owns it, like the rest of the
+	 * movement. A fresh character is spawned every round and on every respawn, so an effect is gone
+	 * the moment its round is, and two of them can never stack.
+	 */
+
+	/**
+	 * Air jumps on a Double Jump round. A floor rather than an addition: the tuned default for
+	 * AirJumps is 0, so 1 here is one jump in the air.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "0"))
+	int32 EffectAirJumps = 1;
+
+	/** Charges you start a Loaded round carrying. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "0"))
+	int32 EffectC4Charges = 1;
+
+	/** How many you can hold on a Loaded round, so a pickup tops you back up and no further. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "1"))
+	int32 EffectC4MaxCharges = 1;
+
+	/** Gravity on a Low Gravity round, as a fraction of the tuned 2.04. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "0.05", ClampMax = "1"))
+	float EffectGravityScale = 0.6f;
+
+	/** Give this character whatever this round's effect is. Called from BeginPlay. */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Effects")
+	void ApplyRoundEffect();
+
 	/* ---------------- Camera effects ---------------- */
 
 	/** Dip the view by this many degrees (negative kicks it up); it settles back quickly. */
