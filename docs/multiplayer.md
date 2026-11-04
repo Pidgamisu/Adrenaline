@@ -509,9 +509,9 @@ warnings.
 Most of this list was closed on 2026-11-03 by playing a Shipping package - see *Played and signed
 off* in `docs/itch.md`. What is actually left:
 
-- **No two separate machines have connected through the menu.** Join has now been clicked by hand
-  and a failure reported correctly, but every *success* so far has been one process, or two on the
-  loopback. This is the last big unknown in the whole project.
+- ~~**No two separate machines have connected through the menu.**~~ **Two did, on 2026-11-03,
+  from two different states, and it worked.** See *Two machines, two states* at the end of this
+  file for what that proves and the details nobody wrote down at the time.
 - **The Cancel button has not been clicked**, only the give-up clock it shares a code path with.
   A failed join was played on 2026-11-03 and reports properly, so the path is exercised; the button
   is not.
@@ -747,9 +747,8 @@ outside the editor.
 
 ### Still not done
 
-- **Two machines have never connected.** Everything so far has been one process, or two on the
-  loopback. This is the actual remaining unknown, and it needs a second computer and the firewall
-  prompt answered.
+- ~~**Two machines have never connected.**~~ Closed 2026-11-03: two machines in two different
+  states played over the internet. See *Two machines, two states* at the end of this file.
 - **Nobody has looked at the packaged build on screen.** Both runs above were `-nullrhi`, so the
   menu, the pink, the ghost and the explosion have been proved to *load* in a package, not to
   *look* right in one.
@@ -766,3 +765,79 @@ Zip the whole `Windows` folder - 946 MB - and make sure you are both on the same
 and a server from different builds refuse each other. Then *Hosting and joining* above applies,
 except that nobody needs the `.bat` files any more: the host reads their address off the menu,
 and the joiner types it into the menu's box.
+
+## Two machines, two states (2026-11-03)
+
+**It works.** Two separate computers, in two different US states, connected through the menu and
+played. This closes *Next steps* 4 and the item that both lists above called the last big unknown
+in the project: every previous success had been one process, or two processes on the loopback.
+
+Reported as working **amazing** - so the client-authoritative model, which was only ever defended
+as good enough for local play, holds up across the country. That is a better result than this file
+expected. Two cautions before taking much comfort from it: it went over a **Tailscale** tailnet, so
+the hard part of the internet was never the game's problem (see *What a tailnet does and does not
+prove* below), and nothing about it makes cheating any harder - read *Client authority* above, and
+the Steam note in `docs/steam.md` still stands.
+
+### What this proves
+
+- The packaged Shipping build hosts and joins between two machines on different networks, hundreds
+  of miles apart - not just two processes on one box.
+- The menu's address box and the give-up clock are good enough to get two people connected
+  without a lobby, a browser or a `.bat` file.
+- Movement at speed is playable at inter-state latency. This was the open worry: the whole game is
+  Source-style momentum, and client authority means each machine draws the *other* player from
+  replicated movement. It did not ruin it.
+
+### How it was actually connected: Tailscale
+
+**Over a Tailscale tailnet, with the address read off the menu. No port forwarding, and no
+firewall prompt** (possibly one appeared and was forgotten; more likely the executable was already
+allowed from the loopback runs on 2026-11-02 and 11-03, or the rule already covered Tailscale's
+adapter).
+
+This is exactly the route *Hosting and joining* above recommends for "different cities", so the
+advice is now proved rather than guessed. It also means the menu's address list earned its keep
+first time out: Tailscale hands out `100.64.0.0/10`, `NoteForAddress` in
+`GetawayMenuSubsystem.cpp` labels that range **"Tailscale - a friend somewhere else"**, and the VPN
+bucket is sorted *above* the local `10.x` one, so the address worth reading down a phone was at the
+top of the list. That ordering was a guess when it was written. It was the right one.
+
+**Leave the firewall advice in *Hosting and joining* as it stands.** One machine not prompting is
+no reason to stop telling the next person to expect it.
+
+### What a tailnet does and does not prove
+
+Tailscale is a WireGuard mesh VPN: every machine on the tailnet gets a stable `100.x` address and
+they all behave as if they were on one flat private network, with Tailscale doing the NAT traversal
+underneath. **So the game saw the same thing it was built for - a plain private address on a local
+network - and the distance was Tailscale's problem, not the game's.**
+
+What that proves, and it is the important half: **the netcode, the round loop and the movement hold
+up at real inter-state latency.** That was the actual worry.
+
+What it does **not** prove: that someone who downloads the build from itch.io can host to a friend.
+They are not on your tailnet. For them it is still either **UDP 7777 forwarded on the host's
+router**, or **both of them on a mesh VPN of their own**. The game still cannot do NAT
+punch-through, and nothing about this session changed that - it arrives with SteamSockets, see
+`docs/steam.md`. **The itch.io page has to say so**, or the first thing a stranger meets is a join
+that times out.
+
+### What was played, and what held
+
+All reported working, with nothing singled out as wrong:
+
+- **Movement looked really smooth.** No snapping or rubber-banding on the other player. This is the
+  one that could have sunk the whole design, since client authority means each machine draws the
+  other player from replicated movement.
+- **Deaths, respawns, breakables, C4 and the score all worked.** Every system the round loop
+  replicates, over a real connection, in one sitting.
+- **The collapsing bridge gave way in the same place on both screens**, which surprised the player
+  and is worth knowing *why*: it is the design in *The bridge* in `docs/round-loop.md` paying off.
+  The server alone runs the stand probe and the timers, and `StartFalling` resets the rattle before
+  it drops, so both copies begin falling on the same frame from the same place. Only the fall
+  itself is local and unreplicated - deliberately, so a rider has the platform under them
+  immediately rather than a frame late. That note says the two copies "will not land identically,
+  which does not matter". At inter-state latency, nobody could tell.
+- **Nobody left mid-game**, so the host-leaves path is still unplayed - see *What the front end
+  does not do* above for what it is supposed to do.

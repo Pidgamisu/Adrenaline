@@ -245,8 +245,11 @@ multiplayer game whose multiplayer has never once crossed a network is a bet.
 
 Three honest options:
 
-1. **Test two machines first, then release.** The right order. It is the oldest open item in the
-   project and it needs a second computer and a firewall prompt answered, not more code.
+1. ~~**Test two machines first, then release.**~~ **Done 2026-11-03** - two machines in two
+   different states played, over a **Tailscale** tailnet, and it worked. This was the oldest open
+   item in the project. It does not let the page stay quiet about connecting, though: a stranger is
+   not on your tailnet, so the page has to say **UDP 7777 forwarded on the host, or both of you on
+   a mesh VPN**.
 2. **Release it and describe it accurately** - "local/LAN multiplayer, direct IP" on the page, in
    the tagline, not buried in the description. Expect it to limit who plays together.
 3. **Release it as a single-player time-attack** and say multiplayer is coming. The placement phase
@@ -291,7 +294,10 @@ path with.
 
 - **The Cancel button on a join has not been clicked**, only the give-up clock it shares a code path
   with. The smallest open item left in the front end.
-- **Two machines have never connected.**
+- ~~**Two machines have never connected.**~~ **Two did on 2026-11-03**, from two different states,
+  over a Tailscale tailnet, and it worked - smooth movement, and every replicated system in step.
+  **A stranger hosting is still unproved**, and needs port forwarding or a VPN of their own. See
+  *Two machines, two states* in `docs/multiplayer.md`.
 - ~~**`butler login` has not been run and no itch.io project exists yet.**~~ **Both done 2026-11-03**:
   butler is authenticated (credentials at `C:\Users\natha\.config\itch\butler_creds`) and the
   project is <https://rpidgey.itch.io/adrenaline>.

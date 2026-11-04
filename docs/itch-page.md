@@ -66,11 +66,18 @@ understand the game. Number 2 sells the movement. Number 3 is the shortest.
 > ### Playing with other people
 >
 > One player hosts and the others join by typing the host's address, which the menu shows the host
-> so they can read it out. On a home network that is all it takes. Over the internet the host needs
-> UDP port 7777 forwarded through their router.
+> so they can read it out. On a home network that is all it takes.
 >
-> **Being straight with you: this has been played by two players, but never yet across two separate
-> computers.** If you try it with a friend, I would genuinely like to hear whether it worked.
+> **Playing with someone far away, there are two ways.** The easy one: put both computers on a mesh
+> VPN - [Tailscale](https://tailscale.com) is free and takes a few minutes - and the menu will show
+> the host a `100.x` address labelled *Tailscale*, which is the one to read out. The other way is to
+> forward **UDP port 7777** through the host's router. There is no matchmaking and no server list;
+> the game cannot punch through a router on its own yet.
+>
+> **Being straight with you: this has been played across two computers in two different states,
+> over Tailscale, and it held up - smooth movement, and the deaths, the breakables, the C4 and the
+> scoring all stayed in step. It has not been tested over a forwarded port.** If you try it with a
+> friend, I would genuinely like to hear whether it worked.
 >
 > ### This is an early build
 >

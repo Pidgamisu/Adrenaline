@@ -12,14 +12,21 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
 
 - **Movement:** ported from the browser prototype and signed off.
 - **Input:** keyboard and mouse, plus a full controller map for both the run and the placement camera (not yet play-tested with a pad in hand). See `docs/controller.md`.
-- **Multiplayer:** client-authoritative, two players play-tested 2026-10-17.
+- **Multiplayer:** client-authoritative, two players play-tested 2026-10-17. **Two machines in two
+  different states played 2026-11-03 over a Tailscale tailnet, and it worked amazing** - smooth
+  movement, and deaths, respawns, breakables, C4, the score and the collapsing bridge all in step.
+  The last big unknown in the project, closed. Note what a tailnet means: the game saw a flat
+  private network and Tailscale did the NAT traversal, so **a stranger from itch still needs UDP
+  7777 forwarded or a mesh VPN of their own.** See *Two machines, two states* in
+  `docs/multiplayer.md`.
 - **Playing with friends:** packaged 2026-11-02, and **switched to Shipping 2026-11-03** - 609 MB in
   `C:\Users\natha\Desktop\AdrenalineShipping`, down from 946. The cook is clean: every material and
   piece Blueprint is in, and no ThirdParty or editor content. **Played on screen for the first time
   2026-11-03 and it all works** - the placement ghost, the HUD messages and the C4 explosion all
   survive Shipping, so the thing that blocked a distributable build for weeks is closed. Shipping
-  writes **no log**, so a crash in a packaged build leaves nothing to read. **Two machines have
-  still never connected.** See *It is packaged* in `docs/multiplayer.md` and `docs/itch.md`.
+  writes **no log**, so a crash in a packaged build leaves nothing to read. **Two machines in two
+  different states have now played it** (2026-11-03). See *It is packaged* and *Two machines, two states* in
+  `docs/multiplayer.md`, and `docs/itch.md`.
 - **On itch.io:** <https://rpidgey.itch.io/adrenaline>, and **the page is public** - an anonymous
   HEAD request returns 200, where it returned 404 when the project was made. So a push is now a
   publish: the build goes downloadable the moment it processes. Build **#2293004 (version 2)** is
@@ -32,8 +39,8 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
   and were scored by name. **The whole front end was played 2026-11-03** in a Shipping build - the
   first time Escape has ever been pressed outside the editor: Resume, Leave to menu, Quit and a join
-  that fails all work. Only the **Cancel** button is still unclicked, and no two separate machines
-  have connected. A join that fails now gives up after 10 s and says why, and the menu
+  that fails all work. Only the **Cancel** button is still unclicked. **Two separate machines, in
+  two different states, connected through this menu on 2026-11-03.** A join that fails now gives up after 10 s and says why, and the menu
   shows your own address so others know what to type. **Player names work for the first time**:
   `?Name=` had always been discarded. There is still no lobby - and one would not have fixed any of
   this. See *The front end* in `docs/multiplayer.md`, and the two traps at the end of it: input
@@ -209,9 +216,12 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
    join that fails all work, the first time Escape has been pressed outside the editor. See *The
    front end* in `docs/multiplayer.md`. What is left of it: the **Cancel** button is unclicked, a pad
    cannot drive it, and there is no lobby or settings page.
-4. **Play with somebody on a second machine.** Packaging is done and the cook is proved
-   (2026-11-02); what is left is two real computers, a firewall prompt, and how the movement feels
-   over a connection that is not the loopback. See *It is packaged* in `docs/multiplayer.md`.
+4. ~~**Play with somebody on a second machine.**~~ **Done 2026-11-03** - two machines in two
+   different states played over a **Tailscale** tailnet and it worked amazing. No port forwarding
+   and no firewall prompt, the address read straight off the menu, which labels and sorts a
+   Tailscale address first. What is still unproved is a **stranger** hosting: they are not on your
+   tailnet, so it is UDP 7777 forwarded or their own mesh VPN until SteamSockets. The host-leaves
+   path is also still unplayed. See *Two machines, two states* in `docs/multiplayer.md`.
 5. ~~A Niagara explosion effect for `BP_C4`. Without one the blast falls back to a debug sphere,
    which is invisible in a Shipping build.~~ **Done 2026-11-02, and not Niagara** - Niagara cannot
    be scripted at all, so it is `AGetawayBlast`: real additive geometry, a flash and glowing

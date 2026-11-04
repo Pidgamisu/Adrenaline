@@ -5,8 +5,11 @@ This is the plan, the real costs and the gates, so that the order of work is cle
 is written.
 
 Read this with *It is packaged* and *The front end* in `docs/multiplayer.md`. The short version of
-those: there is a packaged Development build that boots and plays, two machines have never
-connected, and nobody has looked at the package on screen.
+those: there is a Shipping build on itch that boots and plays, two machines in two different states
+have played it over a Tailscale tailnet (2026-11-03) with the movement smooth and every replicated
+system in step, and the whole front end has been played on screen. The tailnet is the catch that
+matters here: the game still cannot punch through a router by itself, which is one of the things
+Steam would bring.
 
 ## The thing to understand first
 
