@@ -124,7 +124,7 @@ editing them in the Blueprint's Catalog array does not last.
 All four are set unconditionally, so clearing one in the Details panel puts the engine default back
 rather than leaving the last material stuck on.
 
-**`Content/Python/dress_pieces.py` does all eleven at once**, added 2026-11-02. It makes one
+**`Content/Python/dress_pieces.py` does all twelve at once**, added 2026-11-02. It makes one
 Blueprint per catalog entry under `/Game/Blueprints/Pieces`, puts a material on each, and rewires
 `BP_GetawayGameMode`'s **Catalog > Actor Class** to point at them. The colours live in a `PIECES`
 table at the top of the script - they are a first guess, not a decision, and changing them there
@@ -137,6 +137,28 @@ because adding a piece to the C++ catalog later would shift every index below it
 dress the wrong piece. And it **reads every material back** after compiling, because writing to a
 component on a Blueprint's class default object is the part most likely to go quietly nowhere; a
 material that did not take is reported with the panel to set it in by hand.
+
+**Known bug: a property write can pass that read-back and still not persist** (found 2026-11-05,
+deliberately not chased). `BP_Piece_Ramp`'s `SurfaceMaterial` reads as `M_VB_Solid` on disk, not the
+`MI_VB_Ramp` the table names - confirmed three ways: a byte grep of the `.uasset`, and two cold
+headless reads via `Content/Python/export_tuning.py`. Yet the script wrote it twice that day and the
+read-back passed both times. So the value is on the class default object after the compile and the
+save, and is not in the saved asset. **The read-back does not catch this class of failure**, which
+is the one thing it exists to catch.
+
+Two consequences while it stands:
+
+- **A placed ramp wears the master material.** Wrong colour, and - worse - `BandMode` 0 instead of
+  the `BandMode` 1 that `MI_VB_Ramp` sets. That is the UV band a wedge needs, so the sloped face you
+  run up bands along two edges instead of four. On a look where the band carries the shape, that
+  reads as the ramp having changed colour.
+- **Every piece the script dresses is suspect.** The only ones proved right are those
+  `export_tuning.py` reads as *properties*; its component reads are unreliable for a different
+  reason, documented at the top of that script.
+
+The fix is by hand rather than in the script: `BP_Piece_Ramp` > **Class Defaults** > **Surface
+Material** > `MI_VB_Ramp`, then **Compile** and **Save**. It survives a script run, because the
+script's write of that same value is precisely the one that does not stick.
 
 **Scale stretches UVs.** Pieces are the 100 cm engine cube scaled to `Size`, so the catalog's
 400 x 50 x 400 wall is scale (4, 0.5, 4) and any ordinary UV-mapped texture smears with it. A

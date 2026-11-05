@@ -98,7 +98,7 @@ Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, 
 | C4 momentum carried | 100% | C4MomentumCarried (character) | 1.0 |
 | C4 carried at once | 2 | MaxCharges (character) | 2 |
 | C4 you spawn with | - | StartingCharges (character) | 0 |
-| C4 given by a pickup | - | ChargesGranted (pickup) | 2 |
+| C4 given by a pickup | - | ChargesGranted (pickup) | 1 |
 | C4 pickup respawn | - | RespawnDelay (pickup) | 8 s |
 
 Presets from the lab, applied to the movement component:
@@ -107,6 +107,60 @@ Presets from the lab, applied to the movement component:
 - **Apex-like:** RunSpeed 750, GroundAccelerate 12, GroundFrictionSource 6, AirAccelerate 5, GravityScale 1.84, JumpSpeed 700, SlideBoost 220, SlideFriction 0.25, SlideMinSpeed 500, WallRunGravityScale 0.3, WallRunMaxTime 1.2, WallKickSpeed 500
 - **Titanfall-like:** RunSpeed 850, GroundAccelerate 12, AirAccelerate 22, AirSpeedCap 90, GravityScale 1.73, JumpSpeed 720, SlideBoost 300, SlideFriction 0.18, SlideMinSpeed 500, WallRunGravityScale 0.1, WallRunMaxTime 2.2, WallKickSpeed 650
 - **Surf server:** AirAccelerate 100, GroundFrictionSource 4, SlideBoost 100
+
+## What the Blueprints actually play at (2026-11-05)
+
+The table above is the **C++ default**. `BP_Character` and `BP_GetawayGameMode` override some of it,
+and the Blueprint is what you actually play. These were read out of the assets on 2026-11-05 and
+confirmed deliberate. Anything not listed here is the C++ default.
+
+| Property | C++ | Blueprint |
+|---|---|---|
+| AirJumps | 1 | **0** - no double jump |
+| AirSpeedCap | 75 | 35 |
+| JumpSpeed | 750 | 700 |
+| GroundFrictionSource | 5.0 | 5.5 |
+| SlideCooldown | 1.5 | 0.5 |
+| SlideBoostCooldown | 1.0 | 0.5 |
+| SlideMinSpeed | 550 | 500 |
+| SlideStopSpeed | 280 | 260 |
+| WallAttachRange | 60 | 50 |
+| WallKickSpeed | 550 | 600 |
+| WallRunMinSpeed | 250 | 260 |
+| MantleDuration | 0.22 | 0.30 |
+| MantleMinHeight | 30 | 50 |
+| SmashSpeed | 900 | 1000 |
+| FootstepStride | 340 | 250 |
+| FootstepMinInterval | 0.3 s | 0.0 |
+| FallDeathZ (character) | -100 | -200 |
+| HandSize (game mode) | 3 | 2 |
+| GoalPoints (game mode) | 1 | **0** |
+| bNoPointsIfAllFinish (game mode) | true | **false** |
+| bStartInMenu (game mode) | true | false, so Play goes straight to placement |
+
+Three of those turn documented behaviour *off* rather than tuning it: **AirJumps 0** removes the
+double jump, and **GoalPoints 0** with **bNoPointsIfAllFinish false** removes Ultimate Chicken Horse
+scoring. They live in the Blueprint, not the C++, so clearing the override in the Details panel puts
+each one back.
+
+**Reading them back.** These values are inside a `.uasset`, which nothing but the editor can read -
+which is how a hand-set value drifts from what the docs claim without anyone noticing. Run
+`Content/Python/export_tuning.py` to dump them again, either from Tools > Execute Python Script or
+headless with the editor closed:
+
+```
+"C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" ^
+  "<path>\Getaway.uproject" -run=pythonscript ^
+  -Script="<path>\Content\Python\export_tuning.py" -unattended -nopause -nosplash
+```
+
+It compares each Blueprint's class default object against the native class's and prints only what
+differs, so the list stays short as the C++ defaults move.
+
+That command is written for **cmd.exe**. PowerShell strips the inner quotes before the engine
+sees them, and because this project has a space in its path, the script path then arrives
+truncated at that space - the commandlet reports *"Could not load Python file"* and exits 255.
+Run it from cmd.exe. Escaping the quotes for PowerShell was tried and did not help.
 
 ## Notes
 

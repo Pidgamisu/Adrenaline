@@ -103,10 +103,17 @@ PALETTE = [
 
     ("MI_VB_Wall",   PANE,  (0.30, 0.02, 0.14), EDGE_PINK,  1.0, {}),
     ("MI_VB_Panel",  PANE,  (0.45, 0.03, 0.20), EDGE_WHITE, 1.3, {"FaceOpacity": 0.10}),
-    ("MI_VB_Crate",  PANE,  (0.50, 0.10, 0.28), EDGE_WHITE, 1.2, {}),
+    # BorderWidth is spelled out rather than left to the master default because the asset had
+    # drifted to 0.12 - effectively no band at all, on the one piece whose whole read is its rim -
+    # and with no override here a run could not put it back. Found and set to 8 on 2026-11-05.
+    ("MI_VB_Crate",  PANE,  (0.50, 0.10, 0.28), EDGE_WHITE, 1.2, {"BorderWidth": 8.0}),
     ("MI_VB_Vortex", PANE,  (0.05, 0.30, 0.28), EDGE_CYAN,  1.6, {"FaceOpacity": 0.04}),
     ("MI_VB_Pickup", PANE,  (0.05, 0.35, 0.32), EDGE_CYAN,  1.8, {"BorderWidth": 5.0}),
-    ("MI_VB_Danger", PANE,  (0.25, 0.40, 0.04), EDGE_LIME,  1.8, {"FaceOpacity": 0.30,
+    # Set by hand in the editor on 2026-11-05 and read back out of the asset: the face went from
+    # lime to a deep blue. The *edge* is still EDGE_LIME, which is what carries the "this kills you"
+    # rule, so the palette rule in docs/look.md still holds - the face is no longer the thing
+    # saying it. Was (0.25, 0.40, 0.04).
+    ("MI_VB_Danger", PANE,  (0.054, 0.006, 0.400), EDGE_LIME, 1.8, {"FaceOpacity": 0.30,
                                                                  "CellSize": 40.0,
                                                                  "BorderWidth": 4.0}),
     ("MI_VB_Player", PANE,  (0.40, 0.22, 0.34), EDGE_WHITE, 1.4, {"BorderWidth": 4.0}),

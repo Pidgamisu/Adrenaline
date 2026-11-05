@@ -64,13 +64,15 @@ AGetawayGameMode::AGetawayGameMode()
 
 	Catalog.Add(MakePiece(TEXT("floor"), TEXT("Floor"), FVector(400.f, 400.f, 50.f), AGetawayPiece::StaticClass()));
 	Catalog.Add(MakePiece(TEXT("wall"), TEXT("Wall"), FVector(400.f, 50.f, 400.f), AGetawayPiece::StaticClass()));
-	Catalog.Add(MakePiece(TEXT("ledge"), TEXT("Ledge"), FVector(200.f, 200.f, 130.f), AGetawayPiece::StaticClass()));
+	Catalog.Add(MakePiece(TEXT("ledge"), TEXT("Ledge"), FVector(300.f, 300.f, 150.f), AGetawayPiece::StaticClass()));
 	// The panel, the crate and the bridge were retuned by hand on 2026-11-03 (the panel out to a
 	// full wall, the crate up to a 2 m block, the bridge back to 1000). The numbers that actually
 	// play are the ones in BP_GetawayGameMode, which overrides this whole array - these are kept
-	// equal to it so the two do not disagree.
+	// equal to it so the two do not disagree. Retuned again in the editor on 2026-11-05 - ledge to
+	// 300 x 300 x 150, crate to 250 cubed, vortex to 200 x 200 x 400 - and copied back here, because
+	// dress_pieces.py rebuilds the Blueprint's array from these values and would otherwise undo them.
 	Catalog.Add(MakePiece(TEXT("break"), TEXT("Breakable panel"), FVector(400.f, 50.f, 400.f), AGetawayBreakable::StaticClass()));
-	Catalog.Add(MakePiece(TEXT("crate"), TEXT("Crate"), FVector(200.f, 200.f, 200.f), AGetawayBreakable::StaticClass()));
+	Catalog.Add(MakePiece(TEXT("crate"), TEXT("Crate"), FVector(250.f, 250.f, 250.f), AGetawayBreakable::StaticClass()));
 	// Directional pieces run their length along X, which is the way the placement arrow points: the
 	// ramp rises that way and the bridge drops that way. The lab's ramp is 4 x 6 on the floor, so it
 	// is 600 along the rise and 400 across it.
@@ -90,7 +92,7 @@ AGetawayGameMode::AGetawayGameMode()
 	// a floor tile across, and a storey and a half tall, so it is a wide enough mouth to run into at
 	// speed and long enough that how far up you come out is a decision. It lifts straight up however
 	// it is placed, so it needs nothing aimed and nothing stuck to.
-	Catalog.Add(MakePiece(TEXT("vortex"), TEXT("Vortex"), FVector(300.f, 300.f, 500.f), AGetawayVortex::StaticClass()));
+	Catalog.Add(MakePiece(TEXT("vortex"), TEXT("Vortex"), FVector(200.f, 200.f, 400.f), AGetawayVortex::StaticClass()));
 	// A paddle wheel: four level plates orbiting a horizontal axle, so it is a lift you ride
 	// rather than a windmill you dodge. Directional, with the arrow along the axle, so it goes up
 	// facing you and R turns it side on. Not scaled: it builds itself from its own blade

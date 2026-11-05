@@ -62,13 +62,13 @@ down on slopes* and *Only attached things follow a slope* in `docs/falling-slope
 ### The catalog
 
 Eleven pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
-Z-up), three of them retuned by hand since: floor 400x400x50, wall 400x50x400, ledge 200x200x130,
-breakable panel 400x50x400, crate 200x200x200, ramp 600x400x200, collapsing bridge 1000x400x60, and
+Z-up), six of them retuned by hand since, the last three on 2026-11-05: floor 400x400x50, wall 400x50x400, ledge 300x300x150,
+breakable panel 400x50x400, crate 250x250x250, ramp 600x400x200, collapsing bridge 1000x400x60, and
 the C4 pickup. The ninth is
 **spikes** (400x400x50), added 2026-10-19, which has no lab equivalent and was the first
 surface-mounted piece - see *Spikes, and death*. The tenth is the **jump pad** (200x200x50),
 added 2026-10-27, surface mounted the same way - see *The jump pad* below. The eleventh is the
-**vortex** (300x300x500), added 2026-10-31, a free-standing column - see *The anti-gravity vortex*
+**vortex** (200x200x400), added 2026-10-31, a free-standing column - see *The anti-gravity vortex*
 below. The party box deals `HandSize` (3) of them at random without repeats.
 
 Edit the catalog on a Blueprint child of `GetawayGameMode` - it is `EditDefaultsOnly`.

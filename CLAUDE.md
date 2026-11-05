@@ -118,6 +118,15 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 
 ## Decisions already made (don't undo without asking)
 
+- **Some of the values below are overridden in `BP_Character` and `BP_GetawayGameMode`, and the
+  Blueprint is what you play** (read out of the assets and confirmed deliberate 2026-11-05).
+  Twenty-one differ from the C++ defaults quoted here. Most are tuning, but three turn documented
+  behaviour *off*: `AirJumps` **0** (no double jump) and `GoalPoints` 0 with
+  `bNoPointsIfAllFinish` **false** (no Ultimate Chicken Horse scoring). `SlideCooldown` plays at
+  0.5 rather than 1.5, `WallAttachRange` at 50 rather than 60, `AirSpeedCap` at 35 rather than 75.
+  The full list is *What the Blueprints actually play at* in `Plugins/GetawayMovement/README.md`,
+  and `Content/Python/export_tuning.py` dumps it again at any time. Clearing an override in the
+  Details panel puts the C++ default back.
 - **Movement feel:** Source-style ground friction and air strafing, lossless bunny hops, auto-hop while holding jump, jump buffering, mouse-wheel jump.
 - **Double jump:** 1 air jump. It redirects your momentum toward the keys you're holding, without losing speed. It is not spent by a jump pressed just before landing (that press is kept for a bunny hop).
 - **Slide:** crouch at speed. Entry boost on a 1 s cooldown, very low friction, speeds up on slopes.
@@ -136,7 +145,7 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   climbed, not burst. `bMantleOverSmash` on the movement component turns it off. Panels and anything
   else outside the mantle window still break on contact at speed.
   **A crate is not one of them any more** (settled 2026-11-03): the crate was retuned to 200 cm
-  cubed, which puts its top above `MantleMaxHeight` 170, so a crate smashes rather than being
+  cubed - **250 since 2026-11-05** - which puts its top above `MantleMaxHeight` 170, so a crate smashes rather than being
   climbed. Asked and left that way deliberately - a 2 m block reads as a wall, not a step.
   Raising `MantleMaxHeight` past 200 on `BP_Character` would hand climbing back, and make
   everything else that tall climbable with it. Don't.
