@@ -708,10 +708,18 @@ void AGetawayCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	// Velocity still holds the fall speed here.
-	const float Impact = -GetCharacterMovement()->Velocity.Z / 100.f; // m/s
+	const float Fall = -GetCharacterMovement()->Velocity.Z; // cm/s
+	const float Impact = Fall / 100.f; // m/s
 	if (Impact > 9.f)
 	{
 		Punch = FMath::Min(3.4f, Impact * 0.172f);
+	}
+
+	// The thump, and the one movement sound not fired from inside the movement component: Landed is
+	// an override on the character, and it is the only place the fall speed is still readable.
+	if (UGetawayMovementComponent* Move = GetGetawayMovement())
+	{
+		Move->PlayLandSound(Fall);
 	}
 }
 

@@ -4,6 +4,9 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GetawayMovementComponent.generated.h"
 
+class UAudioComponent;
+class USoundBase;
+
 UENUM(BlueprintType)
 enum class EGetawayCustomMove : uint8
 {
@@ -191,6 +194,136 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Breakables")
 	bool bMantleOverSmash = true;
 
+	/* ---------------- Sound ---------------- */
+
+	/**
+	 * Every sound below is played 2D, on the machine that owns this character and nowhere else.
+	 *
+	 * 2D rather than placed in the world because the listener is this character's own camera, so a
+	 * positioned sound would sit on top of the listener anyway - and a 2D sound needs no Attenuation
+	 * asset, which means a slot works the moment you point it at an imported wave. The cost is that
+	 * nobody hears anybody else move: a remote character's movement component is tick-disabled by
+	 * AGetawayCharacter::SetProxySimulation, so none of this runs for it. Rivals' footsteps would
+	 * have to be driven off the replicated FGetawayNetMove instead. See docs/sound.md.
+	 */
+
+	/** Master switch for every movement sound. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	bool bMovementSounds = true;
+
+	/** Volume every movement sound is multiplied by. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound", meta = (ClampMin = "0", ClampMax = "4"))
+	float MovementSoundVolume = 1.f;
+
+	/** Leaving the ground under your own power. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> JumpSound;
+
+	/** The air jump. Worth making airier than JumpSound, so you can hear that you spent it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> DoubleJumpSound;
+
+	/** Hitting the ground. Louder the harder you land, between LandMinSpeed and LandFullSpeed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> LandSound;
+
+	/**
+	 * The footstep pool. One is picked per step, never the one just played, so a handful of cuts
+	 * from a real run cycle is enough to stop walking sounding mechanical.
+	 *
+	 * An array rather than one slot pointed at a Sound Cue with a Random node in it. The Cue is the
+	 * usual way to do this and it is a dozen clicks of graph wiring per sound, where this is
+	 * dragging waves into a list - and the Cue graph cannot be scripted, so there is no way to hand
+	 * it over as a one-click setup either: USoundCue::FirstNode is BlueprintReadOnly and AllNodes
+	 * is editor-only with no accessor. A Cue still works here; make it the only entry.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TArray<TObjectPtr<USoundBase>> FootstepSounds;
+
+	/** The scrape as a slide begins. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> SlideStartSound;
+
+	/** Held for as long as the slide lasts, pitched by speed. The asset itself must loop. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> SlideLoopSound;
+
+	/** Catching a wall. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> WallRunStartSound;
+
+	/** Held for as long as the wallrun lasts. The asset itself must loop. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> WallRunLoopSound;
+
+	/** Kicking off a wall with Space. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> WallKickSound;
+
+	/** Pulling yourself over a ledge. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound")
+	TObjectPtr<USoundBase> MantleSound;
+
+	/* ---------------- Sound tuning ---------------- */
+
+	/**
+	 * Centimetres of ground covered between footsteps. Steps come faster as you speed up.
+	 *
+	 * 340 is 0.43 s between steps at RunSpeed 800 - a weighty jog. It was 220 to start with, which
+	 * is 0.28 s and almost exactly the real cadence of the recording the footsteps were cut from,
+	 * and it played far too quick: a true sprint cadence out of a first-person camera reads as
+	 * frantic, and it gave the echoing samples no room to breathe between hits. Lower it for a
+	 * faster patter, raise it for a heavier tread.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "20"))
+	float FootstepStride = 340.f;
+
+	/**
+	 * A floor on how often a footstep may fire, in seconds, whatever the speed. 0 removes the cap.
+	 *
+	 * FootstepStride alone ties the rate to speed, and Source movement does not stop at RunSpeed:
+	 * a few lossless bunny hops put you well past it, where distance-per-step turns into a machine
+	 * gun. This is the backstop. A step waiting on the cap is not lost - the distance stays banked
+	 * and it fires the moment the cap lets it, so the cap sets a maximum rate rather than dropping
+	 * steps.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0", ClampMax = "2"))
+	float FootstepMinInterval = 0.3f;
+
+	/** Below this ground speed you move silently (cm/s), so creeping about makes no noise. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0"))
+	float FootstepMinSpeed = 150.f;
+
+	/** Pitch spread on each footstep, so one wave played over and over does not sound mechanical. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0", ClampMax = "0.5"))
+	float FootstepPitchJitter = 0.08f;
+
+	/** Landing slower than this is silent (cm/s downward). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0"))
+	float LandMinSpeed = 200.f;
+
+	/** Landing this fast is full volume (cm/s downward). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "1"))
+	float LandFullSpeed = 1600.f;
+
+	/** How quiet the gentlest audible landing is, so a step off a kerb is still heard. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0", ClampMax = "1"))
+	float LandMinVolume = 0.35f;
+
+	/** Pitch of the slide loop at SlideStopSpeed, and at full tilt. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0.1", ClampMax = "4"))
+	float SlideLoopPitchMin = 0.85f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0.1", ClampMax = "4"))
+	float SlideLoopPitchMax = 1.3f;
+
+	/** Seconds a held loop takes to fade when it ends, so slides and wallruns do not click off. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Sound Tuning", meta = (ClampMin = "0", ClampMax = "1"))
+	float LoopFadeTime = 0.12f;
+
+	/** Play the landing thump, scaled by the fall. Called from AGetawayCharacter::Landed. */
+	void PlayLandSound(float DownwardSpeed);
+
 	/* ---------------- Input from the character ---------------- */
 
 	void QueueJump();
@@ -309,6 +442,15 @@ private:
 	// Vortex lift
 	void ApplyVortexLift(float DeltaSeconds);
 
+	// Sound. All of it no-ops unless this character is the one this machine is playing.
+	bool SoundsAudible() const;
+	void PlayMovementSound(USoundBase* Sound, float VolumeScale = 1.f, float Pitch = 1.f) const;
+	void StartSoundLoop(TObjectPtr<UAudioComponent>& Slot, USoundBase* Sound);
+	void StopSoundLoop(TObjectPtr<UAudioComponent>& Slot);
+	void UpdateFootsteps(float DeltaSeconds);
+	void UpdateSoundLoops();
+	USoundBase* PickFootstep();
+
 	// Runtime state
 	bool bJumpHeld = false;
 	bool bCrouchHeld = false;
@@ -351,4 +493,20 @@ private:
 	float MantleTopCenterZ = 0.f;
 	float MantleElapsed = 0.f;
 	float LastMantleTime = -100.f;
+
+	/**
+	 * The two held loops, and how far you have walked since the last footstep.
+	 *
+	 * The loops are spawned attached to the capsule with bStopWhenAttachedToDestroyed, so dying
+	 * mid-slide takes the scrape with it rather than leaving it playing in an empty level.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> SlideLoop;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> WallRunLoop;
+
+	float FootstepDistance = 0.f;
+	float LastFootstepTime = -100.f;
+	int32 LastFootstepIndex = -1;
 };

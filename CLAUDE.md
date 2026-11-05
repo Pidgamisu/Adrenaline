@@ -81,6 +81,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 | `docs/controller.md` | controller support: the button map, stick tuning, why a stick can't use the mouse look code |
 | `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named, giving a piece a material |
 | `docs/look.md` | the unlit pink look: materials, the palette and what each colour is allowed to mean, lighting, bloom |
+| `docs/sound.md` | sound and music: the movement sound slots, what fires each, the 2D and own-sounds-only decisions, what has no audio yet |
 | `docs/itch.md` | the itch.io release: the Shipping build, butler, pushing a new version, the page |
 | `docs/itch-page.md` | the text for the itch.io page: tagline, description, tags, controls, pricing |
 | `docs/steam.md` | launching on Steam later: the fee, Valve's gates, Steam sessions, client authority |

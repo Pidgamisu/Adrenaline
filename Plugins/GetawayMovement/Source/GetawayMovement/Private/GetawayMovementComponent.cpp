@@ -1,10 +1,13 @@
 #include "GetawayMovementComponent.h"
 
 #include "GetawayBreakable.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 UGetawayMovementComponent::UGetawayMovementComponent()
 {
@@ -236,6 +239,7 @@ void UGetawayMovementComponent::EndSlide()
 	if (!bSliding) return;
 	bSliding = false;
 	SlideCooldownLeft = SlideCooldown;
+	StopSoundLoop(SlideLoop);
 }
 
 void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
@@ -274,6 +278,7 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 		EndSlide();
 		JumpQueuedAt = -100.f;
 		SetMovementMode(MOVE_Falling);
+		PlayMovementSound(JumpSound);
 	}
 	else if (IsWallRunning() && bFreshJump)
 	{
@@ -288,6 +293,7 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 			JumpQueuedAt = -100.f;
 			LastDoubleJumpTime = Now;
 			Velocity.Z = JumpSpeed * 0.92f;
+			PlayMovementSound(DoubleJumpSound);
 			// Steer toward the keys you're holding without losing speed.
 			if (Analog > 0.f)
 			{
@@ -311,6 +317,8 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 		if (!bSliding && bCrouchHeld && Speed >= SlideMinSpeed && SlideCooldownLeft <= 0.f)
 		{
 			bSliding = true;
+			PlayMovementSound(SlideStartSound);
+			StartSoundLoop(SlideLoop, SlideLoopSound);
 			if (SlideBoostCooldownLeft <= 0.f && SlideBoost > 0.f && Speed > 1.f)
 			{
 				const float Scale = (Speed + SlideBoost) / Speed;
@@ -336,6 +344,9 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 
 	SmashAhead(DeltaSeconds);
 	PushScraps();
+
+	UpdateFootsteps(DeltaSeconds);
+	UpdateSoundLoops();
 }
 
 void UGetawayMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode)
@@ -545,6 +556,8 @@ bool UGetawayMovementComponent::TryStartWallRun()
 
 	AirJumpsLeft = AirJumps;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(EGetawayCustomMove::WallRun));
+	PlayMovementSound(WallRunStartSound);
+	StartSoundLoop(WallRunLoop, WallRunLoopSound);
 	return true;
 }
 
@@ -552,6 +565,7 @@ void UGetawayMovementComponent::EndWallRun(float PushOff)
 {
 	WallCooldown = 0.25f;
 	WallActor.Reset();
+	StopSoundLoop(WallRunLoop);
 	SetMovementMode(MOVE_Falling);
 	Velocity += WallNormal * PushOff;
 }
@@ -568,6 +582,7 @@ void UGetawayMovementComponent::WallKick()
 	Velocity.Z = JumpSpeed * 0.95f;
 	JumpQueuedAt = -100.f;
 	WallCooldown = 0.2f;
+	PlayMovementSound(WallKickSound);
 
 	// Pushing off a breakable is what breaks it. SmashAhead deliberately spares the wall you are
 	// running on, so a panel holds you up for the whole run and gives way as you leave it - which
@@ -802,6 +817,7 @@ bool UGetawayMovementComponent::TryStartMantle()
 	EndSlide();
 	Velocity = FVector::ZeroVector;
 	SetMovementMode(MOVE_Custom, static_cast<uint8>(EGetawayCustomMove::Mantle));
+	PlayMovementSound(MantleSound);
 	return true;
 }
 
@@ -936,4 +952,142 @@ void UGetawayMovementComponent::PushScraps()
 			P->SetPhysicsAngularVelocityInDegrees(FMath::VRand() * (200.f + HSpeed * 0.5f));
 		}
 	}
+}
+
+/* ============================================================ sound */
+
+/**
+ * Whether this machine should hear this character move at all.
+ *
+ * The test mirrors the one in AGetawayCharacter::Tick: ROLE_AutonomousProxy is set a frame or two
+ * before the replicated Controller arrives, so IsLocallyControlled alone would miss the first
+ * moments of your own character's life. Remote characters mostly never reach here - their movement
+ * component is tick-disabled by SetProxySimulation - but the host's copy of a remote player does
+ * tick, and without this the host alone would hear that player's footsteps.
+ */
+bool UGetawayMovementComponent::SoundsAudible() const
+{
+	if (!bMovementSounds || !CharacterOwner) return false;
+	return CharacterOwner->IsLocallyControlled() || CharacterOwner->GetLocalRole() == ROLE_AutonomousProxy;
+}
+
+void UGetawayMovementComponent::PlayMovementSound(USoundBase* Sound, float VolumeScale, float Pitch) const
+{
+	if (!Sound || !SoundsAudible()) return;
+	// bIsUISound false: these are the world's noises, not the menu's, so a pause should silence them.
+	UGameplayStatics::PlaySound2D(this, Sound, MovementSoundVolume * VolumeScale, Pitch, 0.f, nullptr, CharacterOwner, false);
+}
+
+/**
+ * Start a held sound, or leave the one already playing alone.
+ *
+ * Attached to the capsule rather than spawned 2D so bStopWhenAttachedToDestroyed can take it away
+ * with the character: a 2D loop outlives whatever started it, and dying mid-slide would otherwise
+ * leave the scrape playing over an empty level for the rest of the round. With no Attenuation asset
+ * set it still plays at full volume, and the listener sits on this capsule, so attaching costs
+ * nothing.
+ *
+ * The sound asset has to loop itself - the Looping box on a Sound Wave, or a Looping node in a
+ * Sound Cue. A one-shot in this slot plays once and goes quiet, which looks like a bug and is not.
+ */
+void UGetawayMovementComponent::StartSoundLoop(TObjectPtr<UAudioComponent>& Slot, USoundBase* Sound)
+{
+	if (!Sound || !SoundsAudible() || !CharacterOwner) return;
+	if (Slot && Slot->IsPlaying()) return;
+
+	Slot = UGameplayStatics::SpawnSoundAttached(Sound, CharacterOwner->GetRootComponent(), NAME_None,
+		FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset,
+		/*bStopWhenAttachedToDestroyed=*/ true, MovementSoundVolume);
+}
+
+void UGetawayMovementComponent::StopSoundLoop(TObjectPtr<UAudioComponent>& Slot)
+{
+	if (!Slot) return;
+	// The component auto-destroys once the fade finishes, so let go of it rather than keep a handle
+	// to something that is on its way out.
+	Slot->FadeOut(LoopFadeTime, 0.f);
+	Slot = nullptr;
+}
+
+/**
+ * A footstep every FootstepStride centimetres of ground covered.
+ *
+ * Distance rather than a timer, so steps keep pace with you for free and anything that takes your
+ * feet off the floor - a jump, a slide, a wallrun - simply stops adding to the tally. There is no
+ * animation to hang notifies off, the character being a box, so this is the whole footstep system.
+ *
+ * What is walked but not yet spent stays on the tally while you are airborne or sliding, so coming
+ * out of either does not swallow the next step.
+ */
+void UGetawayMovementComponent::UpdateFootsteps(float DeltaSeconds)
+{
+	if (FootstepSounds.Num() == 0 || !SoundsAudible() || bSliding || !IsMovingOnGround()) return;
+
+	const float Speed = Velocity.Size2D();
+	if (Speed < FootstepMinSpeed) return;
+
+	FootstepDistance += Speed * DeltaSeconds;
+	if (FootstepDistance < FootstepStride) return;
+
+	// The distance is deliberately left banked while the cap holds a step back, so the step is late
+	// rather than lost and the cap reads as a maximum rate.
+	const UWorld* World = GetWorld();
+	const float Now = World ? World->GetTimeSeconds() : 0.f;
+	if (FootstepMinInterval > 0.f && Now - LastFootstepTime < FootstepMinInterval) return;
+
+	LastFootstepTime = Now;
+	FootstepDistance = 0.f;
+	PlayMovementSound(PickFootstep(), 1.f, 1.f + FMath::FRandRange(-FootstepPitchJitter, FootstepPitchJitter));
+}
+
+/**
+ * One of the pool, never the one just played.
+ *
+ * A plain random pick of six repeats itself about one step in six, and the same footstep twice in a
+ * row is the thing that gives away that a sound is being repeated at all - it is far more
+ * noticeable than the pool being small. Excluding the last one costs nothing and buys most of the
+ * illusion.
+ */
+USoundBase* UGetawayMovementComponent::PickFootstep()
+{
+	const int32 Num = FootstepSounds.Num();
+	if (Num == 0) return nullptr;
+	if (Num == 1) return FootstepSounds[0].Get();
+
+	// Nothing played yet, or the list was edited under us: any of them will do.
+	if (LastFootstepIndex < 0 || LastFootstepIndex >= Num)
+	{
+		LastFootstepIndex = FMath::RandRange(0, Num - 1);
+		return FootstepSounds[LastFootstepIndex].Get();
+	}
+
+	// Draw from one fewer, then step over the one just played, so every other entry stays equally likely.
+	int32 Index = FMath::RandRange(0, Num - 2);
+	if (Index >= LastFootstepIndex) ++Index;
+	LastFootstepIndex = Index;
+	return FootstepSounds[Index].Get();
+}
+
+/** Keep the slide loop in step with how fast you are actually going. */
+void UGetawayMovementComponent::UpdateSoundLoops()
+{
+	if (!SlideLoop) return;
+
+	const float Lo = SlideStopSpeed;
+	const float Hi = FMath::Max(RunSpeed + SlideBoost, Lo + 1.f);
+	const float K = FMath::Clamp((Velocity.Size2D() - Lo) / (Hi - Lo), 0.f, 1.f);
+	SlideLoop->SetPitchMultiplier(FMath::Lerp(SlideLoopPitchMin, SlideLoopPitchMax, K));
+}
+
+void UGetawayMovementComponent::PlayLandSound(float DownwardSpeed)
+{
+	// Landing clears the footstep tally, so the first step after a landing is a full stride away
+	// rather than arriving on top of the thump.
+	FootstepDistance = 0.f;
+
+	if (!LandSound || DownwardSpeed < LandMinSpeed) return;
+
+	const float Hi = FMath::Max(LandFullSpeed, LandMinSpeed + 1.f);
+	const float K = FMath::Clamp((DownwardSpeed - LandMinSpeed) / (Hi - LandMinSpeed), 0.f, 1.f);
+	PlayMovementSound(LandSound, FMath::Lerp(LandMinVolume, 1.f, K));
 }
