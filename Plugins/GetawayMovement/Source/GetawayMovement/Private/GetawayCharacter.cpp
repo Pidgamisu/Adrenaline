@@ -547,6 +547,16 @@ void AGetawayCharacter::FellOutOfWorld(const UDamageType& DmgType)
 		// breaking. A simulated proxy interpolating below the plane has not fallen off anything.
 		return;
 	}
+
+	// Falling past the plane when you are already home is not a death, which is the same rule
+	// CheckFallDeath above has always applied. This route did not, and the hole showed up in the
+	// first two-machine game (2026-11-03): cross the line at speed, carry on over the edge, and
+	// you were told "Killed. Back to the start" after you had won - then left hanging there, because
+	// PlayerDied and RespawnRunner both refuse a player who is not running. The game mode lifts a
+	// finisher into the fly camera a beat after they cross; until it does, nothing may kill them.
+	const AGetawayPlayerState* PS = GetPlayerState<AGetawayPlayerState>();
+	if (PS && !PS->IsRunning()) return;
+
 	Die(nullptr);
 }
 

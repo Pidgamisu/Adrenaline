@@ -145,6 +145,26 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Round", meta = (ClampMin = "0"))
 	float FinishLingerTime = 2.5f;
 
+	/*
+	 * Reaching the objective lifts you into the fly camera to watch the rest of the field, after a
+	 * beat spent looking at where you landed.
+	 *
+	 * Off, you keep your character for the rest of the run. That was the behaviour until
+	 * 2026-11-04 and it was reported as a bug: the course has nothing left to offer a player who
+	 * is already home except an edge to fall off, and falling off after finishing used to say
+	 * "Killed" and then leave you hanging there, because nothing respawns a player who is not
+	 * running.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Run")
+	bool bWatchAfterFinish = true;
+
+	/**
+	 * How long a finisher keeps their body before the camera lifts. Long enough to read YOU MADE IT
+	 * from where you stopped; short enough that you are watching the race again quickly.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Run", meta = (ClampMin = "0"))
+	float FinishWatchDelay = 2.f;
+
 	/* ---------------- Scoring ---------------- */
 
 	/*

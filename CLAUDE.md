@@ -162,6 +162,16 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Camera effects:** wallrun tilt, speed FOV, shake, landing kick and mantle jiggle are wanted, with a toggle to turn them off. Note when porting camera effects: roll signs invert between the lab and Unreal. three.js rolls about a camera Z axis pointing back at the viewer; Unreal rolls about forward X in the aviation sense (positive = right side down). Copying a roll formula across verbatim tilts it the wrong way, which is exactly what happened to the wallrun tilt (fixed 2026-10-15). A camera "shaking" bug was reported in the prototype and was likely frame-timing judder. Movement should look smooth at any refresh rate.
 
 - **Dying puts you back at the start** (decided 2026-10-31, replacing "death ends your run for the round"). A fresh character at the PlayerStart after `DeathLingerTime`, your run state untouched, as many times as the run clock allows. Your C4 charges do not come back with you (confirmed 2026-10-31). The game mode's `bRespawnOnDeath` turns it off for the old Ultimate Chicken Horse behaviour. See `docs/spikes-and-death.md`.
+- **Finishing lifts you into the fly camera to watch** (decided 2026-11-04, after it was played
+  across two machines). Crossing the line gives you a big **YOU MADE IT** with your time and place
+  where you landed, and `FinishWatchDelay` (2 s) later the camera takes your body away and you
+  watch the rest of the field from above. Before this you kept your character, got no prompt at
+  all until the round ended, and could fall off the course after winning - which told you
+  "Killed" and then left you hanging, since nothing respawns a player who is not running. The
+  alternatives were a death-proof victory lap and freezing you at the pad; watching won because
+  the course has nothing left to offer somebody who is already home, and watching your rivals
+  struggle is half of Ultimate Chicken Horse. `bWatchAfterFinish` off restores the old behaviour.
+  See `docs/round-loop.md`.
 - **Local first, Steam later** (decided 2026-10-26). Build and test for local/LAN play now. Steamworks, online sessions and achievements wait until the game is fun locally.
 - **Client-authoritative multiplayer is fine for local play. Revisit it before Steam.** Each machine decides where its own player is, which makes cheating easy with strangers online. That is a deliberate trade-off for now, not something to fix unasked.
 - **The wall and breakable panel stay rotated 90° from the lab** (decided 2026-11-02, after

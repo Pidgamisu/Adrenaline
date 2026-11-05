@@ -18,6 +18,24 @@ namespace
 	const FLinearColor Warn(0.94f, 0.70f, 0.24f);
 	const FLinearColor Urgent(1.f, 0.42f, 0.3f);
 	const FLinearColor Go(0.31f, 0.82f, 0.58f);
+
+	/** 1st, 2nd, 3rd, 4th. The teen rule costs a line and a wrong "11st" would be remembered. */
+	FString Ordinal(int32 N)
+	{
+		const int32 Mod100 = N % 100;
+		const TCHAR* Suffix = TEXT("th");
+		if (Mod100 < 11 || Mod100 > 13)
+		{
+			switch (N % 10)
+			{
+			case 1: Suffix = TEXT("st"); break;
+			case 2: Suffix = TEXT("nd"); break;
+			case 3: Suffix = TEXT("rd"); break;
+			default: break;
+			}
+		}
+		return FString::Printf(TEXT("%d%s"), N, Suffix);
+	}
 }
 
 void AGetawayHUD::Centred(const FString& Text, UFont* Font, float Scale, float CX, float Y, const FLinearColor& Color)
@@ -110,16 +128,21 @@ void AGetawayHUD::DrawHUD()
 
 	DrawScoreboard(GS, Mine);
 
+	// Drawn before the pawn branch below, because all three belong to the round rather than to
+	// whatever you happen to be possessing. A player who is home, or who gave up, watches the rest
+	// of the run from the fly camera and still wants the clock, their own time and the result -
+	// and until this moved up here, the placement branch returned before any of it was drawn.
+	if (GS && GS->GetPhase() == EGetawayPhase::Run)
+	{
+		DrawRunClock(GS, CX);
+		DrawFinishedBanner(GS, Mine, CX);
+		DrawRoundBanner(GS, Mine, CX);
+	}
+
 	if (const AGetawayPlacementPawn* Placing = Cast<AGetawayPlacementPawn>(GetOwningPawn()))
 	{
 		DrawPlacementHUD(Placing, GS, CX);
 		return;
-	}
-
-	if (GS && GS->GetPhase() == EGetawayPhase::Run)
-	{
-		DrawRunClock(GS, CX);
-		DrawRoundBanner(GS, Mine, CX);
 	}
 
 	const AGetawayCharacter* Player = Cast<AGetawayCharacter>(GetOwningPawn());
@@ -393,6 +416,34 @@ void AGetawayHUD::DrawRunClock(const AGetawayGameState* GS, float CX)
 			Centred(FString::Printf(TEXT("best %.2f s"), Best), Small, 1.1f, CX, 64.f, Dim);
 		}
 	}
+}
+
+void AGetawayHUD::DrawFinishedBanner(const AGetawayGameState* GS, const AGetawayPlayerState* Mine, float CX)
+{
+	// Once the round is over DrawRoundBanner owns this spot and says the same thing with the score
+	// on it. This is only for the gap in between.
+	if (!GS || GS->IsRoundOver() || !Mine || !Mine->HasFinished()) return;
+
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Small = GEngine->GetSmallFont();
+
+	const FString Place = Mine->GetFinishPlace() > 0 ? FString::Printf(TEXT("  -  %s"), *Ordinal(Mine->GetFinishPlace())) : TEXT("");
+	const FString Time = FString::Printf(TEXT("%.2f seconds%s"), Mine->GetFinishTime(), *Place);
+
+	// Still on foot means the game mode has not lifted you out yet: this is the beat you spend
+	// looking at where you landed, so it gets the full banner.
+	if (!Cast<AGetawayPlacementPawn>(GetOwningPawn()))
+	{
+		const float Y = Canvas->ClipY * 0.34f;
+		Centred(TEXT("YOU MADE IT"), Big, 2.6f, CX, Y, Go);
+		Centred(Time, Small, 1.5f, CX, Y + 56.f, Go);
+		Centred(TEXT("watching the others..."), Small, 1.1f, CX, Y + 84.f, Dim);
+		return;
+	}
+
+	// In the fly camera now, where the big one would sit on top of the course you are watching.
+	// Under the run clock at the top, which is where the other player's remaining time already is.
+	Centred(FString::Printf(TEXT("you made it  -  %s"), *Time), Small, 1.2f, CX, 92.f, Go);
 }
 
 void AGetawayHUD::DrawRoundBanner(const AGetawayGameState* GS, const AGetawayPlayerState* Mine, float CX)

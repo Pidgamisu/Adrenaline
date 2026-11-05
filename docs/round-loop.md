@@ -330,3 +330,76 @@ grant routed through the server like the breakable's, and `ChargesHeld` replicat
 made* with what switching it would take.
 
 Built clean. **Not played.**
+
+## Crossing the line now says so, and takes your body away (2026-11-04)
+
+Reported from the first two-machine game: **"after someone reaches the end, they can still fall and
+they get no prompt that they made it."** Three separate faults, and the reason none of them had ever
+been seen is that **all three need a second player.** Solo, the round ends on the same frame you
+cross the line, so the round-over banner covered the gap and there was no gap left to fall into.
+
+### 1. The prompt was tied to the round, not to you
+
+`AGetawayHUD::DrawRoundBanner` opened with `if (!GS->IsRoundOver()) return;`. "FINISHED" and your
+time lived there and nowhere else, so the first player home got **nothing at all** until the last
+one was in or the grace clock ran out - up to `FinishGraceTime` (10 s) of silence after winning.
+
+`DrawFinishedBanner` now draws for the window in between: phase `Run`, round not over, your own
+`PlayerState` reading `Finished`. Big **YOU MADE IT** with your time and place while you still have
+your body, one line under the run clock once the camera has lifted you out of it.
+
+It reads `HasFinished`, `GetFinishTime` and `GetFinishPlace` off the replicated `PlayerState`, so it
+draws on a client with no game mode to ask - the same bargain the scoreboard already made.
+
+**`DrawRunClock` and `DrawRoundBanner` moved up with it**, above the placement-pawn branch in
+`DrawHUD`. That branch `return`s, so anybody in a fly camera during a run - a finisher, or someone
+who gave up - was being shown no clock, no result and no time. Now all three belong to the round
+rather than to whatever pawn you are holding.
+
+### 2. `FellOutOfWorld` was missing a guard its sibling had
+
+`AGetawayCharacter::CheckFallDeath` has always refused to kill a player who is not running, and the
+comment there says why: *"a character that is still there during the finish banner should not be
+told it has been killed."* **The engine's own KillZ route, `FellOutOfWorld`, had no such check** and
+called `Die()` outright.
+
+So: cross the line at speed, carry on over the edge, and you were told **"Killed. Back to the
+start"** after you had already won. Then nothing brought you back, because `PlayerDied` and
+`RespawnRunner` both refuse a player who is not `Running` - you hung there as a dead frozen pawn
+until the round ended. The same guard is now on both routes.
+
+### 3. Nothing happened to you when you finished
+
+The actual hole. You kept full control of a character in a level you were done with, and the only
+thing left to do with it was fall off.
+
+**Asked and settled 2026-11-04: a finisher watches the rest from the fly camera.** After
+`FinishWatchDelay` (2 s) holding the banner where you landed, `ReachedFinish` calls
+`StartPlacementFor` - the same place giving up already puts you, and the same place the next
+placement phase will find you. `bWatchAfterFinish` off restores the old keep-your-body behaviour.
+
+Two things that had to be got right:
+
+- **The watch spot is read at the moment of crossing, not when the timer fires.** You arrive at
+  speed and may well be over the edge and falling two seconds later, and `StartPlacementFor` opens
+  its fly camera 300 up from wherever the body is - which would have been thousands of units under
+  the course. The finisher is teleported back to the remembered spot a line before the swap, which
+  is never seen, because the same call destroys that body.
+- **It cannot hold the round open.** `StartPlacementFor` only swaps the pawn; it does not touch the
+  run state, so `Finished` survives and `CheckRoundOver` - which counts `IsRunning` and
+  `IsBuilding`, not pawns - still calls the round. The placement pawn also refuses to place outside
+  the `Placement` phase, so a finisher can fly and watch but cannot build early.
+
+The timer bails if the phase changed, the round ended, or the player is no longer `Finished`, so
+the last player home (whose arrival ends the round outright) is left to `StartPlacement` as before.
+
+### Still unverified
+
+- **None of this has been played.** Both targets compile clean; nothing has been seen on screen.
+- **The compact line's position** (centred, `y = 92`, under the run clock) has not been looked at
+  against the placement HUD drawn behind it.
+- **Two players at once**: that the second finisher gets the banner too, with `2nd` on it, and that
+  the round is still called properly when both are watching.
+- **A finisher who falls** past KillZ in the two seconds before the camera lifts: the guard stops
+  the death, and the teleport should put the camera at the finish, but the fall itself has not been
+  watched.

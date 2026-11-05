@@ -90,6 +90,14 @@ private:
 	void DrawEffectBanner(const AGetawayGameState* GS, float CX, float CY, float Elapsed, float RestX);
 	void DrawScoreboard(const AGetawayGameState* GS, const AGetawayPlayerState* Mine);
 	void DrawRoundBanner(const AGetawayGameState* GS, const AGetawayPlayerState* Mine, float CX);
+	/**
+	 * You are home and somebody else is not. DrawRoundBanner only ever fires once the whole round
+	 * is over, which solo is the same moment you cross the line and with company is not - so the
+	 * first player home used to get no word at all that they had made it.
+	 *
+	 * Big while you still have your body, one line once the camera has lifted you out of it.
+	 */
+	void DrawFinishedBanner(const AGetawayGameState* GS, const AGetawayPlayerState* Mine, float CX);
 
 	/** Text centred on CX, since four different things here want it. */
 	void Centred(const FString& Text, class UFont* Font, float Scale, float CX, float Y, const FLinearColor& Color);

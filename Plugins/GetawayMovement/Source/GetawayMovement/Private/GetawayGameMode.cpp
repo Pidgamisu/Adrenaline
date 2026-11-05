@@ -797,8 +797,9 @@ void AGetawayGameMode::HandleStartingNewPlayer_Implementation(APlayerController*
 
 void AGetawayGameMode::ReachedFinish(AGetawayCharacter* Runner)
 {
+	UWorld* World = GetWorld();
 	AGetawayGameState* GS = State();
-	if (!HasAuthority() || !GS || !Runner) return;
+	if (!World || !HasAuthority() || !GS || !Runner) return;
 	if (GS->GetPhase() != EGetawayPhase::Run || GS->IsRoundOver()) return;
 
 	AGetawayPlayerState* PS = Runner->GetPlayerState<AGetawayPlayerState>();
@@ -820,6 +821,39 @@ void AGetawayGameMode::ReachedFinish(AGetawayCharacter* Runner)
 	if (FinishersThisRound == 1)
 	{
 		ApplyRunDeadline(FinishGraceTime, true);
+	}
+
+	// Up into the fly camera to watch the others, after a beat holding the banner where you landed.
+	//
+	// The spot is read now, at the moment of crossing, rather than when the timer fires: you arrive
+	// here at speed and may well be over the edge and falling by then, and a fly camera handed that
+	// position would open 10,000 units underneath the course. The teleport a line before the swap
+	// is never seen, because StartPlacementFor destroys this body in the same call.
+	//
+	// CheckRoundOver below may end the round first, in which case StartPlacement puts everybody in
+	// a camera anyway and the timer finds the phase changed and does nothing.
+	if (bWatchAfterFinish)
+	{
+		TWeakObjectPtr<APlayerController> WeakPC(Cast<APlayerController>(Runner->GetController()));
+		const FVector Spot = Runner->GetActorLocation();
+		FTimerHandle Handle;
+		World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this, WeakPC, Spot]()
+		{
+			if (!WeakPC.IsValid() || GetPhase() != EGetawayPhase::Run) return;
+			const AGetawayGameState* GS2 = State();
+			if (GS2 && GS2->IsRoundOver()) return;
+
+			// Still finished, and not something else by now: the run could have been forfeited, or
+			// the next round could have dealt them back in.
+			const AGetawayPlayerState* Mine = StateOf(WeakPC.Get());
+			if (!Mine || !Mine->HasFinished()) return;
+
+			if (APawn* Body = WeakPC->GetPawn())
+			{
+				Body->SetActorLocation(Spot, false, nullptr, ETeleportType::TeleportPhysics);
+			}
+			StartPlacementFor(WeakPC.Get());
+		}), FMath::Max(0.05f, FinishWatchDelay), false);
 	}
 
 	CheckRoundOver();
