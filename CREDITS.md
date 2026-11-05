@@ -6,6 +6,7 @@ Check each license allows use in a commercial game on Steam, and whether it requ
 | Asset / pack | Folder | Source (link) | License | Attribution required? | Added |
 |---|---|---|---|---|---|
 | GlowGrid Starter | `Content/ThirdParty/GlowGridStarter/` | Fab, free pack - [listing URL still to add](https://www.fab.com/library) | Fab Standard License, Personal tier (to confirm on the listing) | No, under the Standard License | 2026-11-02 |
+| Suspenseful boom (C4 blast) | `Audio/C4/` | **Still to confirm** - downloaded as `dragon-studio-suspenseful-boom-451863.mp3` | **Still to confirm** | **Still to confirm** | 2026-11-04 |
 
 ## GlowGrid Starter
 
@@ -42,3 +43,19 @@ Neither blocks greyboxing with the kit now.
 ## Attribution text for the game's credits screen
 
 *(Fill in for any pack whose license requires attribution.)*
+
+## Suspenseful boom (C4 blast)
+
+Added 2026-11-04 as `Audio/C4/C4_Blast.wav` and `C4_Blast_Short.wav`, prepared from a downloaded
+mp3 by `Tools/prep_sound.py`. See *The blast actually chosen* in `docs/sound.md`.
+
+**The source and license are not recorded yet, and this must be settled before the itch.io page
+goes any further.** The file arrived as `dragon-studio-suspenseful-boom-451863.mp3`, which has the
+shape of a Pixabay download, but that is a guess from a filename and not good enough: Pixabay's
+audio license changed in January 2023 and older uploads are not covered by the current terms. The
+same download also appears to have been re-exported as `Untitled song (Nov 4, 2026 12:56 PM).mp3` -
+the two files have the same five events at the same spacing to within a millisecond - so whatever
+covers one covers both.
+
+Needed: where it was downloaded from, the listing link, the license it was offered under, and
+whether that license requires attribution in a commercial release.
