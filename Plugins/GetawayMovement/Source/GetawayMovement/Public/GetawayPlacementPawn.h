@@ -188,13 +188,35 @@ public:
 	float ContactReach = 6.f;
 
 	/**
-	 * How far off a world axis a face has to be before a piece lies down on it instead of sitting
-	 * square. Flat floors, walls and ceilings are exactly axis-aligned and stay square whatever
-	 * this is; a ramp face is 18.4 degrees off and tips the piece onto the slope. Raise it past
-	 * that and ramps stop slanting what you put on them.
+	 * How far off a world axis a face has to be before it counts as sloped at all. Flat floors,
+	 * walls and ceilings are exactly axis-aligned and are never sloped whatever this is; a ramp
+	 * face is 18.4 degrees off. It decides two things: which faces a surface-mounted piece lies
+	 * down on, and - when bSlantOnSlopes is on - which faces tip a free-standing piece. Raise it
+	 * past 18.4 and a ramp stops counting as a slope for either.
+	 *
+	 * The server reads it too, to decide whether an arriving rotation is upright enough to snap
+	 * back to a quarter turn, so the two have to agree. Leave it alone.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement", meta = (ClampMin = "0.5", ClampMax = "45"))
 	float SlantTolerance = 5.f;
+
+	/**
+	 * Tip a free-standing piece onto a sloped face: the behaviour asked for on 2026-10-26, where a
+	 * floor becomes a slanted platform, a wall leans, and a ramp carries on up the slope under it.
+	 *
+	 * Off since 2026-11-05, so a wall, floor, crate or ramp placed on a slope stands square
+	 * instead. What splits the two is bSurfaceMounted: spikes and jump pads are *attached* to the
+	 * face they are stuck to and always follow it, whatever this is set to, because they are placed
+	 * by the branch above this one in ComputePlacement. Turning this on puts free-standing pieces
+	 * back on the slope as well, exactly as they were.
+	 *
+	 * The cost of standing square: an upright piece over a slope touches at one bottom edge and
+	 * lifts away across its footprint by the slope's rise over that distance - 133 cm for a 400 cm
+	 * piece lying along an 18.4 degree ramp. Burying it into the slope instead is what FitTolerance
+	 * refuses. See *Things lie down on slopes* in docs/falling-slopes-cleanup.md.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement")
+	bool bSlantOnSlopes = false;
 
 	/** Draw the ghost box. Off if you want to see the piece land unobstructed. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Placement")

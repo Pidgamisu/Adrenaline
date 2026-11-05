@@ -173,6 +173,15 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   the course has nothing left to offer somebody who is already home, and watching your rivals
   struggle is half of Ultimate Chicken Horse. `bWatchAfterFinish` off restores the old behaviour.
   See `docs/round-loop.md`.
+- **Only attached pieces follow a slope** (decided 2026-11-05, narrowing the 2026-10-26 decision
+  that everything lies down on one). Spikes and jump pads still lie flat on a ramp face - they are
+  surface mounted, which is to say attached to whatever they are stuck to. A wall, floor, crate or
+  ramp placed on a slope now stands **square**, resting on the slope rather than tipping onto it.
+  `bSlantOnSlopes` on the placement pawn puts the old behaviour back. The cost is a wedge of air
+  under the downhill end of a long piece - 133 cm for a 400 cm piece on an 18.4 degree ramp -
+  because burying it instead is what `FitTolerance` refuses. It also means a ramp placed on a ramp
+  steps rather than continuing the slope. See *Only attached things follow a slope* in
+  `docs/falling-slopes-cleanup.md`.
 - **Local first, Steam later** (decided 2026-10-26). Build and test for local/LAN play now. Steamworks, online sessions and achievements wait until the game is fun locally.
 - **Client-authoritative multiplayer is fine for local play. Revisit it before Steam.** Each machine decides where its own player is, which makes cheating easy with strangers online. That is a deliberate trade-off for now, not something to fix unasked.
 - **The wall and breakable panel stay rotated 90° from the lab** (decided 2026-11-02, after

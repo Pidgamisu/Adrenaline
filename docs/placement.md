@@ -55,8 +55,9 @@ it as the lab's did; settled by playing on 2026-11-02, see the end of this file.
 falls back to the ground plane. A piece that
 would overlap existing geometry turns red and cannot be placed - and since 2026-10-23 so does one
 that would touch nothing at all; see *Everything has to touch something* at the end. Aim at a
-**sloped** face and the piece lies down on it rather than sitting square; see *Things lie down on
-slopes* at the end.
+**sloped** face and what happens depends on the piece: a surface-mounted one (spikes, a jump pad)
+lies down on it, and a free-standing one stands square on it, resting on the slope. See *Things lie
+down on slopes* and *Only attached things follow a slope* in `docs/falling-slopes-cleanup.md`.
 
 ### The catalog
 

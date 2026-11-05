@@ -107,6 +107,68 @@ slanted platform, a wall leans, and a ramp carries on up the slope of the ramp u
 - **Stacking compounds, on purpose.** A piece lying on a ramp presents its own sloped faces, so the
   next piece lies on *that*. Slanted staircases fall out of this for free.
 
+### Only attached things follow a slope (2026-11-05)
+
+Asked for: *"is it possible to make it so it slopes for objects that attach (spikes and jump pad)
+but not objects like walls"*. Yes, and it cost almost nothing, because `ComputePlacement` was
+already split the right way. It has three branches - surface-mounted, sloped face, flat face - and
+the surface-mounted one turns the piece's own +Z out of whatever face it is stuck to without ever
+consulting `SlantTolerance`. So **it was already doing the asked-for thing**, and only
+*free-standing* pieces ever reach the sloped branch. The whole change is inside that branch.
+
+- **`bSlantOnSlopes` on the placement pawn, default off.** Turning it on puts 2026-10-26 back
+  exactly. Nothing new distinguishes the two kinds of piece: `bSurfaceMounted` is already a
+  per-piece catalog flag, so this needed **no catalog change, no `dress_pieces.py` run and no
+  Blueprint edit** - which matters, because `BP_GetawayGameMode` overrides the catalog outright.
+- **Upright means yaw only**, so **R** keeps meaning what it meant.
+- **It rests *on* the slope rather than cutting into it.** The slanted path solves the dominant axis
+  so the centre sits half a thickness off the face's plane; the upright path keeps that solve and
+  changes only the distance, to the upright box's reach along the face normal,
+  `|N.x|*Hx + |N.y|*Hy + |N.z|*Hz`. That is exactly the distance at which the box's lowest corner
+  touches the plane without crossing it. It has to be that rather than the aim point for the reason
+  the *Snapping solves for the slope* bullet above already gives: `IsBlockedAt` forgives only
+  `FitTolerance` (3 cm) of overlap, so a buried corner comes back blocked. Resting also satisfies
+  `IsTouchingSomething`, since resting on something is touching it.
+- **It degrades into the flat branch.** As the slope goes to zero, that reach becomes half the
+  piece's height - exactly where the flat branch would have put the piece. So for a free-standing
+  piece there is no longer a visible step in behaviour at `SlantTolerance`; the two paths meet.
+- **The server needed no change, and got slightly stricter.** `ServerPlacePiece` already snapped an
+  upright free-standing rotation back to a quarter turn and took a tilted one on trust. With this
+  off nothing free-standing arrives tilted, so that trust is never exercised.
+
+**The price of standing square**, and it is real: an upright box over a slope touches at one bottom
+edge and lifts away across its footprint by the slope's rise over that distance. On an 18.4° ramp:
+
+| Piece, as laid | Gap at the far end |
+|---|---|
+| Wall across the slope (50 cm along the rise) | 17 cm |
+| Crate (200 cubed) | 67 cm |
+| Wall or floor along the slope (400) | 133 cm |
+| Collapsing bridge along the slope (1000) | 333 cm |
+
+There is no third option: upright over a slope is either floating or buried, and buried is refused.
+If the floating turns out to matter, the fix is to let `IsBlockedAt` ignore the single actor the
+placement was aimed at, letting a piece sink into the ramp instead. That loosens a check which is
+also the server's, so it was not done unasked.
+
+**What this gives up:** *"a ramp carries on up the slope of the ramp under it"*, and *"slanted
+staircases fall out of this for free"* - both from 2026-10-26. A ramp is free-standing, so a ramp
+placed on a ramp now steps instead of continuing the slope. Offered and turned down on 2026-11-05;
+if it is missed, the one-line version is `Def.bSurfaceMounted ||
+Def.ActorClass->IsChildOf(AGetawayRamp::StaticClass())` as the branch condition.
+
+### Still unverified (upright on slopes)
+
+- **Nothing has been played.** It builds clean and that is all.
+- **How big the gap reads at speed.** The table above is arithmetic, not a judgement. 133 cm of air
+  under a floor may look broken, or may never be noticed.
+- **A piece on a steep face**, where the normal's dominant axis is X or Y rather than Z. The solve
+  is written for any normal, but every slope in the game so far is a ramp face at 18.4°.
+- **Stacking.** A piece standing square on a slope presents flat faces again, so the compounding
+  that slanted stacking had is gone. What stacking on a ramp now feels like is unplayed.
+- **Two machines.** Nothing new crosses the wire - the client still sends a centre and a rotation
+  and the server still re-tests both - but it has not been played.
+
 ### Oriented boxes, which this needed first
 
 The blocked test, the contact test and the ghost all used `FGetawayPlacement::Size` - the piece's

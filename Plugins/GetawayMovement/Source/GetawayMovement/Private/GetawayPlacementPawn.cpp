@@ -997,22 +997,56 @@ FGetawayPlacement AGetawayPlacementPawn::ComputePlacement(const FGetawayPieceDef
 	}
 	else if (A[Axis] < FMath::Cos(FMath::DegreesToRadians(FMath::Clamp(SlantTolerance, 0.5f, 45.f))))
 	{
-		// A sloped face - a ramp, or something already lying on one. The piece lies down on it
-		// rather than sitting square and burying one corner: yaw it the way you are looking as
-		// usual, then tip that whole frame so its up axis follows the face. A floor becomes a
-		// slanted platform, a wall leans, a ramp carries on up the slope.
-		const FQuat Yaw(FRotator(0.f, Steps * 90.f, 0.f));
-		const FQuat Tilt = FQuat::FindBetweenNormals(FVector::UpVector, N);
-		Out.Rotation = (Tilt * Yaw).Rotator();
-		Out.LocalSize = Def.Size;
-		Out.Size = WorldSizeFor(Def.Size, Out.Rotation);
+		// A sloped face - a ramp, or something already lying on one. Only *free-standing* pieces
+		// reach here: a surface-mounted piece is placed by the branch above, which turns its own
+		// +Z out of whatever face it is stuck to, so spikes and jump pads follow a slope however
+		// this one is set. That split is the whole of what was asked for on 2026-11-05 - things
+		// that attach follow the slope, things that stand on it do not.
+		//
+		// bSlantOnSlopes picks between the two. Slanted (asked for 2026-10-26, now off by
+		// default): yaw the piece the way you are looking, then tip that whole frame so its up
+		// axis follows the face, so a floor becomes a slanted platform and a wall leans. Upright:
+		// yaw only, and the piece stands square on the slope.
+		//
+		// Lift is the one other difference - how far the centre has to sit off the face's plane -
+		// and it is why the two can share the snapping below.
+		float Lift;
+		if (bSlantOnSlopes)
+		{
+			const FQuat Yaw(FRotator(0.f, Steps * 90.f, 0.f));
+			const FQuat Tilt = FQuat::FindBetweenNormals(FVector::UpVector, N);
+			Out.Rotation = (Tilt * Yaw).Rotator();
+			Out.LocalSize = Def.Size;
+			Out.Size = WorldSizeFor(Def.Size, Out.Rotation);
 
-		// Bottom face flush on the slope, then snapped along it so slanted pieces still line up
-		// with each other. Snapping moves the piece sideways, which on a slope also means up or
-		// down, so the dominant axis is solved for afterwards rather than snapped: it puts the
-		// centre back on the face's own plane, exactly half a thickness clear of it. Snapping all
-		// three would bury the piece or float it by the slope's rise across half a grid square.
-		const float Lift = Def.Size.Z * 0.5f;
+			// Lying flush on the face, so the piece reaches toward it by half its own thickness.
+			Lift = Def.Size.Z * 0.5f;
+		}
+		else
+		{
+			Out.Rotation = FRotator(0.f, Steps * 90.f, 0.f);
+			Out.LocalSize = Def.Size;
+			Out.Size = WorldSizeFor(Def.Size, Out.Rotation);
+
+			// Standing square, so the piece reaches toward the face by however far its own box
+			// pokes along the face normal - the support radius of an upright box, which is what
+			// puts its lowest corner *on* the plane rather than through it. Resting and not
+			// cutting in is what keeps IsBlockedAt happy: that test forgives only FitTolerance
+			// (3 cm) of overlap, and a buried corner is far more than that. It also means an
+			// upright piece touches the slope, so IsTouchingSomething is satisfied too.
+			//
+			// As the slope goes to zero this becomes half the piece's height, which is exactly
+			// where the flat branch below would have put it.
+			const FVector H = Out.Size * 0.5f;
+			Lift = FMath::Abs(N.X) * H.X + FMath::Abs(N.Y) * H.Y + FMath::Abs(N.Z) * H.Z;
+		}
+
+		// Bottom face flush on the slope - or resting on it - then snapped along the face so
+		// pieces still line up with each other. Snapping moves the piece sideways, which on a
+		// slope also means up or down, so the dominant axis is solved for afterwards rather than
+		// snapped: it puts the centre back exactly Lift clear of the face's own plane. Snapping
+		// all three would bury the piece or float it by the slope's rise across half a grid
+		// square.
 		FVector Centre = P + N * Lift;
 		float Rest = FVector::DotProduct(N, P) + Lift;
 		for (int32 i = 0; i < 3; ++i)
