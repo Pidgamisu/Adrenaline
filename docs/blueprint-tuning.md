@@ -162,7 +162,25 @@ or in the Blueprint's Details panel both stick. Safe to run twice: existing Blue
 though the materials named in the table are rewritten every run, so a colour picked by hand needs
 clearing out of the table to survive.
 
-Two things it does that are worth knowing. It matches catalog entries on **Id**, not position,
+**`Content/Python/flag_special_pieces.py` is the narrow version of that**, added 2026-11-06 with
+the one-normal-one-special hand. It copies a single field - `bSpecial` on each piece - out of
+`AGetawayGameMode`'s class defaults onto `BP_GetawayGameMode`'s `Catalog` rows, matching on Id and
+writing nothing else: no Actor Class, no sizes, no materials, and no piece Blueprint recompiled. It
+exists because the Blueprint stores the whole `Catalog` array and stopped tracking C++ long ago, so
+a field *added* to `FGetawayPieceDef` reads false on all fourteen rows there until something writes
+it - and `dress_pieces.py`, which would also fix it, rebuilds the array wholesale and recompiles
+nine Blueprints to do so. Reach for that one only when a piece is being **added**; this one when a
+flag on an existing piece changed. It forces the save rather than trusting the dirty flag, for the
+reason in *Known bug* below, and it refuses to write at all if C++ reports no special pieces, since
+that means the build is stale and the result would be fourteen normal rows.
+
+It ran clean first time and the hand it produced played the same day, so its one real unknown - what
+UE's Python layer calls a `bSpecial` property, since the engine's own scripts pass the raw name while
+the generated stubs strip the leading b - never had to be settled by hand. The script tries each
+candidate against a real struct and logs the one that answered, which is the pattern to copy for the
+next flag added to a piece.
+
+Two things `dress_pieces.py` does that are worth knowing. It matches catalog entries on **Id**, not position,
 because adding a piece to the C++ catalog later would shift every index below it and silently
 dress the wrong piece. And it **reads every material back** after compiling, because writing to a
 component on a Blueprint's class default object is the part most likely to go quietly nowhere; a

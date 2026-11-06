@@ -74,9 +74,58 @@ The thirteenth is the **speed ring** (100x300x300), added 2026-11-05, a hoop you
 three seconds of extra speed - see *The speed ring* at the end of this file. The fourteenth is the
 **grapple pickup** (110x110x110), added 2026-11-05: the same pad as the C4 pickup with a hook
 turning above it, and the second thing a player can carry - see *The grapple pickup* at the end of
-this file. Fourteen in all; the party box deals `HandSize` (3) of them at random without repeats.
+this file. Fourteen in all; the party box deals `HandSize` of them without repeats - **2** in
+`BP_GetawayGameMode`, where the C++ says 3 - and since 2026-11-06 it deals **one normal and one
+special**, not two at random.
 
 Edit the catalog on a Blueprint child of `GetawayGameMode` - it is `EditDefaultsOnly`.
+
+### One normal and one special (added 2026-11-06)
+
+**Played the day it was built and signed off at the first split** - *"works great"*. No piece was
+moved across after playing, which is worth noting given the four interesting calls below were all
+reasoned about rather than tested.
+
+A hand is one piece you build the course **out of** and one piece that changes how it is **moved
+through**. `FGetawayPieceDef::bSpecial` says which a piece is, and the split came from going through
+the catalog a row at a time:
+
+| Normal - structure you place and stand on | Special - pickups, hazards, speed devices |
+|---|---|
+| Floor, wall, ledge | C4 pickup |
+| Ramp | Grapple pickup |
+| Breakable panel | Spikes |
+| Crate | Jump pad |
+| Windmill | Vortex |
+| Collapsing bridge | Speed ring |
+
+Eight normal, six special. The four interesting calls are all on the normal side:
+
+- **The breakable panel and the crate.** Since *Breaking is granted by the level*, `SmashSpeed`
+  1100 is out of reach on foot - so a panel nobody has put a pad or a ring in front of is a wall,
+  and a crate is a 250 cm block you climb round. They are structure with a conditional twist, and
+  the twist needs a *special* piece placed near them to go off, which is exactly the combination
+  the one-of-each hand is for.
+- **The windmill** is a lift you ride. It moves, but what it does is carry you up and over, which
+  is what a staircase would do.
+- **The collapsing bridge** is a floor that happens to be a lie. It spans a gap like a floor and is
+  placed like one; it just stops being there.
+
+`AGetawayGameMode::DealHandFor` draws one out of each pool first, in that order - **normal in slot
+1, special in slot 2, every round**, deliberately not shuffled, so 1 and 2 mean the same thing every
+time you build. Any slot past the second is free, dealt from whatever is left; at `HandSize` 2 there
+are none. `bOneOfEach` off on the game mode deals from the whole catalog as before.
+
+If either pool is empty - a flag cleared, or every pickup retired from the catalog - nothing is
+drawn from it and the free loop fills the slot instead, so a hand is never short.
+
+**The flag lives in C++ and has to be pushed into the Blueprint.** `BP_GetawayGameMode` stores the
+whole `Catalog` array and stopped tracking C++ long ago, so all fourteen of its rows read
+`bSpecial` false until something writes them. `Content/Python/flag_special_pieces.py` copies just
+that one field across, matching on Id and touching nothing else - no Actor Class, no sizes, no
+materials. `dress_pieces.py` also carries it, because it rebuilds the array from C++ wholesale, but
+it recompiles nine piece Blueprints to do it and is the wrong tool unless a piece is being *added*.
+Until the script is run the deal is a normal piece plus a free one, which looks like it half works.
 
 **The sizes that play are `BP_GetawayGameMode`'s, not the C++ ones.** The Blueprint stores the whole
 `Catalog` array, so its copy wins outright and a size changed in C++ never reaches the game. The two
@@ -382,7 +431,7 @@ Play-tested 2026-10-16: reaching it ends the run and returns to placement as int
 
 - **The rest of the round loop:** deaths. More than one player, scoring and per-player finish
   arrived on 2026-10-17 - see *The round loop*. The party box still deals from the whole catalog
-  rather than a per-round deck.
+  rather than a per-round deck; one normal and one special (2026-11-06) is the only shape it has.
 - ~~**The ghost is drawn with debug lines**, which are compiled out of Shipping builds.~~
   **Done 2026-11-02**, see *The ghost is real geometry* at the end of this file.
 

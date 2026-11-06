@@ -63,6 +63,22 @@ struct FGetawayPieceDef
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Piece")
 	bool bSurfaceMounted = false;
 
+	/**
+	 * Special, rather than ordinary structure. The party box deals one of each, so a hand is one
+	 * piece you build the course *out of* and one piece that changes how it is *moved through*.
+	 *
+	 * Special is the pickups, the hazards and the speed devices: C4, the grapple pad, spikes, the
+	 * jump pad, the vortex, the speed ring. Normal is everything you place and stand on, which
+	 * deliberately includes the breakable panel, the crate, the windmill and the collapsing bridge -
+	 * since *Breaking is granted by the level* a panel nobody has put a pad in front of is only a
+	 * wall, the windmill is a lift you ride, and the bridge is a floor that happens to be a lie.
+	 *
+	 * Decided 2026-11-06, going through the catalog a row at a time. See AGetawayGameMode::bOneOfEach,
+	 * which is what honours it, and *One normal and one special* in docs/placement.md.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Piece")
+	bool bSpecial = false;
+
 	bool IsValid() const { return ActorClass != nullptr && !Size.IsNearlyZero(); }
 };
 

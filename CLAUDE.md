@@ -206,6 +206,21 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   anything when you arrive by piece.
   The C++ default is 1100 as well, so `BP_Character`'s override is now redundant and can be cleared
   at leisure - same value either way.
+- **A hand is one normal piece and one special one** (decided and played 2026-11-06, going through
+  the catalog a row at a time, and signed off at the first split with no piece moved across). The party box no longer deals two at random: `bOneOfEach` on the game mode draws
+  one piece you build the course **out of** and one that changes how it is **moved through**, normal
+  in slot 1 and special in slot 2, the same order every round. `FGetawayPieceDef::bSpecial` says
+  which a piece is. **Special is six:** C4 pickup, grapple pickup, spikes, jump pad, vortex, speed
+  ring - pickups, hazards and speed devices. **Normal is the other eight:** floor, wall, ledge, ramp,
+  breakable panel, crate, windmill, collapsing bridge. The panel and the crate are normal because
+  since *Breaking is granted by the level* nothing you can do on foot breaks them, so placed alone
+  they are a wall and a block and the twist needs a *special* piece nearby to go off - which is the
+  combination the hand now guarantees. The windmill is a lift you ride; the bridge is a floor that
+  happens to be a lie. `bOneOfEach` off deals from the whole catalog as before.
+  **The flag has to be pushed into `BP_GetawayGameMode`** with
+  `Content/Python/flag_special_pieces.py`, because the Blueprint stores the whole `Catalog` array
+  and every row reads false until something writes it. See *One normal and one special* in
+  `docs/placement.md`.
 - **One item in your hand** (decided 2026-11-05, replacing "carry up to two charges" of C4).
   `ItemCapacity` on the character is 1 and counts C4 charges and grapple hooks together, so no
   pickup of either kind gives you anything until you have spent what you are carrying. Throwing or
@@ -352,7 +367,8 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 ## Next steps
 
 1. More traps. Spikes were the first.
-2. The party box deals from the whole catalog. A per-round deck is still to do.
+2. The party box deals one normal piece and one special one from the whole catalog (2026-11-06). A
+   per-round deck is still to do.
 3. ~~**A front end**: a menu with Host, Join and an IP box, and Escape to leave in game.~~ **Done
    2026-11-02, and fully played in a Shipping build 2026-11-03** - Resume, Leave to menu, Quit and a
    join that fails all work, the first time Escape has been pressed outside the editor. See *The

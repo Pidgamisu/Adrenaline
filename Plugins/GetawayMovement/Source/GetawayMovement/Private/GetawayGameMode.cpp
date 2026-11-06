@@ -43,6 +43,18 @@ namespace
 		Def.bSurfaceMounted = bSurfaceMounted;
 		return Def;
 	}
+
+	/**
+	 * Marks a piece as the special half of the hand - a pickup, a hazard or a speed device, as
+	 * opposed to structure you stand on. Wrapped round MakePiece rather than being a seventh
+	 * positional bool, because five bools in a row in a call nobody can read is how a piece ends
+	 * up surface mounted by accident.
+	 */
+	FGetawayPieceDef Special(FGetawayPieceDef Def)
+	{
+		Def.bSpecial = true;
+		return Def;
+	}
 }
 
 AGetawayGameMode::AGetawayGameMode()
@@ -65,6 +77,12 @@ AGetawayGameMode::AGetawayGameMode()
 	EffectPool = { EGetawayEffect::DoubleJump, EGetawayEffect::Loaded, EGetawayEffect::LowGravity,
 		EGetawayEffect::Grapple };
 
+	// The catalog, and with it the normal/special split that bOneOfEach deals from: the six rows
+	// wrapped in Special() are the pickups, the hazards and the speed devices, and the other eight
+	// are structure you place and stand on. Going through the list a row at a time on 2026-11-06
+	// put the panel, the crate, the windmill and the collapsing bridge on the normal side - see
+	// FGetawayPieceDef::bSpecial for why each of those is only scenery until something else is
+	// placed near it.
 	Catalog.Add(MakePiece(TEXT("floor"), TEXT("Floor"), FVector(400.f, 400.f, 50.f), AGetawayPiece::StaticClass()));
 	Catalog.Add(MakePiece(TEXT("wall"), TEXT("Wall"), FVector(400.f, 50.f, 400.f), AGetawayPiece::StaticClass()));
 	Catalog.Add(MakePiece(TEXT("ledge"), TEXT("Ledge"), FVector(300.f, 300.f, 150.f), AGetawayPiece::StaticClass()));
@@ -82,31 +100,31 @@ AGetawayGameMode::AGetawayGameMode()
 	Catalog.Add(MakePiece(TEXT("ramp"), TEXT("Ramp"), FVector(600.f, 400.f, 200.f), AGetawayRamp::StaticClass(), true, true));
 	Catalog.Add(MakePiece(TEXT("bridge"), TEXT("Collapsing bridge"), FVector(1000.f, 400.f, 60.f), AGetawayCollapsingBridge::StaticClass(), true, true));
 	// The pickup builds its own meshes, so it is placed at its own size; Size is only the ghost.
-	Catalog.Add(MakePiece(TEXT("c4"), TEXT("C4 pickup"), FVector(110.f, 110.f, 110.f), AGetawayC4Pickup::StaticClass(), false));
+	Catalog.Add(Special(MakePiece(TEXT("c4"), TEXT("C4 pickup"), FVector(110.f, 110.f, 110.f), AGetawayC4Pickup::StaticClass(), false)));
 	// The hook comes from a pad of its own, the same furniture at the same size. Your hand holds one
 	// item across both, so placing one of each in a stretch of course is offering a choice rather
 	// than a shopping trip - see AGetawayCharacter::ItemCapacity.
-	Catalog.Add(MakePiece(TEXT("grapple"), TEXT("Grapple pickup"), FVector(110.f, 110.f, 110.f),
-		AGetawayGrapplePickup::StaticClass(), false));
+	Catalog.Add(Special(MakePiece(TEXT("grapple"), TEXT("Grapple pickup"), FVector(110.f, 110.f, 110.f),
+		AGetawayGrapplePickup::StaticClass(), false)));
 	// Surface mounted: the same three numbers as a wall, read as a plate - 400 x 400 across the
 	// face it sticks to, 50 thick out from it. It cannot be placed without something to stick to.
-	Catalog.Add(MakePiece(TEXT("spikes"), TEXT("Spikes"), FVector(400.f, 400.f, 50.f), AGetawaySpikes::StaticClass(), true, false, true));
+	Catalog.Add(Special(MakePiece(TEXT("spikes"), TEXT("Spikes"), FVector(400.f, 400.f, 50.f), AGetawaySpikes::StaticClass(), true, false, true)));
 	// Surface mounted the other way round: the spikes are what you must not touch, a jump pad is
 	// what you aim for. It fires you straight out of the face it is stuck to, so the surface you
 	// place it on is the launch direction. 200 x 200 rather than the bed's 400, because a pad is a
 	// route you have to hit rather than a hazard you have to miss.
-	Catalog.Add(MakePiece(TEXT("jumppad"), TEXT("Jump pad"), FVector(200.f, 200.f, 50.f), AGetawayJumpPad::StaticClass(), true, false, true));
+	Catalog.Add(Special(MakePiece(TEXT("jumppad"), TEXT("Jump pad"), FVector(200.f, 200.f, 50.f), AGetawayJumpPad::StaticClass(), true, false, true)));
 	// Free-standing, not surface mounted: a column you stand in. 300 x 300 x 500 - three quarters of
 	// a floor tile across, and a storey and a half tall, so it is a wide enough mouth to run into at
 	// speed and long enough that how far up you come out is a decision. It lifts straight up however
 	// it is placed, so it needs nothing aimed and nothing stuck to.
-	Catalog.Add(MakePiece(TEXT("vortex"), TEXT("Vortex"), FVector(200.f, 200.f, 400.f), AGetawayVortex::StaticClass()));
+	Catalog.Add(Special(MakePiece(TEXT("vortex"), TEXT("Vortex"), FVector(200.f, 200.f, 400.f), AGetawayVortex::StaticClass())));
 	// A hoop you run through for a few seconds of extra speed. Directional, with the arrow along
 	// the axis of the hole, so it faces you as you place it and R turns it side on. 100 deep so it
 	// is a gate rather than a tunnel, and 300 x 300 across so a 3 m hole stands on the floor with
 	// its lowest point on the ground - wide enough to hit at speed without aiming.
-	Catalog.Add(MakePiece(TEXT("speedring"), TEXT("Speed ring"), FVector(100.f, 300.f, 300.f),
-		AGetawaySpeedRing::StaticClass(), true, true));
+	Catalog.Add(Special(MakePiece(TEXT("speedring"), TEXT("Speed ring"), FVector(100.f, 300.f, 300.f),
+		AGetawaySpeedRing::StaticClass(), true, true)));
 	// A paddle wheel: four level plates orbiting a horizontal axle, so it is a lift you ride
 	// rather than a windmill you dodge. Directional, with the arrow along the axle, so it goes up
 	// facing you and R turns it side on. Not scaled: it builds itself from its own blade
@@ -266,12 +284,42 @@ void AGetawayGameMode::DealHandFor(AGetawayPlayerState* PS)
 	// Dealt per player, so two players no longer share one list. That sharing is what let one of
 	// them spend a slot and shift the indices under the other, which happened during the spike.
 	TArray<FGetawayPieceDef> Dealt;
-	for (int32 n = 0; n < HandSize; ++n)
+
+	// Draw one index out of a pool at random and take it out of `Usable` as well, so no piece can
+	// be dealt twice however many pools it passed through.
+	auto DrawFrom = [this, &Usable, &Dealt](TArray<int32>& Pool)
 	{
-		if (Usable.Num() == 0) break;
-		const int32 Pick = FMath::RandRange(0, Usable.Num() - 1);
-		Dealt.Add(Catalog[Usable[Pick]]);
-		Usable.RemoveAtSwap(Pick);
+		if (Pool.Num() == 0) return false;
+		const int32 Pick = FMath::RandRange(0, Pool.Num() - 1);
+		const int32 Index = Pool[Pick];
+		Pool.RemoveAtSwap(Pick);
+		Usable.Remove(Index);
+		Dealt.Add(Catalog[Index]);
+		return true;
+	};
+
+	// One normal and one special, in that order, before anything is dealt freely: a hand is one
+	// piece you build the course out of and one that changes how it is moved through. Slot order is
+	// fixed rather than shuffled so that 1 and 2 mean the same thing every round.
+	//
+	// If either half of the catalog is empty - somebody cleared a flag, or retired every pickup -
+	// this quietly deals nothing from it rather than dealing a short hand, and the free loop below
+	// fills the slot from whatever is left.
+	if (bOneOfEach && HandSize >= 2)
+	{
+		TArray<int32> Normals;
+		TArray<int32> Specials;
+		for (const int32 Index : Usable)
+		{
+			(Catalog[Index].bSpecial ? Specials : Normals).Add(Index);
+		}
+		DrawFrom(Normals);
+		DrawFrom(Specials);
+	}
+
+	for (int32 n = Dealt.Num(); n < HandSize; ++n)
+	{
+		if (!DrawFrom(Usable)) break;
 	}
 	PS->SetHand(Dealt);
 }

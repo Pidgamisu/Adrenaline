@@ -43,6 +43,20 @@ public:
 	int32 HandSize = 3;
 
 	/**
+	 * Every hand holds at least one ordinary piece and at least one special one, rather than being
+	 * drawn from the whole catalog at random. At `HandSize` 2 - which is what BP_GetawayGameMode
+	 * plays - that is exactly one of each: something to build with in slot 1, something that
+	 * changes how the course is moved through in slot 2, in that order every round.
+	 *
+	 * Which is which is `bSpecial` on the piece. Off deals from the whole catalog as it did before,
+	 * which could hand you two walls or two traps and nothing to join them with.
+	 *
+	 * Any slots past the first two are free, dealt from whatever is left either way.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Round")
+	bool bOneOfEach = true;
+
+	/**
 	 * Seconds everyone gets to build before the run starts. Spending your own hand starts your own
 	 * run early. 0 turns the clock off and waits for Enter, which is how placement was first tested.
 	 */

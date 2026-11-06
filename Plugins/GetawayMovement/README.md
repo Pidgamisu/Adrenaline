@@ -207,8 +207,14 @@ confirmed deliberate. Anything not listed here is the C++ default.
 | bStartInMenu (game mode) | true | false, so Play goes straight to placement |
 
 **Note what is not in that list.** `bMantleOverSmash`, `bGroundStrafeGain`, `bAirStrafeGain`,
-`AirControlAccelerate` and the jump pad's `FrictionScale` / `FrictionTime` have no Blueprint
-override, so their C++ defaults are what you play and changing the C++ changes the game.
+`AirControlAccelerate`, the game mode's `bOneOfEach` and the jump pad's `FrictionScale` /
+`FrictionTime` have no Blueprint override, so their C++ defaults are what you play and changing the
+C++ changes the game.
+
+`bOneOfEach` is the exception that proves the rule about the Catalog, though: the *flag it reads* -
+`bSpecial` on each piece - is inside `Catalog`, which the Blueprint does store and does override, so
+that one has to be pushed across with `Content/Python/flag_special_pieces.py`. See *One normal and
+one special* in `docs/placement.md`.
 
 **`SmashSpeed` is the cautionary tale.** On 2026-11-06 the C++ default was moved to 800 and the
 override was *meant* to be cleared so that 800 would be live. The export above shows what actually
