@@ -139,7 +139,30 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   The full list is *What the Blueprints actually play at* in `Plugins/GetawayMovement/README.md`,
   and `Content/Python/export_tuning.py` dumps it again at any time. Clearing an override in the
   Details panel puts the C++ default back.
-- **Movement feel:** Source-style ground friction and air strafing, lossless bunny hops, auto-hop while holding jump, jump buffering, mouse-wheel jump.
+- **Movement feel:** Source-style ground friction, lossless bunny hops, auto-hop while holding jump, jump buffering, mouse-wheel jump. **Air strafing no longer gains speed** - see *Speed comes from the pieces* below.
+- **Speed comes from the pieces, not from strafing** (decided and played 2026-11-06, signed off the
+  same day - *"I like this a lot more, it's much more consistent"*). Air input
+  **steers your momentum without lengthening it**: `bAirStrafeGain` is **off**, so a bunny hop
+  preserves speed rather than building it, and nothing you can do with the keyboard and mouse takes
+  you past `RunSpeed` 800. Top speed comes only from what is placed in the level - jump pads, speed
+  rings, slides down slopes, the C4 jump, the grapple - which makes placing a ring or a pad a real
+  decision instead of a shortcut for somebody who cannot strafe. It is also what lets `SmashSpeed`
+  1100 sit out of reach on foot - see *Breaking is granted by the level* below.
+  What you get in exchange is **real air control**: `AirSpeedCap` 35 was only ever that small to
+  stop strafing gaining for free, and the cost was that you could influence your flight only within
+  about 2.5 degrees of perpendicular to your own momentum. With the gain gone the cap stops being
+  load-bearing, so redirect-only mode ignores it and targets the full wish speed, opening the gate
+  at every angle. `AirControlAccelerate` 3 is the turn strength, worth about 170 deg/s at full
+  speed. `bAirStrafeGain` back on restores classic Source strafing exactly, with no retuning.
+  `AirControlAccelerate` 3 was played at its first-pass value and kept.
+- **Turning the camera while you run does not speed you up** (fixed 2026-11-06; this one was a bug,
+  not a feel change). Holding forward and turning settled at about **1030 cm/s**, because the ground
+  acceleration cap is on your speed *projected* onto the direction you are asking for, never on your
+  actual speed - so turning keeps the projection under 800 while the real speed climbs, and the push
+  along your own momentum outruns friction. `bGroundStrafeGain` off ratchets it: acceleration still
+  steers you freely but cannot raise your speed past what you are asking for. Faithful Source
+  behaviour either way (the same formulas with Source's constants give a 1.30x overspeed against our
+  1.29x), just far easier to exploit with a mouse here.
 - **Double jump:** 1 air jump. It redirects your momentum toward the keys you're holding, without losing speed. It is not spent by a jump pressed just before landing (that press is kept for a bunny hop).
 - **Slide:** crouch at speed. Entry boost on a 1 s cooldown, very low friction, speeds up on slopes.
   **Slides are on a cooldown** (decided 2026-10-31): once a slide ends, for whatever reason - crouch
@@ -152,15 +175,37 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   - Space kicks off.
   - In the Unreal version you can't re-grab the same wall until you land.
 - **Mantle:** stays in. Keeps 75% of your run-up speed (it doesn't stop you) and does a small camera jiggle.
-- **No kick/punch button.** Breaking things is done by hitting them at speed (slide or jump into them) or with C4.
-- **Climbing beats breaking** (decided 2026-11-01): a breakable whose top you could mantle is
-  climbed, not burst. `bMantleOverSmash` on the movement component turns it off. Panels and anything
-  else outside the mantle window still break on contact at speed.
-  **A crate is not one of them any more** (settled 2026-11-03): the crate was retuned to 200 cm
-  cubed - **250 since 2026-11-05** - which puts its top above `MantleMaxHeight` 170, so a crate smashes rather than being
-  climbed. Asked and left that way deliberately - a 2 m block reads as a wall, not a step.
-  Raising `MantleMaxHeight` past 200 on `BP_Character` would hand climbing back, and make
-  everything else that tall climbable with it. Don't.
+- **No kick/punch button.** Breaking things is done by arriving at `SmashSpeed` 1100 or with C4 - and since 2026-11-06 that is a speed only the pieces can give you, so a slide or a jump on flat ground is no longer enough. See *Breaking is granted by the level* below.
+- **Breaking beats climbing** (decided 2026-11-06, reversing "climbing beats breaking" of
+  2026-11-01): if you hit a breakable **fast enough to break it, it breaks** - it is never spared
+  because its top happened to be climbable. Speed is the whole decision, and the two rules can
+  never overlap: `SmashAhead` only runs at all above the smash threshold, so anything slower than
+  that still climbs exactly as before. `bMantleOverSmash` on the movement component (now **false**
+  by default) puts the old rule back.
+  The old rule was never played, only reasoned about - see *Still unverified* in `docs/placement.md`.
+  **A crate was already outside it** (settled 2026-11-03): the crate was retuned to 200 cm cubed -
+  **250 since 2026-11-05** - which puts its top above `MantleMaxHeight` 170, so a crate standing on
+  the floor beside you smashes rather than being climbed whatever this flag says. Asked and left
+  that way deliberately - a 2 m block reads as a wall, not a step. Raising `MantleMaxHeight` past
+  200 on `BP_Character` would hand climbing back, and make everything else that tall climbable with
+  it. Don't.
+- **Breaking is granted by the level, not by running hard** (decided and played 2026-11-06).
+  `SmashSpeed` is **1100**, one rule for every way of moving, and it is deliberately **out of reach
+  on foot**: a full sprint is 800, a slide out of that run is 1050, a wallrun is capped at 920, and
+  with `bAirStrafeGain` off there is no strafing past any of them. So the only things that break a
+  breakable are a **jump pad** (1400), a **speed ring** (1200), a **slide down a ramp** where
+  gravity carries you past it, and **C4**. You have to be going exceptionally fast, and only the
+  pieces make you that fast - the same thought as *Speed comes from the pieces* above, applied to
+  destruction.
+  Two older rules died with it. Sliding had a **second, much lower threshold** of its own
+  (`SlideMinSpeed * 0.9`, so 450), so almost any slide burst almost anything it brushed - that
+  branch is gone rather than retuned, and the `SlideSmashSpeedScale` knob that briefly replaced it
+  was dropped too. And **"hitting them at speed (slide or jump into them)" no longer holds on the
+  flat**: sliding into a panel on level ground now does nothing. Since this is also the
+  climb-or-break line, a breakable on foot is always a step, and `bMantleOverSmash` only decides
+  anything when you arrive by piece.
+  The C++ default is 1100 as well, so `BP_Character`'s override is now redundant and can be cleared
+  at leisure - same value either way.
 - **One item in your hand** (decided 2026-11-05, replacing "carry up to two charges" of C4).
   `ItemCapacity` on the character is 1 and counts C4 charges and grapple hooks together, so no
   pickup of either kind gives you anything until you have spent what you are carrying. Throwing or
@@ -241,6 +286,18 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   keeps reading the *raw* `RunSpeed`, or a boosted run would look like a normal jog; the boost's own
   signal is a flat `BoostFOV` bump. Boosts refresh rather than stack. See *The speed ring* in
   `docs/placement.md`.
+- **A jump pad takes the drag away rather than raising your ceiling** (decided 2026-11-06). The
+  other half of the decision above, and the opposite lever. A ring raises `RunSpeed` so you can
+  *climb* to a speed you could not hold; a pad already throws you at `LaunchSpeed` 1400, far above
+  anything you can run at, and the problem is **keeping** it - Source friction eats the whole launch
+  on the first touchdown. So the pad hands you a low-friction window instead: `FrictionScale` 0.3
+  for `FrictionTime` 3 s, multiplying `GroundFrictionSource` *and* `SlideFriction`
+  (`UGetawayMovementComponent::AddLowFriction`), so landing out of a pad into a slide is the fast
+  line. It is not a push and never touches your velocity, so a window can only ever let you keep
+  what you landed with. Windows refresh rather than stack, like boosts.
+  **There is no air friction in this game to reduce**: `FallingLateralFriction` is 0 and
+  `CalcVelocity` applies no drag at all while airborne, so speed through the air is already
+  lossless and the window has nothing to do until you touch down.
 - **Hand-dressed pieces are protected by emptying their row, not by recording the colour**
   (settled 2026-11-05, after `dress_pieces.py` put its table back over an afternoon's editor work).
   Five rows in `PIECES` are now `{}, {}` - spikes, panel, jump pad, C4 pickup, vortex. The table
@@ -255,7 +312,16 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 
 ## Units and tuning
 
-Unreal uses cm. The prototype showed Source units: **1 u = 2.5 cm** (40 u = 1 m, 320 u/s = 800 cm/s). The tuned defaults are in the plugin README table. Key values:
+Unreal uses cm. The prototype showed Source units: **1 u = 2.5 cm** (40 u = 1 m, 320 u/s = 800 cm/s). The tuned defaults are in the plugin README table.
+
+**The in-game speedometer reads cm/s** (changed 2026-11-06), so the number on screen is the number
+in the Details panel. It showed the lab's u/s before that, and every reading was 2.5x smaller than
+the property being tuned against it - which made a working 550 smash threshold look broken, because
+a slide reading "300" is really 750 cm/s. The lab's u/s is still on the small grey line under it,
+for comparing feel against `Reference/getaway-lab.html`. The remote-player debug line over other
+players reads cm/s too.
+
+Key values:
 
 - RunSpeed 800
 - GroundAccelerate 10, GroundFrictionSource 5, StopSpeed 250

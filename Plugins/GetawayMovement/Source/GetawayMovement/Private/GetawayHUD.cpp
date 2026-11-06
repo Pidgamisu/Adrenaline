@@ -152,7 +152,13 @@ void AGetawayHUD::DrawHUD()
 	UFont* Big = GEngine->GetLargeFont();
 	UFont* Small = GEngine->GetSmallFont();
 
-	const int32 Ups = FMath::RoundToInt32(Player->GetVelocity().Size2D() / 2.5f);
+	// cm/s, because that is what every tuning property in the editor is in - RunSpeed, SmashSpeed,
+	// SlideMinSpeed and the rest - so the number on screen is the number you type in the Details
+	// panel. It showed the lab's Source units (cm/s / 2.5) until 2026-11-06, inherited from the
+	// browser prototype, and that cost a x2.5 conversion every single time anything was tuned
+	// against what the speedometer said. It also hid a real one: a slide reading "300" is 750 cm/s,
+	// comfortably over a 550 smash threshold, so the threshold looked broken when it was not.
+	const float Speed = Player->GetVelocity().Size2D();
 	const FString State = Move->GetStateName();
 	FLinearColor StateColor = Dim;
 	if (State == TEXT("SLIDE")) StateColor = Warn;
@@ -169,8 +175,12 @@ void AGetawayHUD::DrawHUD()
 		Centred(FString::Printf(TEXT("slide  %.1fs"), SlideWait), Small, 1.1f, CX, Bottom - 172.f, Dim);
 	}
 	Centred(State, Small, 1.4f, CX, Bottom - 150.f, StateColor);
-	Centred(FString::Printf(TEXT("%d u/s"), Ups), Big, 2.2f, CX, Bottom - 125.f, FLinearColor::White);
-	Centred(FString::Printf(TEXT("%.1f m/s"), Player->GetVelocity().Size2D() / 100.f), Small, 1.1f, CX, Bottom - 62.f, Dim);
+	Centred(FString::Printf(TEXT("%d cm/s"), FMath::RoundToInt32(Speed)), Big, 2.2f, CX, Bottom - 125.f, FLinearColor::White);
+	// The lab's units kept on the small line, where m/s used to be. m/s was worth having when the
+	// big number was u/s, but against a cm/s readout it is the same digits shifted by two places;
+	// u/s is the one that still says something, because Reference/getaway-lab.html shows u/s and it
+	// is the reference for how movement should feel. 1 u = 2.5 cm.
+	Centred(FString::Printf(TEXT("%d u/s"), FMath::RoundToInt32(Speed / 2.5f)), Small, 1.1f, CX, Bottom - 62.f, Dim);
 
 	// What is in your hand. One line for both items rather than one line each, because the hand
 	// holds a single thing (AGetawayCharacter::ItemCapacity) and a second line reading "none" for

@@ -1213,10 +1213,12 @@ void AGetawayCharacter::ShowRemoteState() const
 	if (!bShowRemoteState || !GEngine || GetNetMode() == NM_Standalone) return;
 
 	const EGetawayNetMove State = GetNetMoveState();
-	const int32 Ups = FMath::RoundToInt32(FVector(NetMove.Velocity).Size2D() / 2.5f);
+	// cm/s, to agree with the speedometer and with every tuning property in the editor. See the
+	// note in AGetawayHUD::DrawHUD: this read u/s until 2026-11-06.
+	const int32 CmPerSec = FMath::RoundToInt32(FVector(NetMove.Velocity).Size2D());
 	// Keyed on the actor so each remote player gets its own line rather than overwriting the others.
 	GEngine->AddOnScreenDebugMessage(static_cast<uint64>(GetUniqueID()), 0.2f, NetMoveColour(State),
-		FString::Printf(TEXT("%s  %s  %d u/s"), *GetName(), NetMoveName(State), Ups));
+		FString::Printf(TEXT("%s  %s  %d cm/s"), *GetName(), NetMoveName(State), CmPerSec));
 }
 #endif
 

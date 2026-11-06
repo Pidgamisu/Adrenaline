@@ -19,7 +19,7 @@ What's in it:
 | `AGetawayJumpPad` | A pad that throws you out of whatever it is stuck to, at `LaunchSpeed`. Mounts flat the same way, so a wall pad fires you sideways |
 | `AGetawayVortex` | An anti-gravity column that holds you climbing at `LiftSpeed` for as long as you are inside it, while you keep full steering |
 | `AGetawayPlacementPawn` | The placement-phase fly camera: aim at a surface, drop the piece in your hand |
-| `AGetawayHUD` | Crosshair, speedometer in the lab's units, movement state, C4 count, the dealt hand while placing |
+| `AGetawayHUD` | Crosshair, speedometer in cm/s (the editor's units, with the lab's u/s on the small line under it), movement state, C4 count, the dealt hand while placing |
 | `AGetawayGameMode` | Uses the character and HUD above, owns the placement / run phases and the piece catalog |
 
 ## Setup
@@ -67,6 +67,13 @@ Full map and the tuning in `docs/controller.md`.
 
 Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, so **1 u = 2.5 cm**. If you changed sliders in the lab's tuning bench, multiply any u/s value by 2.5 to get cm/s.
 
+**The in-game speedometer reads cm/s** (since 2026-11-06), so what you read while playing matches
+the right-hand column below and the Details panel directly, with no conversion. It showed u/s until
+then, which meant every number you read while playing was 2.5x smaller than the property you were
+trying to tune against it - and that hid a real confusion: a slide reading "300" is 750 cm/s, well
+over a 550 smash threshold, so the threshold looked broken when it was working. The lab's u/s is
+still on the small grey line underneath, for comparing feel against `Reference/getaway-lab.html`.
+
 | Lab setting | Lab value | Unreal property | Value |
 |---|---|---|---|
 | Run speed | 320 u/s | RunSpeed | 800 |
@@ -74,7 +81,10 @@ Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, 
 | sv_friction | 5 | GroundFrictionSource | 5 |
 | sv_stopspeed | 100 u/s | StopSpeed | 250 |
 | sv_airaccelerate | 12 | AirAccelerate | 12 |
-| Air wishspeed cap | 30 u | AirSpeedCap | 75 |
+| Air wishspeed cap | 30 u | AirSpeedCap | 75 (ignored while air strafe gain is off) |
+| Air strafing gains speed | yes | bAirStrafeGain | **off** - steers only |
+| Air turn strength | - | AirControlAccelerate | 3 (~170 deg/s at full speed) |
+| Ground strafing gains speed | yes | bGroundStrafeGain | **off** - was worth 1030 cm/s |
 | sv_gravity | 800 | GravityScale | 2.04 (with default world gravity -980) |
 | Jump impulse | 300 u/s | JumpSpeed | 750 |
 | Air jumps | 1 | AirJumps | 1 |
@@ -87,7 +97,7 @@ Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, 
 | Kick-off push | 220 u/s | WallKickSpeed | 550 |
 | Attach range | 0.60 m | WallAttachRange | 60 |
 | Mantle speed kept | 75% | MantleSpeedKept | 0.75 |
-| Smash speed | 360 u/s | SmashSpeed | 900 |
+| Smash speed | 360 u/s | SmashSpeed | 1100 - one rule, and out of reach on foot |
 | Sensitivity | 2.20 | MouseSensitivity (character) | 2.2 |
 | Pad turn rate | Apex 4 Linear | StickLookYawSpeed / StickLookPitchSpeed (character) | 230 / 180 deg/s |
 | Pad stick curve | Apex Linear | StickLookExponent (character) | 1.0 |
@@ -113,6 +123,50 @@ Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, 
 | Speed ring boost | - | BoostScale / BoostTime (speed ring) | 1.5x for 3 s |
 | Speed ring snap | - | bSnapToSpeed / SnapMinSpeed (speed ring) | on / 300 |
 | Speed boost FOV | - | BoostFOV (character) | 9 deg |
+| Jump pad launch | - | LaunchSpeed (jump pad) | 1400 |
+| Jump pad low friction | - | FrictionScale / FrictionTime (jump pad) | 0.3x for 3 s |
+
+## Strafing: where speed is allowed to come from (2026-11-06)
+
+Two switches, both **off** by default, both new. They share one helper,
+`UGetawayMovementComponent::RatchetSpeed`, which runs straight after an acceleration step and
+refuses to let it have made you *faster*, while leaving the direction it chose alone. The ceiling is
+`Max(speed before, wish speed)`, and that `Max` is the whole subtlety: it only ever blocks a **gain**
+and never trims speed you already had, so a jump pad landing at 1400 or a slide out of a run at 1050
+is untouched and decays by friction exactly as before.
+
+**`bGroundStrafeGain` off - a bug fix.** Holding forward and turning the camera settled at about
+**1030 cm/s**. The ground acceleration cap is on your speed *projected* onto the direction you are
+asking for (`Add = WishSpeed - Velocity · WishDir`), never on your actual speed, so a sustained turn
+keeps that projection under 800 while your real speed climbs. The allowance is the full 800 where
+the air's is clamped to 35, making the push 66.7 cm/s a tick, and its component along your own
+momentum outruns the 36.7 that friction takes. It balances at θ ≈ 45°, v ≈ 1030. That made
+`RunSpeed` not a ceiling and any smash threshold meaningless, since you were over it constantly. This is faithful Source behaviour - the
+same formulas with Source's own constants give a 1.30x overspeed against our 1.29x - just far easier
+to exploit with a mouse than it ever was there.
+
+**`bAirStrafeGain` off - a design decision, under test.** Air input steers your momentum without
+lengthening it. A bunny hop preserves speed rather than building it, and nothing on the keyboard and
+mouse takes you past `RunSpeed`; top speed comes only from the pieces. Accelerating from *below* the
+wish speed is still allowed, so a standing jump gets you moving and a slow jump can be rescued.
+
+The two halves of that second one are linked, which is the part worth understanding:
+
+- `AirSpeedCap` is 35 **because** a wide cap would let you accelerate straight forward and gain for
+  free. The cost is that the gate `Current < 35` only opens when your input is within about **2.5
+  degrees of perpendicular** to your momentum (`cos θ < 35/800`), which is why air control feels
+  like nothing outside the strafe.
+- Take the gain away and the cap protects nothing. So redirect-only mode ignores `AirSpeedCap`
+  entirely and uses the **ground** formula, targeting the full wish speed, which opens the gate at
+  every angle. The ratchet guarantees none of it becomes speed.
+- `AirControlAccelerate` (3) is then a pure turn-strength knob: you rotate about
+  **`AirControlAccelerate` x 57.3 degrees a second** at full speed. It is separate from
+  `AirAccelerate` so flipping the switch back gives the old feel with no retuning, and because 12
+  is far too strong once the gate is open everywhere.
+
+Not applied to **slides**, which keep the air formula and its gain. A slide's own equilibrium works
+out near 700 - under `RunSpeed` - so there is no runaway there, but it does mean a slide is the one
+place input can still add speed. Left that way deliberately; worth revisiting after playing.
 
 Presets from the lab, applied to the movement component:
 
@@ -130,7 +184,7 @@ confirmed deliberate. Anything not listed here is the C++ default.
 | Property | C++ | Blueprint |
 |---|---|---|
 | AirJumps | 1 | **0** - no double jump |
-| AirSpeedCap | 75 | 35 |
+| AirSpeedCap | 75 | 35 - **inert** while `bAirStrafeGain` is off |
 | JumpSpeed | 750 | 700 |
 | GroundFrictionSource | 5.0 | 5.5 |
 | SlideCooldown | 1.5 | 0.5 |
@@ -142,7 +196,8 @@ confirmed deliberate. Anything not listed here is the C++ default.
 | WallRunMinSpeed | 250 | 260 |
 | MantleDuration | 0.22 | 0.30 |
 | MantleMinHeight | 30 | 50 |
-| SmashSpeed | 900 | 1000 |
+| SmashSpeed | **1100** (was 900) | 1100 - redundant now, clear at leisure |
+| GrapplePull | 4500 | 4000 |
 | FootstepStride | 340 | 250 |
 | FootstepMinInterval | 0.3 s | 0.0 |
 | FallDeathZ (character) | -100 | -200 |
@@ -150,6 +205,24 @@ confirmed deliberate. Anything not listed here is the C++ default.
 | GoalPoints (game mode) | 1 | **0** |
 | bNoPointsIfAllFinish (game mode) | true | **false** |
 | bStartInMenu (game mode) | true | false, so Play goes straight to placement |
+
+**Note what is not in that list.** `bMantleOverSmash`, `bGroundStrafeGain`, `bAirStrafeGain`,
+`AirControlAccelerate` and the jump pad's `FrictionScale` / `FrictionTime` have no Blueprint
+override, so their C++ defaults are what you play and changing the C++ changes the game.
+
+**`SmashSpeed` is the cautionary tale.** On 2026-11-06 the C++ default was moved to 800 and the
+override was *meant* to be cleared so that 800 would be live. The export above shows what actually
+happened: the override stayed, set by hand to **1100**. The number was deliberate - 1100 sits above
+everything reachable on foot - but for a few hours the docs confidently claimed 800 was being played
+and it never was. That is precisely the drift `export_tuning.py` exists to catch, and it was caught
+only because the script was run before committing. **Run it before you write a Blueprint value into
+any doc.** The C++ default is 1100 now too, so the override is redundant and can be cleared whenever.
+
+Two notes on reading these values back. `grapple_pull` 4000 had never been recorded here at all and
+turned up in the same export; this table is only as good as its last run. And the headless command
+in `export_tuning.py`'s docstring has a trap - UE's `-Script=` parser truncates at the first space,
+so a path through `Unreal Projects` silently loads nothing and quoting does not help. Copy the
+script somewhere without spaces and run it from there.
 
 Three of those turn documented behaviour *off* rather than tuning it: **AirJumps 0** removes the
 double jump, and **GoalPoints 0** with **bNoPointsIfAllFinish false** removes Ultimate Chicken Horse

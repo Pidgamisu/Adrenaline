@@ -20,8 +20,9 @@ struct FGetawayMessage
 };
 
 /**
- * Crosshair dot, speedometer in the lab's units (u/s, 1 u = 2.5 cm), movement state and C4 count,
- * plus the round: clocks, your hand, and the scoreboard.
+ * Crosshair dot, speedometer in **cm/s** - the editor's own units, so the number on screen is the
+ * number you type into the Details panel - with the lab's u/s on the small line under it (1 u =
+ * 2.5 cm), movement state and C4 count, plus the round: clocks, your hand, and the scoreboard.
  *
  * Everything about the round is read from AGetawayGameState and AGetawayPlayerState, never from
  * the game mode. A client has no game mode, which is why the build clock used to draw for the host

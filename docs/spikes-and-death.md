@@ -160,7 +160,8 @@ vanish when it is smashed, which is the `Host` machinery from earlier the same d
 
 `SmashAhead` is called every frame from `UpdateCharacterStateBeforeMovement`, whatever the movement
 mode, and sweeps the whole capsule along your velocity. Wallrunning was not excluded, so running
-along a breakable panel above `SmashSpeed` 900 smashed it out from under you mid-run. **Changed the
+along a breakable panel above `SmashSpeed` (900 at the time, 800 now) smashed it out from under you
+mid-run. **Changed the
 same day so it breaks on the kick instead:**
 
 - `UGetawayMovementComponent::WallActor` remembers what the current run is on, set when the run
@@ -177,6 +178,52 @@ as a consequence of the push. Only the **kick** breaks it: a run that simply tim
 
 Known gap: once the run has ended that way, the panel is no longer spared, so skimming past it at
 over 900 in the next moment can still smash it. Not worth special-casing.
+
+#### What breaks a breakable, as of 2026-11-06
+
+Two changes landed together, and the pair is the point - see *Reversed: breaking beats climbing* in
+`docs/placement.md` for the full note.
+
+- **One speed, and it is out of reach on foot.** `SmashSpeed` is **1100**, the only test there is.
+  Sliding used to get a second threshold of its own at `SlideMinSpeed * 0.9` - **450** - so almost
+  any slide burst almost anything it brushed. That branch was dropped rather than retuned.
+- **Breaking beats climbing.** `bMantleOverSmash` defaults to **false**, so a breakable you could
+  have mantled is burst if you were going fast enough to burst it. The speed test at the top of
+  `SmashAhead` is the whole decision and the two rules cannot overlap: below it the function returns
+  before the break loop, so slower approaches climb exactly as they always did.
+
+The arithmetic is the whole decision, and it is worth writing down because the number alone does not
+show it. **Everything you can do on your own feet is below the line:**
+
+| How you arrive | Speed | Breaks at 1100? |
+|---|---|---|
+| Walking, crouch-walking | 272 or less | no |
+| Slide entered at the minimum (`SlideMinSpeed` 500 + `SlideBoost` 250) | 750 | no |
+| Full sprint (`RunSpeed`) | 800 | no |
+| Wallrun (capped at `RunSpeed * 1.15`) | 920 | no |
+| Slide out of a full run (800 + 250) | 1050 | **no, and only just** |
+| Through a speed ring (1.5 x `RunSpeed`) | up to 1200 | **yes** |
+| Off a jump pad (`LaunchSpeed`) | 1400 | **yes** |
+| Slide down a ramp | gravity carries you past it | **yes** |
+| C4 | - | yes, always |
+
+Since `bAirStrafeGain` went off there is no strafing past any of the first five either, so the list
+is exhaustive: **breaking is granted by the level, not by running hard.** That is the point - you
+have to be going exceptionally fast, and only a placed piece makes you that fast. The cost is that
+"breaking things is done by hitting them at speed (slide or jump into them)", a rule that stood from
+the prototype, **is dead on flat ground**: sliding into a panel on the level now does nothing.
+
+Since this is also the climb-or-break line, a breakable on foot is **always a step**, and
+`bMantleOverSmash` only decides anything when you arrive by piece. Note too that the second slide
+started inside `SlideBoostCooldown` (0.5 s) gets no entry boost and runs 250 slower - the one case
+where two apparently identical slides behave differently.
+
+`BP_Character` also pins `SmashSpeed` to 1100, which is now the same as the C++ default, so that
+override is redundant and can be cleared whenever. See *What the Blueprints actually play at* in the
+plugin README - and read the trap there about running `export_tuning.py` from a path with spaces.
+
+The `WallKick` path above tests the same `SmashSpeed`, so dropping the slide branch changed nothing
+there: you are wallrunning, not sliding, so it could never have applied.
 
 Built clean. **Not played.**
 

@@ -194,6 +194,12 @@ void AGetawayJumpPad::LaunchLocal(AGetawayCharacter* Who)
 		// ApplyBlast already knows how to drop you out of a wallrun or a mantle, and off the ground
 		// when the kick points away from it, so the pad is expressed as the change it wants.
 		GMove->ApplyBlast(Target - V);
+
+		// And the window, which is what makes the launch last past the landing. Handed over here
+		// rather than ticked at you, because the pad is behind you a frame later; the character's
+		// own clock runs it from now on. It is not a push and does nothing to your velocity - see
+		// AddLowFriction.
+		GMove->AddLowFriction(FrictionScale, FrictionTime);
 	}
 	else
 	{

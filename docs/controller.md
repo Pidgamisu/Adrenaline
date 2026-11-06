@@ -147,6 +147,14 @@ different.
 keyboard while keeping the analogue range underneath for walking. Set it to 1 for honest analogue
 input.
 
+**Since 2026-11-06 this matters less, and for a better reason.** `bAirStrafeGain` is off, so air
+input steers your momentum without lengthening it and there is no strafe gain for a stick to be
+worse at - see *Strafing: where speed is allowed to come from* in the plugin README. The analog
+amount still scales the wish speed, so a partly-held stick turns you more slowly and gets a lower
+ratchet ceiling, which is why `MoveStickFullTilt` stays worth having. But a pad is no longer at a
+disadvantage at "the game's core skill", because that skill is now reading the level's pieces rather
+than holding a key at 90 degrees.
+
 ### The project's own dead zone
 
 `Config/DefaultInput.ini` used to apply a 0.25 dead zone to `Gamepad_LeftX`, `LeftY`, `RightX` and

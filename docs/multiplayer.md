@@ -25,7 +25,8 @@ It is **not play-tested**. Read *What the spike does not prove* before trusting 
    their own three pieces.
 6. Fly, left click to place, **Enter** to start your run. Each window shows the *other* player as a
    grey cylinder with a nose block (you never see your own body), plus a line of on-screen text
-   naming what they are doing - GROUND, AIR, SLIDE, WALLRUN, MANTLE - and their speed in u/s.
+   naming what they are doing - GROUND, AIR, SLIDE, WALLRUN, MANTLE - and their speed in cm/s
+   (u/s until 2026-11-06, changed to agree with the speedometer and the editor).
 7. Since 2026-10-17 a scoreboard sits top-right with both scores and how each player's round is
    going, and the round is scored when the last runner is done. See *The round loop* at the end
    for what the numbers mean.

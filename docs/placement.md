@@ -149,6 +149,9 @@ the overhang trim and the server's re-check all came free from the spikes.
 - **It reuses `UGetawayMovementComponent::ApplyBlast`** (written for the C4 rocket jump) by handing
   it the change in velocity it wants, so dropping out of a wallrun or a mantle, and coming off the
   ground when the kick points away from it, is already handled.
+- **It hands you a low-friction window** (`FrictionScale` 0.3 for `FrictionTime` 3 s, added
+  2026-11-06). See *The low-friction window* below: this is what makes the launch last past the
+  landing instead of being eaten by friction the moment you touch down.
 - **Your own machine throws you,** on the frame you touched the pad - the same client-authority
   bargain as dying on spikes and the rocket jump. Nothing about a launch goes over the wire.
 - **Armed only during a run,** like the spikes: `StartPlacement` disarms every pad, `BeginRun` arms
@@ -176,8 +179,55 @@ panel or on a Blueprint child:
 | `SideSpeedKept` | 1.0 | How much of your speed *across* the pad survives. 1 keeps the whole arc; lower values straighten your path towards the pad's facing |
 | `GroundLift` | 0.35 | The least upward tilt a launch gets while you are standing on the ground, so a wall pad throws you off the floor instead of along it. 0 turns it off; it never applies in the air or to a pad firing steeply down |
 | `Retrigger` | 0.25 s | Per player, so one pass through a pad is one launch |
+| `FrictionScale` | 0.3 | How much friction survives the window. 1 turns it off, 0 is frictionless ice |
+| `FrictionTime` | 3 s | How long the window lasts after the launch |
 | `LaunchViewPunch` / `LaunchShake` | 1.2 deg / 0.35 | The camera kick, matching the C4 blast's |
 | `PistonWidth` / `PistonHeight` | 120 / 30 cm | The disc, held at a constant world size and kept inside a trimmed plate |
+
+#### The low-friction window (added 2026-11-06)
+
+A pad used to throw you 1400 cm/s and then watch Source friction take all of it back on the first
+touchdown. `GroundFrictionSource` always drags you toward `StopSpeed`, so the height was the only
+thing a pad was really worth: you landed, you were jogging, and the launch had bought you a gap
+rather than a line. Now the launch comes with `FrictionScale` 0.3 for `FrictionTime` 3 s, and you
+keep what you were given.
+
+It is deliberately **the opposite lever to the speed ring's**, and the two are worth holding apart
+because they look similar and are not:
+
+| | Speed ring | Jump pad |
+|---|---|---|
+| What it moves | `RunSpeed`, the ceiling | `GroundFrictionSource` and `SlideFriction`, the drag |
+| What it gives you | a speed you could not otherwise **reach** | the ability to **keep** a speed you were handed |
+| Why that way round | a velocity kick would be eaten in a second, so raising the ceiling is the only thing that lasts | the pad already hands you far more speed than you can run at; the problem was never reaching it |
+
+So the ring is `AddSpeedBoost` and the pad is `AddLowFriction`, and neither touches your velocity.
+Both are handed over **once** and then run on the character's own clock, because both pieces are
+behind you a frame later - a window outliving the piece is the same trick, and for the same reason,
+as the ring's boost outliving the hoop.
+
+Details worth knowing:
+
+- **It covers sliding too.** `SlideFriction` is scaled by the same number, so landing out of a pad
+  into a slide is the fast line rather than a way to throw the launch away. That is the main thing
+  to try when playing it.
+- **It can never make you faster than you landed.** Nothing is done to `Velocity`; low friction
+  only stops you losing speed. A pad cannot become a speed boost by accident.
+- **Windows refresh rather than stack**, exactly like boosts: the lower scale wins and the longer
+  clock wins, so two pads in a row give you three more seconds instead of compounding into ice.
+  `LowFrictionScale` is put back to 1 the instant the clock runs out, so an expired window cannot
+  drag a stale value into the next one.
+- **There is no air friction in this game to reduce.** This was asked for as "air and ground
+  friction", and the air half turned out to need no code: `FallingLateralFriction` is 0 and
+  `CalcVelocity` applies no drag at all while you are airborne, so speed through the air is already
+  lossless. The window has nothing to do until you touch down, which is also exactly where the
+  problem was. If air speed ever *does* feel lossy, the number to look at is `AirSpeedCap`
+  (Blueprint **35** against a C++ 75), which limits how hard air strafing can bite - but that is
+  air control, not friction, and it cannot slow you down.
+
+**Not played yet.** `FrictionScale` 0.3 is a first guess. It is the one value here with a real risk
+of being wrong in both directions: too high and the window does nothing, too low and a landing
+becomes ice you cannot turn on.
 
 **Known duplication:** the host-binding half of this (`Host`, `BindToHost`, `OnHostBroken`,
 `SetPresent` and the replication that goes with it) is copied from `AGetawaySpikes`, about forty
@@ -204,7 +254,9 @@ by how hard it hit you. That is the whole point of the piece: it is a route you 
   *does* lie a piece down on a sloped face, so the visible cage is held upright in world space to
   say that the lift is not tilted with it; only the invisible trigger box leans.
 - **You keep full control the whole way up.** Two parts to that, and the second one is the piece.
-  Source air strafing still works, so a fast run-up carries its whole arc through the column. On top
+  Air input still works, so a fast run-up carries its whole arc through the column - and since
+  2026-11-06 it steers harder than it used to, because redirect-only air control opens the gate at
+  every angle rather than only near perpendicular. On top
   of it the vortex gives you *direct* horizontal steering (`SteerSpeed`, `SteerAccel`), because plain
   Source air acceleration can only add `AirSpeedCap` (75 cm/s) to a direction you already have speed
   in - without the extra steering, walking into a column would ride you straight up it with no say
@@ -425,6 +477,40 @@ since the crate went to 200 cm on 2026-11-03, **a single crate too**: its top si
 else that tall climbable as well. And C4. `bMantleOverSmash` on the movement component turns the whole thing
 off for the old behaviour.
 
+### Reversed: breaking beats climbing (2026-11-06)
+
+The rule above was turned around. `bMantleOverSmash` now defaults to **false**: hit a breakable
+fast enough to break it and it breaks, climbable top or not. The sparing code is all still there
+behind the flag, reach argument and all, so turning it back on restores 2026-11-01 exactly.
+
+The reason it is safe to be this blunt is that **speed already separates the two cases and they
+cannot overlap**. `SmashAhead` returns on its first line unless you are above the smash threshold,
+so every slower approach never reaches the break loop at all and climbs precisely as it always did.
+What changed is only the band above the threshold, which used to be the one place a crate could be
+both climbable and smashable at once - and the old tie-break there was never played, only reasoned
+about (see *Still unverified* below).
+
+Changed with it: **sliding lost its separate threshold.** It used to break things at
+`SlideMinSpeed * 0.9` - 450 - where everything else needed `SmashSpeed`, so almost any slide burst
+almost anything it brushed. That second test is gone, and `SmashSpeed` is now **1100**: one rule for
+running, sliding, falling, a pad launch and a ring boost alike.
+
+Getting to 1100 took two passes and both were instructive. The first raised the slide threshold to
+`SlideMinSpeed * 1.1` (550) instead of dropping it, and **playing it showed why that could never
+work**: `SlideBoost` adds 250 on entry, so even a slide started at the bare minimum is instantly at
+750 and cleared a 550 bar every time. The bar could only ever catch a slide already decaying towards
+a stop. The second pass dropped the branch and set one rule at 800 - `RunSpeed`, so a full sprint
+broke things and nothing less did.
+
+**1100 is where it actually landed**, chosen deliberately to sit above *everything reachable on
+foot*: sprint 800, wallrun 920, slide out of a full run 1050. With `bAirStrafeGain` off there is no
+strafing past any of them, so breaking is granted by the level - a jump pad, a speed ring, a slide
+down a ramp, or C4. See the table in *What breaks a breakable* in `docs/spikes-and-death.md`.
+
+That reframes the climb band rather than narrowing it: a breakable on foot is now **always** a step,
+and breaking-beats-climbing only decides anything when you arrive by piece. `SmashSpeed` is still
+the one number to move if that balance feels wrong.
+
 ### Fixed: a surface-mounted piece the ghost said yes to (2026-11-01)
 
 Four bugs, all of them only on spikes and the jump pad - the pieces that go through
@@ -470,6 +556,12 @@ unless a crate was placed during the placement phase to try it. No crate stands 
 *What is actually in the map* in `docs/test-course.md`), so `bMantleOverSmash` has no standing
 obstacle to prove itself against. To settle it, place a crate and jump at it above `SmashSpeed`: it
 should be a step up, not scrap.
+
+**It was never settled, and on 2026-11-06 it was reversed instead** - see *Reversed: breaking beats
+climbing* above. So the behaviour that went unplayed has now been turned off by default rather than
+proved, which is the cheapest possible outcome for it: nothing depends on the untested path any
+more. What wants playing now is the other side, and it is the same experiment - place a crate, hit
+it above the threshold and confirm it bursts, then hit it below and confirm you climb.
 
 ### Still unverified (placement and pieces)
 
@@ -885,7 +977,10 @@ now goes through it:
 - ground acceleration and the crouch-walk speed (`CalcVelocity`)
 - air strafing, including while sliding - and note `SourceAirAccelerate` caps the *target* at
   `AirSpeedCap` but scales the acceleration by the full wish speed, so a boost makes strafing bite
-  harder too. Deliberate: a jump out of a ring should carry further
+  harder too. Deliberate: a jump out of a ring should carry further. (Since 2026-11-06 the air path
+  only takes this route while `bAirStrafeGain` is on. With it off the boost still reaches the air,
+  as the ratchet's ceiling is the boosted wish speed, so a ring lets you hold 1200 in flight -
+  you just cannot strafe your way past it. Slides keep the old path either way.)
 - the double jump's redirect floor (`RunSpeed * 0.85`)
 - the wallrun's speed target (`RunSpeed * 1.15`), so a boosted wallrun runs at the boosted pace
 - `GetMaxSpeed()`, which is the ceiling the engine itself asks about

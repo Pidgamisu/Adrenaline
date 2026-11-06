@@ -190,6 +190,23 @@ void UGetawayMovementComponent::SourceAirAccelerate(const FVector& WishDir, floa
 	Velocity.Y += WishDir.Y * Amount;
 }
 
+void UGetawayMovementComponent::RatchetSpeed(float Before, float Ceiling)
+{
+	const float After = Velocity.Size2D();
+	// Max, not Ceiling: this refuses a gain, it never trims speed you already had. That is what
+	// keeps a jump pad landing at 1400 and a slide out of a run at 1050 intact - they decay by
+	// friction, as they are meant to, rather than being snapped down to walking pace the instant
+	// you touch a movement key.
+	const float Limit = FMath::Max(Before, Ceiling);
+	if (After <= Limit || After <= KINDA_SMALL_NUMBER) return;
+
+	// Scaled rather than clamped per-axis, so the direction the acceleration step chose survives
+	// untouched and only the length is given back. Steering stays completely free.
+	const float K = Limit / After;
+	Velocity.X *= K;
+	Velocity.Y *= K;
+}
+
 void UGetawayMovementComponent::CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration)
 {
 	if (!HasValidData() || HasAnimRootMotion() || DeltaTime < MIN_TICK_TIME)
@@ -199,16 +216,17 @@ void UGetawayMovementComponent::CalcVelocity(float DeltaTime, float Friction, bo
 
 	const FVector WishDir = Acceleration.GetSafeNormal2D();
 	const float Analog = WishAnalog();
-	// A speed ring raises this and nothing else. Friction is untouched - it always drags you back
-	// toward StopSpeed - so the boost shows up as a higher speed you are able to hold, rather than
-	// as less drag.
+	// A speed ring raises this and nothing else, so the boost shows up as a higher speed you are
+	// able to hold rather than as less drag. A jump pad's low-friction window is the other lever -
+	// it leaves the ceiling alone and takes the drag away instead, so you keep the speed the pad
+	// gave you. See AddSpeedBoost and AddLowFriction.
 	const float Run = GetBoostedRunSpeed();
 
 	if (IsMovingOnGround())
 	{
 		if (bSliding)
 		{
-			SourceFriction(SlideFriction, DeltaTime);
+			SourceFriction(GetEffectiveSlideFriction(), DeltaTime);
 
 			// Gravity pulls you down slopes while sliding.
 			const FVector N = CurrentFloor.HitResult.ImpactNormal;
@@ -227,19 +245,49 @@ void UGetawayMovementComponent::CalcVelocity(float DeltaTime, float Friction, bo
 			// so skip friction while a jump is waiting to keep bunny hops lossless.
 			if (!JumpPending())
 			{
-				SourceFriction(GroundFrictionSource, DeltaTime);
+				SourceFriction(GetEffectiveGroundFriction(), DeltaTime);
 			}
 			const float WishSpeed = (IsCrouching() ? Run * CrouchSpeedScale : Run) * Analog;
+			const float Before = Velocity.Size2D();
 			SourceAccelerate(WishDir, WishSpeed, GroundAccelerate, DeltaTime);
+			if (!bGroundStrafeGain)
+			{
+				// Walking forward and turning the camera used to settle at about 1030, because the
+				// cap above is on your speed *projected* onto WishDir and turning keeps that
+				// projection small while your real speed climbs. The ratchet takes the gain away
+				// and leaves the steering. See bGroundStrafeGain.
+				RatchetSpeed(Before, WishSpeed);
+			}
 		}
 	}
 	else
 	{
 		// PhysFalling calls this with the vertical velocity stripped out, so this only touches X/Y.
-		// Note what a boost does here: SourceAirAccelerate caps the *target* at AirSpeedCap but
-		// scales the acceleration by the full wish speed, so a boost also makes air strafing bite
-		// harder. That is deliberate - a ring should make a jump out of it carry further too.
-		SourceAirAccelerate(WishDir, Run * Analog, AirAccelerate, DeltaTime);
+		const float WishSpeed = Run * Analog;
+		if (bAirStrafeGain)
+		{
+			// Classic Source air strafing. Note what a boost does here: SourceAirAccelerate caps
+			// the *target* at AirSpeedCap but scales the acceleration by the full wish speed, so a
+			// boost also makes air strafing bite harder. That is deliberate - a ring should make a
+			// jump out of it carry further too.
+			SourceAirAccelerate(WishDir, WishSpeed, AirAccelerate, DeltaTime);
+		}
+		else
+		{
+			// Redirect only: steer your momentum, never lengthen it. This is the *ground* formula
+			// rather than the air one on purpose - the air version's small AirSpeedCap is precisely
+			// what keeps the gate shut outside a 2.5 degree window around perpendicular, and with
+			// the gain gone there is nothing left for it to protect. Targeting the full wish speed
+			// instead opens the gate at every angle, which is the air control; the ratchet is what
+			// guarantees none of it turns into speed. See bAirStrafeGain.
+			//
+			// Accelerating from *below* the wish speed is still allowed, so a standing jump gets
+			// you moving and a slow jump can be rescued - the ceiling is RunSpeed, not whatever you
+			// happened to leave the ground with.
+			const float Before = Velocity.Size2D();
+			SourceAccelerate(WishDir, WishSpeed, AirControlAccelerate, DeltaTime);
+			RatchetSpeed(Before, WishSpeed);
+		}
 	}
 }
 
@@ -275,6 +323,18 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 		{
 			BoostLeft = 0.f;
 			BoostScale = 1.f;
+		}
+	}
+
+	// The jump pad's low-friction window, on the same terms and for the same reason: either on at
+	// full strength or off, so nothing has to reason about a half-faded value.
+	if (LowFrictionLeft > 0.f)
+	{
+		LowFrictionLeft -= DeltaSeconds;
+		if (LowFrictionLeft <= 0.f)
+		{
+			LowFrictionLeft = 0.f;
+			LowFrictionScale = 1.f;
 		}
 	}
 
@@ -443,6 +503,25 @@ void UGetawayMovementComponent::AddSpeedBoost(float Scale, float Duration, float
 	Velocity.Y *= K;
 	// Vertical speed is left exactly as it was, so jumping through a ring keeps the arc you aimed
 	// for and simply covers more ground with it.
+}
+
+/* ============================================================ low friction */
+
+void UGetawayMovementComponent::AddLowFriction(float Scale, float Duration)
+{
+	// A scale of 1 or more is not a window, and a window with no clock is not one either.
+	if (Scale >= 1.f || Duration <= 0.f) return;
+
+	// Each half takes the better of the two rather than multiplying, so two pads in a row refresh
+	// the window instead of compounding into something nobody tuned. "Better" is the *lower* scale
+	// here, which is the only place this differs from AddSpeedBoost: less drag is the stronger
+	// effect. LowFrictionScale is put back to 1 the moment the clock runs out, so a window that has
+	// expired cannot drag an old value into this Min.
+	LowFrictionScale = FMath::Min(LowFrictionScale, FMath::Max(0.f, Scale));
+	LowFrictionLeft = FMath::Max(LowFrictionLeft, Duration);
+
+	// Nothing is done to Velocity. A window is not a push: it takes the drag away and lets you keep
+	// what you already have, which is why a pad hands one over at the same moment it throws you.
 }
 
 /* ============================================================ vortex lift */
@@ -1046,7 +1125,17 @@ void UGetawayMovementComponent::PhysMantle(float DeltaTime, int32 Iterations)
 void UGetawayMovementComponent::SmashAhead(float DeltaTime)
 {
 	const float HSpeed = Velocity.Size2D();
-	if (!(HSpeed >= SmashSpeed || (bSliding && HSpeed >= SlideMinSpeed * 0.9f))) return;
+
+	// One rule, whatever you are doing. Sliding used to get a second threshold of its own at
+	// SlideMinSpeed * 0.9 - 450 against this 800 - which meant almost any slide burst almost
+	// anything it brushed; it was dropped on 2026-11-06 rather than retuned. A slide is still how
+	// you break things, since a committed one is the fastest you ever move on the ground (a full
+	// run plus SlideBoost is 1050), but it no longer gets a discount for being a slide: a slide
+	// entered at the minimum runs at 750 and leaves the panel standing.
+	//
+	// This one test is also the whole of the climb-or-break decision - see the note on MantleWall
+	// below - so where it lands is exactly where breakables stop being climbable.
+	if (HSpeed < SmashSpeed) return;
 
 	const FVector Start = UpdatedComponent->GetComponentLocation();
 	const FVector End = Start + Velocity * (DeltaTime + 0.05f);
@@ -1067,15 +1156,18 @@ void UGetawayMovementComponent::SmashAhead(float DeltaTime)
 		bAnyBreakable |= (B && !B->IsBroken());
 	}
 
-	// A crate you are about to pull yourself onto is spared too. This sweep reaches a capsule radius
-	// plus roughly a twentieth of a second of travel ahead of you and grows with your speed, while
-	// the mantle probe is a fixed 30 cm past the capsule: above SmashSpeed the break always won the
-	// race, which is why a breakable could never be climbed at speed. Asking from as far out as the
-	// sweep itself reaches makes the two agree.
+	// Breaking beats climbing since 2026-11-06, so this is off by default and the loop below bursts
+	// a crate you could have climbed. Being here at all means you passed the speed test above, and
+	// that test is now the whole decision: fast enough to break it breaks it, and everything slower
+	// never reaches this function, so it climbs. The two can never both apply.
 	//
-	// Only while airborne, because that is the only state a mantle can start from. Hitting a panel
-	// head-on still bursts it: a mantle needs its top within MantleMaxHeight of your feet, with room
-	// to stand up there and a clear climb - see FindMantle.
+	// bMantleOverSmash on puts the old rule back - a breakable you are about to pull yourself onto
+	// is spared. It needs the reach argument because this sweep covers a capsule radius plus
+	// roughly a twentieth of a second of travel and grows with your speed, while the mantle probe
+	// is a fixed 30 cm past the capsule: without it the break always won the race. Only while
+	// airborne, because that is the only state a mantle can start from. Even then a panel bursts,
+	// since a mantle needs a top within MantleMaxHeight of your feet with room to stand - see
+	// FindMantle.
 	const AActor* MantleWall = nullptr;
 	const AActor* MantleLedge = nullptr;
 	if (bAnyBreakable && bMantleOverSmash && IsFalling())

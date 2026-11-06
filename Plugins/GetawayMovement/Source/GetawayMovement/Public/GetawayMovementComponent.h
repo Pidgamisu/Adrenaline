@@ -79,6 +79,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Ground", meta = (ClampMin = "0"))
 	float StopSpeed = 250.f;
 
+	/**
+	 * **Can turning the camera while you run make you faster?** Off by default since 2026-11-06,
+	 * which fixes a real bug rather than changing a feel.
+	 *
+	 * The ground cap is on your speed *projected onto the direction you are asking for*, never on
+	 * your actual speed, so holding forward and turning keeps that projection under `RunSpeed`
+	 * while your real speed climbs. The allowance is the full 800 (the air's is clamped to 35), so
+	 * the push is 66.7 cm/s a tick, and the component of it along your own momentum outruns
+	 * friction. It settles at about **1030 cm/s from nothing but walking and turning** - which made
+	 * `RunSpeed` not a ceiling at all, and any smash threshold meaningless, since you were over it
+	 * constantly.
+	 *
+	 * Off, acceleration may still steer you freely but cannot raise your speed past what you are
+	 * asking for, so walking and turning tops out at 800. It is faithful Source behaviour either
+	 * way - the same formulas with Source's own constants give a 1.30x overspeed against our 1.29x
+	 * - so this is inherited, not a porting slip. It is simply far easier to exploit with a mouse
+	 * here than it ever was there.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Ground")
+	bool bGroundStrafeGain = false;
+
 	/** Crouch-walk speed as a fraction of RunSpeed. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Ground", meta = (ClampMin = "0", ClampMax = "1"))
 	float CrouchSpeedScale = 0.34f;
@@ -89,9 +110,51 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Air", meta = (ClampMin = "0"))
 	float AirAccelerate = 12.f;
 
-	/** Air wish-speed cap (cm/s). Source uses 30 u. Keep it small: this is what makes strafing work. */
+	/**
+	 * Air wish-speed cap (cm/s). Source uses 30 u. Keep it small: this is what makes strafing work.
+	 *
+	 * Only read while `bAirStrafeGain` is on. With gain off the cap is what was *holding air control
+	 * back*, so redirect-only mode ignores it and uses the full wish speed instead - see
+	 * `AirControlAccelerate`.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Air", meta = (ClampMin = "0"))
 	float AirSpeedCap = 75.f;
+
+	/**
+	 * **Can air input make you faster, or only point you somewhere else?**
+	 *
+	 * Off (the default since 2026-11-06): air input **steers your momentum without lengthening
+	 * it**. You can still accelerate up to the wish speed from slower than it - a standing jump
+	 * still gets you moving - but strafing can never take you past `RunSpeed`, so a bunny hop
+	 * preserves speed instead of building it. Top speed then comes only from the pieces: jump pads,
+	 * speed rings, slides down slopes, the C4 jump, the grapple.
+	 *
+	 * On: classic Source air strafing, where holding a direction near perpendicular to your
+	 * momentum and turning the camera gains speed indefinitely. That is how this played until
+	 * 2026-11-06 and it is one switch away.
+	 *
+	 * The two halves go together. `AirSpeedCap` 35 is tiny *because* a wide cap would let you
+	 * accelerate straight forward and gain for free - which also means you can only influence your
+	 * flight within about 2.5 degrees of perpendicular, and air control feels like nothing the rest
+	 * of the time. Take the gain away and the cap stops being load-bearing, so redirect-only mode
+	 * opens it to the full wish speed and air control becomes real.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Air")
+	bool bAirStrafeGain = false;
+
+	/**
+	 * How hard air input swings your momentum while `bAirStrafeGain` is off. Separate from
+	 * `AirAccelerate` so flipping the switch back gives you the old feel exactly, with no retuning,
+	 * and because `AirAccelerate` 12 is far too strong once the gate is open at every angle.
+	 *
+	 * It converts to a turn rate: at full speed you rotate about **`AirControlAccelerate` x 57.3
+	 * degrees a second**, so 3 is roughly 170 deg/s - a 45 degree correction in a quarter second,
+	 * and most of a reversal inside one jump. Raise it for Titanfall-style authority, drop it for
+	 * something floatier. It cannot affect your speed whatever you set it to; the ratchet sees to
+	 * that.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Air", meta = (ClampMin = "0"))
+	float AirControlAccelerate = 3.f;
 
 	/** Upward speed of a jump (cm/s). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Air", meta = (ClampMin = "0"))
@@ -239,17 +302,42 @@ public:
 
 	/* ---------------- Breakables ---------------- */
 
-	/** Hitting an AGetawayBreakable above this speed bursts it (cm/s). Slides break things at a little under SlideMinSpeed. */
+	/**
+	 * Hitting an AGetawayBreakable at this speed or above bursts it (cm/s). **One rule, whatever you
+	 * are doing** - running, sliding, falling, flung off a jump pad or boosted through a ring.
+	 *
+	 * **1100 is deliberately out of reach on foot.** Nothing you can do with the keyboard buys it:
+	 * a full sprint is `RunSpeed` 800, a slide out of that run is 800 + `SlideBoost` = 1050, a
+	 * wallrun is capped at `RunSpeed * 1.15` = 920, and since `bAirStrafeGain` went off there is no
+	 * strafing your way past any of them. So breaking is **granted by the level, not by running
+	 * hard**: a jump pad (`LaunchSpeed` 1400), a speed ring (1.5x, so 1200), a slide down a ramp
+	 * where gravity carries you past it, or C4. Chosen 2026-11-06 for exactly that - you have to be
+	 * going *exceptionally* fast, and only the pieces make you that fast.
+	 *
+	 * It is also the climb-or-break line, since `SmashAhead` returns below it - which means on foot
+	 * a breakable is always a step, and `bMantleOverSmash` only decides anything when you arrive by
+	 * piece.
+	 *
+	 * Two older rules died here, both on 2026-11-06. Sliding used to have a **second, much lower
+	 * threshold** of its own (`SlideMinSpeed * 0.9`, so 450), so almost any slide burst almost
+	 * anything it brushed; that branch is gone rather than retuned. And "breaking things is done by
+	 * hitting them at speed" no longer holds on the flat: sliding into a panel on level ground does
+	 * nothing at all now.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Breakables", meta = (ClampMin = "0"))
-	float SmashSpeed = 900.f;
+	float SmashSpeed = 1100.f;
 
 	/**
-	 * A breakable you are about to mantle is climbed, not burst. Off, a crate in the air always
-	 * bursts above SmashSpeed, because the break sweep reaches further ahead than the mantle probe.
-	 * Panels and anything too tall to climb still break either way.
+	 * On: a breakable you are about to mantle is climbed rather than burst, even at smashing speed.
+	 * Off (the default since 2026-11-06): **hitting it fast enough to break it breaks it**, and
+	 * climbing is what happens below `SmashSpeed` - which is the one test at the top of SmashAhead,
+	 * so the two never overlap. Below a full sprint you climb; at one you go through.
+	 *
+	 * Panels and anything too tall to climb break either way; what this decides is the crate whose
+	 * top you could have pulled yourself onto. Arrive under the threshold and you still climb it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Breakables")
-	bool bMantleOverSmash = true;
+	bool bMantleOverSmash = false;
 
 	/* ---------------- Sound ---------------- */
 
@@ -453,6 +541,56 @@ public:
 	float GetSpeedBoostScale() const { return BoostLeft > 0.f ? BoostScale : 1.f; }
 
 	/**
+	 * A timed low-friction window, from an AGetawayJumpPad that threw you.
+	 *
+	 * Handed over **once** and then run on the character's own clock, exactly like AddSpeedBoost
+	 * and for the same reason: a pad is one kick on the frame you touch it, so there is nothing
+	 * overlapping you a frame later to keep offering it.
+	 *
+	 * It is the **opposite lever to a speed boost**, and the two are worth keeping straight. A
+	 * speed ring raises the ceiling (`RunSpeed`) and lets you climb to a speed you could not
+	 * otherwise hold; a window lowers the drag and lets you **keep the speed you were already
+	 * given**. That is what a jump pad wants: it throws you at `LaunchSpeed`, which is far above
+	 * anything you can run at, and without this Source friction eats the landing in about a second.
+	 * Neither one pushes you, and a window can never make you faster than you arrived.
+	 *
+	 * Scale multiplies `GroundFrictionSource` and `SlideFriction` together, so it covers running
+	 * and sliding alike. 0 is frictionless ice; 1 or more is not a window and is ignored.
+	 *
+	 * **There is no air friction in this movement model to reduce.** `FallingLateralFriction` is 0
+	 * and CalcVelocity applies no drag at all while you are airborne, so your speed through the air
+	 * is already lossless and a window has nothing to do there. It bites the moment you land.
+	 *
+	 * Windows do not stack: the lower Scale wins and the longer clock wins, so two pads in a row
+	 * refresh the window rather than compounding into ice.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway")
+	void AddLowFriction(float Scale, float Duration);
+
+	/** True while a low-friction window is running. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool IsLowFriction() const { return LowFrictionLeft > 0.f; }
+
+	/** Seconds of low friction left, 0 when there is none. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetLowFrictionLeft() const { return FMath::Max(0.f, LowFrictionLeft); }
+
+	/** The multiplier a live window is putting on friction, 1 when there is none. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetFrictionScale() const { return LowFrictionLeft > 0.f ? LowFrictionScale : 1.f; }
+
+	/**
+	 * GroundFrictionSource and SlideFriction as the movement code should actually use them: the
+	 * tuned value times any live window. Everything that drags you back toward StopSpeed goes
+	 * through one of these, so one window reaches running and sliding at once.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetEffectiveGroundFriction() const { return GroundFrictionSource * GetFrictionScale(); }
+
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetEffectiveSlideFriction() const { return SlideFriction * GetFrictionScale(); }
+
+	/**
 	 * RunSpeed as the movement code should actually use it: the tuned value times any live boost.
 	 * Everything that reads RunSpeed as "how fast you are allowed to go" goes through this, so one
 	 * boost reaches running, crouch-walking, air strafing and a wallrun at once.
@@ -526,6 +664,18 @@ private:
 	void SourceFriction(float Friction, float DeltaTime);
 	void SourceAccelerate(const FVector& WishDir, float WishSpeed, float Accel, float DeltaTime);
 	void SourceAirAccelerate(const FVector& WishDir, float WishSpeed, float Accel, float DeltaTime);
+
+	/**
+	 * Stop an acceleration step from having made you *faster*, while leaving the direction it chose
+	 * alone. Call it straight after one with the horizontal speed you had before.
+	 *
+	 * The ceiling is `FMath::Max(Before, Ceiling)`, and the Max is the whole subtlety: it only ever
+	 * refuses a **gain**, never trims speed you already had. So a jump pad landing at 1400 or a
+	 * slide out of a run at 1050 is untouched and decays by friction as it should, while input
+	 * cannot push you past the speed input is asking for. Pass the wish speed as the ceiling, which
+	 * is already boosted, so a speed ring still lets you reach 1200 under your own feet.
+	 */
+	void RatchetSpeed(float Before, float Ceiling);
 
 	// Helpers
 	FVector ViewForward() const;
@@ -601,6 +751,14 @@ private:
 	 */
 	float BoostScale = 1.f;
 	float BoostLeft = 0.f;
+
+	/**
+	 * The live low-friction window: what it multiplies ground and slide friction by, and how long
+	 * it has left. Counted down next to the boost above and put back to 1 the instant it runs out,
+	 * so GetFrictionScale needs no branch of its own.
+	 */
+	float LowFrictionScale = 1.f;
+	float LowFrictionLeft = 0.f;
 
 	FVector WallNormal = FVector::ZeroVector;
 	/**

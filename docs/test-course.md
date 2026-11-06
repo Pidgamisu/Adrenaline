@@ -15,8 +15,8 @@ tests rather than merely allow it.
 | 1700 | Slide bar, gap 110..230 | Clears a crouched player (100 tall), stops a standing one (180) |
 | 2300..3700 | Wallrun gap, walls 400 tall both sides | 1400 across - a double jump reaches only ~900, so the wall is the only way over |
 | 3700..5600 | Mantle ledges at 60 / 110 / 165 | Spans the MantleMinHeight 30 .. MantleMaxHeight 170 window |
-| 5600..6900 | Two breakable panels, then a 5-crate stack | Slide-smash threshold is 495; running flat out (800) is under SmashSpeed 900, so panels want a slide |
-| 6900..9050 | Three jump platforms, offset sideways | Gaps of 450 with a 500 lateral shift - needs the double jump and air-strafing, not just a hop |
+| 5600..6900 | Two breakable panels, then a 5-crate stack | **Unbreakable on foot since 2026-11-06.** One threshold, `SmashSpeed` **1100**, above a sprint (800), a wallrun (920) and even a slide out of a full run (1050) - so these now need a jump pad, a speed ring, a slide down a ramp or C4. They used to break on any slide, on a separate 495 threshold against `SmashSpeed` 900. The course has no pad or ring standing in it, so **this obstacle is currently a dead end unless you place one** |
+| 6900..9050 | Three jump platforms, offset sideways | Gaps of 450 with a 500 lateral shift - needs air control to swing sideways mid-jump, not just a hop. Note `AirJumps` is **0** on `BP_Character`, so the double jump this was built around is currently off; and since 2026-11-06 air input steers without gaining, so the sideways shift is easier while the distance is not |
 | 9050..9900 | Breakable blast wall, then a ledge at 500 | 500 is above a double jump (~280), so the only way up is a C4 rocket jump |
 
 Colour coding follows the browser lab: cyan = wallrun surface, green = mantle ledge, amber = slide /
