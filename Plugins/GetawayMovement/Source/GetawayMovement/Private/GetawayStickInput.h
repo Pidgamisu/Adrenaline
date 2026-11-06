@@ -32,8 +32,8 @@ namespace GetawayStick
 		const float Dead = FMath::Clamp(DeadZone, 0.f, 0.95f);
 		if (Mag <= Dead) return FVector2D::ZeroVector;
 
-		const float Live = FMath::Min((Mag - Dead) / (1.f - Dead), 1.f);
-		return (Raw / Mag) * Live;
+		const float Travel = FMath::Min((Mag - Dead) / (1.f - Dead), 1.f);
+		return (Raw / Mag) * Travel;
 	}
 
 	/** The same for a single axis, which is what the placement camera's up/down triggers are. */
@@ -45,8 +45,8 @@ namespace GetawayStick
 		const float Dead = FMath::Clamp(DeadZone, 0.f, 0.95f);
 		if (Mag <= Dead) return 0.f;
 
-		const float Live = FMath::Min((Mag - Dead) / (1.f - Dead), 1.f);
-		return FMath::Sign(Raw) * Live;
+		const float Travel = FMath::Min((Mag - Dead) / (1.f - Dead), 1.f);
+		return FMath::Sign(Raw) * Travel;
 	}
 
 	/**

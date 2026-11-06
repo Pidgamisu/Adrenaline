@@ -360,6 +360,52 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	bool IsInVortex() const { return bVortexActive; }
 
+	/**
+	 * A timed speed boost, from an AGetawaySpeedRing you ran through.
+	 *
+	 * Unlike AddVortexLift this is handed over **once** and then runs on its own clock, because a
+	 * ring is a gate you pass through rather than a volume that holds you: a frame later there is
+	 * nothing overlapping you to keep offering it.
+	 *
+	 * Scale multiplies RunSpeed, which is the whole trick. Source friction always drags you back
+	 * toward StopSpeed, so a bare velocity kick is eaten in about a second and "for three seconds"
+	 * would mean nothing; raising the ceiling instead means holding W keeps you up there for as
+	 * long as the boost lasts.
+	 *
+	 * SnapMinSpeed is the least speed you must already be going for the boost to lift you to that
+	 * new ceiling on the spot. Below it you keep what you have and accelerate into the boost
+	 * yourself, so stepping gingerly into a ring does not fling you at full speed in whatever
+	 * direction you happened to be nudging. Pass 0 or less to never snap.
+	 *
+	 * Boosts do not stack: the stronger Scale wins and the longer clock wins, so running two rings
+	 * back to back refreshes the three seconds rather than making you faster and faster.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway")
+	void AddSpeedBoost(float Scale, float Duration, float SnapMinSpeed);
+
+	/** True while a speed boost is running. The camera widens its FOV off this. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool IsSpeedBoosted() const { return BoostLeft > 0.f; }
+
+	/** Seconds of boost left, 0 when there is none. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetSpeedBoostLeft() const { return FMath::Max(0.f, BoostLeft); }
+
+	/** The multiplier a live boost is putting on RunSpeed, 1 when there is none. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetSpeedBoostScale() const { return BoostLeft > 0.f ? BoostScale : 1.f; }
+
+	/**
+	 * RunSpeed as the movement code should actually use it: the tuned value times any live boost.
+	 * Everything that reads RunSpeed as "how fast you are allowed to go" goes through this, so one
+	 * boost reaches running, crouch-walking, air strafing and a wallrun at once.
+	 *
+	 * The camera's speed FOV deliberately still reads the raw RunSpeed, so a boosted run keeps the
+	 * widened view it has earned instead of looking like a normal jog again.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	float GetBoostedRunSpeed() const { return RunSpeed * GetSpeedBoostScale(); }
+
 	/* ---------------- State ---------------- */
 
 	UFUNCTION(BlueprintPure, Category = "Getaway")
@@ -460,6 +506,14 @@ private:
 	float SlideCooldownLeft = 0.f;
 	int32 AirJumpsLeft = 0;
 	float LastDoubleJumpTime = -100.f;
+
+	/**
+	 * The live speed boost: what it multiplies RunSpeed by, and how long it has left. Counted down
+	 * in UpdateCharacterStateBeforeMovement alongside the slide and wall cooldowns, and put back to
+	 * 1 the instant it runs out, so GetBoostedRunSpeed needs no branch of its own.
+	 */
+	float BoostScale = 1.f;
+	float BoostLeft = 0.f;
 
 	FVector WallNormal = FVector::ZeroVector;
 	/**

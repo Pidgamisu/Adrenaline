@@ -53,6 +53,11 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   ride round with it, which took attaching a surface-mounted piece to the **component** it was
   placed on rather than to the host actor's root - see *Spikes and pads ride a plate* in
   `docs/placement.md`. **That part is built but not played.**
+  The thirteenth is the **speed ring** (added 2026-11-05): a hoop you run through that raises your
+  top speed to 1200 cm/s for three seconds, so the effect outlives the piece and you spend it on
+  the jump, wallrun or slide that comes next. **Played the day it was built and signed off at the
+  defaults** - the first piece that needed no retune after playing. See *The speed ring* in
+  `docs/placement.md`.
 - **Effects:** a layer on top of the round, built and **played 2026-11-03 - all three work**.
   Every other round (1 plain, 2 with, 3 plain) both players are given the same effect before
   anybody builds: double jump, one C4, or 60% gravity. One at a time, gone at the end of the round.
@@ -202,6 +207,25 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   players always get the *same* effect, it is dealt and shown before anybody builds so it changes
   what you place, only one is live at a time, and it dies with the round. Round 1 is always plain.
   `bRoundEffects` off plays the game as it was. See `docs/effects.md`.
+- **A speed boost raises your ceiling, it does not shove you** (decided and played 2026-11-05, with
+  the speed ring). Source friction always drags you back toward `StopSpeed`, so a velocity kick is
+  eaten in about a second and a boost "for three seconds" would mean nothing. So the speed ring
+  multiplies `RunSpeed` for the duration instead, which is one number
+  (`UGetawayMovementComponent::GetBoostedRunSpeed`) read by running, crouch-walking, air strafing,
+  the double jump's redirect and the wallrun alike. The snap on entry only ever scales the speed
+  you already have, so **a ring makes you faster along the line you took through it** and never
+  redirects you - which is why it works from either side. The camera's speed FOV deliberately
+  keeps reading the *raw* `RunSpeed`, or a boosted run would look like a normal jog; the boost's own
+  signal is a flat `BoostFOV` bump. Boosts refresh rather than stack. See *The speed ring* in
+  `docs/placement.md`.
+- **Hand-dressed pieces are protected by emptying their row, not by recording the colour**
+  (settled 2026-11-05, after `dress_pieces.py` put its table back over an afternoon's editor work).
+  Five rows in `PIECES` are now `{}, {}` - spikes, panel, jump pad, C4 pickup, vortex. The table
+  cannot hold the right value because **nothing can read a component material back off a
+  Blueprint's class default object**, which is the same limit that stops `export_tuning.py`
+  reporting them. The row itself must stay, or the catalog points that piece at the raw C++ class.
+  A fresh clone gets those five undressed, and that is the accepted cost. See *A script run that
+  resets a colour with nothing saved and nothing to revert* in `docs/blueprint-tuning.md`.
 - **The unlit pink look is the look** (confirmed 2026-11-02, by playing it at speed). The edge band
   is what carries shape and depth once the lights are off; pass one was flat without it. See
   `docs/look.md` before changing any of it.

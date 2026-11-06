@@ -129,9 +129,12 @@ FString UGetawayMovementComponent::GetStateName() const
 
 float UGetawayMovementComponent::GetMaxSpeed() const
 {
-	if (MovementMode == MOVE_Custom) return RunSpeed * 2.f;
-	if (IsCrouching() && !bSliding) return RunSpeed * CrouchSpeedScale;
-	return RunSpeed;
+	// The boosted value, not the raw one: a speed ring is meant to raise the ceiling on everything
+	// at once, and this is the ceiling the engine itself asks about.
+	const float Run = GetBoostedRunSpeed();
+	if (MovementMode == MOVE_Custom) return Run * 2.f;
+	if (IsCrouching() && !bSliding) return Run * CrouchSpeedScale;
+	return Run;
 }
 
 bool UGetawayMovementComponent::CanCrouchInCurrentState() const
@@ -189,6 +192,10 @@ void UGetawayMovementComponent::CalcVelocity(float DeltaTime, float Friction, bo
 
 	const FVector WishDir = Acceleration.GetSafeNormal2D();
 	const float Analog = WishAnalog();
+	// A speed ring raises this and nothing else. Friction is untouched - it always drags you back
+	// toward StopSpeed - so the boost shows up as a higher speed you are able to hold, rather than
+	// as less drag.
+	const float Run = GetBoostedRunSpeed();
 
 	if (IsMovingOnGround())
 	{
@@ -205,7 +212,7 @@ void UGetawayMovementComponent::CalcVelocity(float DeltaTime, float Friction, bo
 				Velocity.X += Along.X * DeltaTime;
 				Velocity.Y += Along.Y * DeltaTime;
 			}
-			SourceAirAccelerate(WishDir, RunSpeed * Analog, AirAccelerate * 0.5f, DeltaTime);
+			SourceAirAccelerate(WishDir, Run * Analog, AirAccelerate * 0.5f, DeltaTime);
 		}
 		else
 		{
@@ -215,14 +222,17 @@ void UGetawayMovementComponent::CalcVelocity(float DeltaTime, float Friction, bo
 			{
 				SourceFriction(GroundFrictionSource, DeltaTime);
 			}
-			const float WishSpeed = (IsCrouching() ? RunSpeed * CrouchSpeedScale : RunSpeed) * Analog;
+			const float WishSpeed = (IsCrouching() ? Run * CrouchSpeedScale : Run) * Analog;
 			SourceAccelerate(WishDir, WishSpeed, GroundAccelerate, DeltaTime);
 		}
 	}
 	else
 	{
 		// PhysFalling calls this with the vertical velocity stripped out, so this only touches X/Y.
-		SourceAirAccelerate(WishDir, RunSpeed * Analog, AirAccelerate, DeltaTime);
+		// Note what a boost does here: SourceAirAccelerate caps the *target* at AirSpeedCap but
+		// scales the acceleration by the full wish speed, so a boost also makes air strafing bite
+		// harder. That is deliberate - a ring should make a jump out of it carry further too.
+		SourceAirAccelerate(WishDir, Run * Analog, AirAccelerate, DeltaTime);
 	}
 }
 
@@ -247,6 +257,19 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 	SlideBoostCooldownLeft -= DeltaSeconds;
 	SlideCooldownLeft -= DeltaSeconds;
 	WallCooldown -= DeltaSeconds;
+
+	// The speed ring's boost. Put back to 1 the moment it runs out rather than left to decay, so a
+	// boost is either on at full strength or off - which is what makes the camera's FOV bump and
+	// the raised ceiling agree with each other.
+	if (BoostLeft > 0.f)
+	{
+		BoostLeft -= DeltaSeconds;
+		if (BoostLeft <= 0.f)
+		{
+			BoostLeft = 0.f;
+			BoostScale = 1.f;
+		}
+	}
 
 	// Before the mantle bail-out below, so a vortex always wins: like a C4 blast or a jump pad it
 	// takes you out of a scripted climb rather than waiting politely for it to finish.
@@ -297,7 +320,7 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 			// Steer toward the keys you're holding without losing speed.
 			if (Analog > 0.f)
 			{
-				const float Speed = FMath::Max(HSpeed, RunSpeed * 0.85f);
+				const float Speed = FMath::Max(HSpeed, GetBoostedRunSpeed() * 0.85f);
 				Velocity.X = WishDir.X * Speed;
 				Velocity.Y = WishDir.Y * Speed;
 			}
@@ -381,6 +404,34 @@ void UGetawayMovementComponent::ApplyBlast(const FVector& DeltaVelocity)
 	{
 		SetMovementMode(MOVE_Falling);
 	}
+}
+
+/* ============================================================ speed boost */
+
+void UGetawayMovementComponent::AddSpeedBoost(float Scale, float Duration, float SnapMinSpeed)
+{
+	// A scale of 1 or less is not a boost, and a boost with no clock is not one either.
+	if (Scale <= 1.f || Duration <= 0.f) return;
+
+	// Each half of this takes the better of the two rather than adding, so two rings in a row
+	// refresh the boost instead of compounding into something nobody tuned.
+	BoostScale = FMath::Max(BoostScale, Scale);
+	BoostLeft = FMath::Max(BoostLeft, Duration);
+
+	// The snap. It only ever scales the speed you already have up to the new ceiling - never down,
+	// and never in a direction of its own - which is what makes the ring "faster along the line you
+	// took through it" rather than a gate that redirects you.
+	if (SnapMinSpeed <= 0.f) return;
+
+	const float HSpeed = Velocity.Size2D();
+	const float Ceiling = GetBoostedRunSpeed();
+	if (HSpeed < SnapMinSpeed || HSpeed >= Ceiling) return;
+
+	const float K = Ceiling / HSpeed;
+	Velocity.X *= K;
+	Velocity.Y *= K;
+	// Vertical speed is left exactly as it was, so jumping through a ring keeps the arc you aimed
+	// for and simply covers more ground with it.
 }
 
 /* ============================================================ vortex lift */
@@ -623,7 +674,9 @@ void UGetawayMovementComponent::PhysWallRun(float DeltaTime, int32 Iterations)
 	if (FVector::DotProduct(Along, Velocity) < 0.f) Along = -Along;
 
 	float Speed = FVector::DotProduct(Along, Velocity);
-	const float Target = RunSpeed * 1.15f;
+	// Boosted, so a wallrun taken during a boost runs at the boosted pace too. It is a one-way
+	// floor - the branch below only ever speeds you up toward it - so arriving faster is safe.
+	const float Target = GetBoostedRunSpeed() * 1.15f;
 	if (Speed < Target) Speed = FMath::Min(Target, Speed + 1400.f * DeltaTime);
 
 	// Light gravity that ramps up over the last 40% of the run.
@@ -1074,7 +1127,8 @@ void UGetawayMovementComponent::UpdateSoundLoops()
 	if (!SlideLoop) return;
 
 	const float Lo = SlideStopSpeed;
-	const float Hi = FMath::Max(RunSpeed + SlideBoost, Lo + 1.f);
+	// Boosted, so a slide taken out of a speed ring does not just sit pegged at the top pitch.
+	const float Hi = FMath::Max(GetBoostedRunSpeed() + SlideBoost, Lo + 1.f);
 	const float K = FMath::Clamp((Velocity.Size2D() - Lo) / (Hi - Lo), 0.f, 1.f);
 	SlideLoop->SetPitchMultiplier(FMath::Lerp(SlideLoopPitchMin, SlideLoopPitchMax, K));
 }

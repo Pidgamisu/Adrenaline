@@ -61,7 +61,7 @@ down on slopes* and *Only attached things follow a slope* in `docs/falling-slope
 
 ### The catalog
 
-Eleven pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
+Thirteen pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
 Z-up), six of them retuned by hand since, the last three on 2026-11-05: floor 400x400x50, wall 400x50x400, ledge 300x300x150,
 breakable panel 400x50x400, crate 250x250x250, ramp 600x400x200, collapsing bridge 1000x400x60, and
 the C4 pickup. The ninth is
@@ -69,7 +69,10 @@ the C4 pickup. The ninth is
 surface-mounted piece - see *Spikes, and death*. The tenth is the **jump pad** (200x200x50),
 added 2026-10-27, surface mounted the same way - see *The jump pad* below. The eleventh is the
 **vortex** (200x200x400), added 2026-10-31, a free-standing column - see *The anti-gravity vortex*
-below. The party box deals `HandSize` (3) of them at random without repeats.
+below. The twelfth is the **windmill** (350x700x540), added 2026-11-03 - see *The paddle wheel*.
+The thirteenth is the **speed ring** (100x300x300), added 2026-11-05, a hoop you run through for
+three seconds of extra speed - see *The speed ring* at the end of this file. Thirteen in all; the
+party box deals `HandSize` (3) of them at random without repeats.
 
 Edit the catalog on a Blueprint child of `GetawayGameMode` - it is `EditDefaultsOnly`.
 
@@ -844,3 +847,168 @@ Built clean. **Not played.**
   plate is placed in the world where the plate happens to be, and the wheel sweeps out from under
   it. Only *surface-mounted* pieces attach, because attaching is what surface mounting is - and
   spikes and jump pads on a plate do ride, as of 2026-11-03; see the section below.
+
+## The speed ring (added 2026-11-05)
+
+`AGetawaySpeedRing`, catalog id `speedring`, 100 x 300 x 300 - **the first piece whose effect
+outlives the piece.** Asked for as *"a ring (physical ring you can stand in and go through) that
+speeds you up for 3 seconds when you go through it"*.
+
+The three movement pieces now read as a set, and what separates them is how long they have you for:
+
+| Piece | How long it has you | Where the effect is useful |
+|---|---|---|
+| Jump pad | one frame | at the pad |
+| Vortex | as long as you stay in the column | in the column |
+| **Speed ring** | **a tenth of a second** | **for three seconds afterwards** |
+
+That is the whole point of it. You are through the hoop before you have registered it, and the
+boost then runs on your own character's clock, so the ring is not where the speed is useful - it is
+where you *collect* it, and what you do with it is the jump, the wallrun or the slide that comes
+next. It is the first piece that rewards planning ahead rather than aiming.
+
+### What the boost actually is
+
+**It raises `RunSpeed` by `BoostScale` (1.5, so 800 -> 1200 cm/s) for `BoostTime` (3 s), and
+nothing else.** That is `UGetawayMovementComponent::AddSpeedBoost`, and the reason it is a raised
+ceiling rather than a velocity kick is Source friction: friction always drags you back toward
+`StopSpeed` whatever your top speed is, so a bare kick is eaten in about a second and "for three
+seconds" would have meant nothing. Raising the ceiling instead means **holding W keeps you up
+there** until the clock runs out.
+
+One number, read in one place, reaches everything at once. `GetBoostedRunSpeed()` is `RunSpeed`
+times the live boost, and every place that treated `RunSpeed` as *how fast you are allowed to go*
+now goes through it:
+
+- ground acceleration and the crouch-walk speed (`CalcVelocity`)
+- air strafing, including while sliding - and note `SourceAirAccelerate` caps the *target* at
+  `AirSpeedCap` but scales the acceleration by the full wish speed, so a boost makes strafing bite
+  harder too. Deliberate: a jump out of a ring should carry further
+- the double jump's redirect floor (`RunSpeed * 0.85`)
+- the wallrun's speed target (`RunSpeed * 1.15`), so a boosted wallrun runs at the boosted pace
+- `GetMaxSpeed()`, which is the ceiling the engine itself asks about
+- the slide loop's pitch, so a boosted slide is not just pegged at the top note
+
+The one deliberate exception is **the camera's speed FOV, which still reads the raw `RunSpeed`**.
+It is relative by design, so if it read the boosted value a boosted run would look like a normal
+jog again - exactly backwards.
+
+On top of the ceiling, `bSnapToSpeed` scales the speed you arrive with **straight up to the new
+one** on the frame you pass through, so the ring hits like a surge rather than like homework. It
+only ever multiplies what you already have, never redirects it and never slows you: the ring makes
+you faster *along the line you took through it*, which is why it works going through from either
+side. Vertical speed is left exactly alone, so jumping through a ring keeps the arc you aimed for
+and simply covers more ground with it.
+
+`SnapMinSpeed` (300) is the floor under that. Below it the snap is skipped and only the ceiling
+goes up, so creeping into a ring does not fling you at 1200 cm/s in whatever direction you happened
+to be nudging - you accelerate into the boost yourself instead.
+
+**Boosts do not stack.** The stronger `BoostScale` wins and the longer clock wins, so running two
+rings back to back refreshes the three seconds rather than compounding into something nobody tuned.
+
+### How you know it is live
+
+A **camera punch** (0.7 degrees, lighter than a jump pad's 1.2 - the ring does not change your
+direction, so a big punch would read as a collision) and a **flat FOV bump** of `BoostFOV`
+(9 degrees, on `AGetawayCharacter` under Getaway|Look) for as long as the boost lasts. The existing
+`FInterpTo` eases it in and out over about a sixth of a second, so it reads as a surge arriving and
+then relaxing rather than as two cuts.
+
+It has to be a flat bump rather than more speed FOV for the reason above: the speed FOV is relative
+to `RunSpeed`, so a boost that is merely *held* - coasting at the new ceiling, not strafing - would
+otherwise look like a slightly fast jog. Between them the two give about 12.6 degrees at 1200 cm/s.
+
+**There is no HUD message for it**, asked for that way. The FOV is the signal.
+
+### The piece
+
+- **It is a gate, so it is directional.** The axis of the hole is the piece's own +X, which is the
+  way the placement arrow points, so a ring faces you as you place it and R turns it side on. The
+  facing says which way the hoop *lies*, not which way it pushes - it works from either side.
+- **The rim is not solid.** No blocking collision anywhere on the piece: clipping the edge of a
+  hoop at 1200 cm/s and being stopped dead by it would be the worst thing in the game. Like the
+  spikes, the pad, the vortex and the finish, the meshes have collision off and the trigger is
+  QueryOnly overlapping pawns only.
+- **The trigger is inset to the hole**, so what you have to hit is the gap rather than the piece. A
+  box's inscribed circle is the hole exactly and its corners reach a little past the rim, which
+  errs on the forgiving side - the same bargain as the wallrun's generous attach.
+- **Free-standing, not surface mounted.** It stands on the floor (or against whatever you aimed
+  at), takes the 50 cm grid and the *everything touches something* rule unchanged. At 300 x 300 the
+  hoop's lowest point sits about 2 cm off the floor, so you really can run through it on the
+  ground; the hole starts 22 cm up, which a running capsule clears without thinking.
+- **The hoop is not held upright in world space**, unlike the vortex's cage. The vortex always
+  lifts straight up whatever it is sitting on, so a tilted cage would lie about it; a ring's axis is
+  only the gap you have to fly through and is free to tilt with the piece. In practice it never
+  does, because free-standing pieces stand square on a slope since 2026-11-05.
+- **There is no torus in the engine's BasicShapes set**, and this plugin ships no content, so the
+  hoop is a ring of stretched cylinders - the same answer as the vortex's cage of bars and the
+  ramp's hand-built wedge. Dashed rather than solid (`SegmentFill` 0.72), because the gaps are what
+  make the spin visible at all. Rolled about the piece's +X only, so the non-uniform catalog scale
+  cannot shear a segment.
+- **Your own machine boosts you**, on the frame you pass through - the same client-authority
+  bargain as the jump pad, dying on spikes and the rocket jump. Nothing about a boost goes over the
+  wire; the ring itself replicates so the piece exists for everyone, with movement replication off
+  because it never moves.
+- **Armed only during a run**, like the spikes, the pad and the vortex: `StartPlacement` disarms
+  every ring, `BeginRun` arms them, and arming clears the per-player retrigger times so a new round
+  starts clean. The spin stops when it is disarmed, which is how you can see it is not live.
+- **Cyan.** The palette says cyan for anything that helps you, and the ring is nothing but help, so
+  `dress_pieces.py` gives the rim `MI_VB_Pickup` - the brightest thing in the palette, the same
+  material the C4 pickup's charge wears.
+
+### Tuning it
+
+On the actor, under **Getaway|Speed Ring**, so it can be changed per ring in the Details panel or
+on `BP_Piece_SpeedRing`:
+
+| Value | Default | What it does |
+|---|---|---|
+| `BoostScale` | 1.5 | What the boost multiplies your top speed by. 800 -> 1200 cm/s |
+| `BoostTime` | 3 s | How long it lasts after you pass through |
+| `bSnapToSpeed` | on | On: lifted to the boosted speed instantly, so it hits like a surge. Off: only the ceiling rises and you accelerate into it yourself |
+| `SnapMinSpeed` | 300 cm/s | The least speed you must already have for that snap, so creeping in does not fling you |
+| `Retrigger` | 0.4 s | Per player, so one pass through the hoop is one boost |
+| `BoostViewPunch` / `BoostShake` | 0.7 deg / 0.2 | The camera kick. Lighter than the pad's, because the ring does not redirect you |
+| `SegmentCount` / `SegmentFill` | 12 / 0.72 | The dashed rim. Fill 1 closes the gaps and the spin stops being visible |
+| `RingThickness` | 20 cm | World thickness of the rim, held constant however the piece is scaled |
+| `SpinRate` | 70 deg/s | How fast the hoop turns about its own axis. 0 stops it |
+| `RingMaterial` | from the script | The rim. Pooled, so it cannot be dressed from the Components panel |
+
+`BoostFOV` (9 degrees) is on `AGetawayCharacter` under **Getaway|Look**, not on the ring, because
+the FOV belongs to your camera rather than to any one piece. `bCameraEffects` off takes it with
+everything else.
+
+### A pre-existing build error that this piece uncovered
+
+Adding `GetawaySpeedRing.cpp` reshuffled the adaptive unity build's groupings and put
+`GetawayHUD.cpp` and `GetawayStickInput.h` in the same blob for the first time. Both had something
+called `Live` - the HUD's cyan, and a local in `ApplyDeadZone` - and C4459, *declaration of 'Live'
+hides global declaration*, is an error in this project's warning settings. The local is now
+`Travel`. Nothing to do with the ring, and it would have bitten the next new file either way.
+
+### Played and signed off (2026-11-05)
+
+**Played the day it was built and it works** - *"all works, speed ring is awesome"*. Signed off at
+the defaults, so none of the first-guess numbers needed changing: `BoostScale` 1.5 and `BoostTime`
+3 s are the tuning, the snap at `SnapMinSpeed` 300 reads as a surge rather than a shove, a 300 cm
+hoop is a fair target at speed, and **the FOV alone is enough** to tell you the boost is live - no
+HUD line was wanted and none is needed. The suspicion recorded before playing, that 3 s might be
+too long for a 300 cm hoop, did not come off: it is the three seconds afterwards that make the
+piece, which is the whole bet the design was built on.
+
+It is also the first piece that was right on the first pass, with no retune after playing - the
+jump pad needed `GroundLift`, the panel and crate and bridge all needed resizing, and the wallrun
+tilt needed its sign flipped.
+
+### Still unverified (the speed ring)
+
+- **Two machines.** Nothing about the boost crosses the wire, which is the same shape as the jump
+  pad and the vortex, so it should be fine - but no ring has been run through on two machines.
+- **Whether a boosted wallrun or a boosted slide is too much.** The boost reaches both on purpose
+  and the ring was signed off as a whole, but neither was aimed at deliberately, so neither is
+  *proved* so much as not complained about.
+- **Two rings back to back.** The refresh-rather-than-stack rule is written and reasoned but was
+  not built into a course and run.
+- **A ring on a slope, or stuck in mid-air against a wall.** It takes the free-standing placement
+  rules unchanged, so this is inherited rather than new behaviour, but it was not tried.

@@ -134,6 +134,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look")
 	bool bCameraEffects = true;
 
+	/**
+	 * Extra degrees of FOV while a speed ring's boost is running, on top of what the speed itself
+	 * already earns. This is the only thing that tells you the boost is live and, as it eases back
+	 * out over about a sixth of a second, that it has gone - there is no HUD message for it.
+	 *
+	 * It has to be a flat bump rather than more speed FOV, because the speed FOV is relative to
+	 * RunSpeed and a boost that is merely *held* (coasting at the new ceiling with no strafing)
+	 * would otherwise look like a slightly fast jog. 0 turns it off; `bCameraEffects` off takes it
+	 * with everything else.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look", meta = (ClampMin = "0", ClampMax = "30"))
+	float BoostFOV = 9.f;
+
 	/** Eye height above your feet (cm), standing and crouched. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Look")
 	float StandingEyeHeight = 162.f;

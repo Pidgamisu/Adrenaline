@@ -100,6 +100,9 @@ Unreal works in centimetres; the lab showed Source units (u), where 40 u = 1 m, 
 | C4 you spawn with | - | StartingCharges (character) | 0 |
 | C4 given by a pickup | - | ChargesGranted (pickup) | 1 |
 | C4 pickup respawn | - | RespawnDelay (pickup) | 8 s |
+| Speed ring boost | - | BoostScale / BoostTime (speed ring) | 1.5x for 3 s |
+| Speed ring snap | - | bSnapToSpeed / SnapMinSpeed (speed ring) | on / 300 |
+| Speed boost FOV | - | BoostFOV (character) | 9 deg |
 
 Presets from the lab, applied to the movement component:
 

@@ -15,6 +15,7 @@
 #include "GetawayPlayerController.h"
 #include "GetawayPlayerState.h"
 #include "GetawayRamp.h"
+#include "GetawaySpeedRing.h"
 #include "GetawaySpikes.h"
 #include "GetawayVortex.h"
 #include "GetawayWindmill.h"
@@ -93,6 +94,12 @@ AGetawayGameMode::AGetawayGameMode()
 	// speed and long enough that how far up you come out is a decision. It lifts straight up however
 	// it is placed, so it needs nothing aimed and nothing stuck to.
 	Catalog.Add(MakePiece(TEXT("vortex"), TEXT("Vortex"), FVector(200.f, 200.f, 400.f), AGetawayVortex::StaticClass()));
+	// A hoop you run through for a few seconds of extra speed. Directional, with the arrow along
+	// the axis of the hole, so it faces you as you place it and R turns it side on. 100 deep so it
+	// is a gate rather than a tunnel, and 300 x 300 across so a 3 m hole stands on the floor with
+	// its lowest point on the ground - wide enough to hit at speed without aiming.
+	Catalog.Add(MakePiece(TEXT("speedring"), TEXT("Speed ring"), FVector(100.f, 300.f, 300.f),
+		AGetawaySpeedRing::StaticClass(), true, true));
 	// A paddle wheel: four level plates orbiting a horizontal axle, so it is a lift you ride
 	// rather than a windmill you dodge. Directional, with the arrow along the axle, so it goes up
 	// facing you and R turns it side on. Not scaled: it builds itself from its own blade
@@ -538,6 +545,10 @@ void AGetawayGameMode::StartPlacement()
 	{
 		It->SetArmed(false);
 	}
+	for (TActorIterator<AGetawaySpeedRing> It(World); It; ++It)
+	{
+		It->SetArmed(false);
+	}
 	for (TActorIterator<AGetawayWindmill> It(World); It; ++It)
 	{
 		It->SetArmed(false);
@@ -727,6 +738,10 @@ void AGetawayGameMode::BeginRun()
 		It->SetArmed(true);
 	}
 	for (TActorIterator<AGetawayVortex> It(World); It; ++It)
+	{
+		It->SetArmed(true);
+	}
+	for (TActorIterator<AGetawaySpeedRing> It(World); It; ++It)
 	{
 		It->SetArmed(true);
 	}

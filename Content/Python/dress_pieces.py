@@ -17,6 +17,23 @@ have changed by hand survives - EXCEPT the ones named in PIECES below, which are
 time. To keep a hand-picked material, clear it out of the table here, but leave the row: the
 row is also what points the catalog entry at the Blueprint. The spikes are kept that way.
 
+**Four pieces are hand-dressed, and this script must not touch them.** The panel, the jump pad,
+the C4 pickup and the vortex were dressed in the editor on 2026-11-05 (commit 800940a), and
+their rows are `{}, {}` for the same reason the spikes' row is. Their colours live in the
+.uasset and nowhere else, so emptying the row is the only thing that protects them - the table
+cannot hold the right value because nothing can read it back out (see export_tuning.py, which
+deliberately does not report component materials: a cold-loaded class default object does not
+show them). A fresh clone therefore gets those four undressed, which is the accepted cost.
+
+**Why a run of this script appeared to reset them, on 2026-11-05.** The symptom was that those
+four went back to their old colours in the editor, with nothing saved and nothing to revert.
+`dress()` writes to the class default object, then compiles the Blueprint, then saves it. The
+write does not dirty the package - that is the known bug recorded in docs/blueprint-tuning.md -
+so the log says "All files are already saved" and the .uasset keeps its hand-set colours. But
+the *compile* propagates the CDO into the running session, so the editor shows the table's
+colours until it is closed and reopened. Nothing is lost; reopening is the whole fix. The rows
+being empty is what stops it happening again.
+
 It also rebuilds BP_GetawayGameMode's Catalog from AGetawayGameMode's class defaults each run,
 which is the only way a piece added to the C++ catalog ever reaches the party box - a Blueprint
 that has been written once stops tracking C++. Everything about a piece except its Actor Class
@@ -58,32 +75,39 @@ PIECES = [
     ("floor",    "BP_Piece_Floor",    "GetawayPiece",             {"mesh": "MI_VB_Floor"},    {}),
     ("wall",     "BP_Piece_Wall",     "GetawayPiece",             {"mesh": "MI_VB_Wall"},     {}),
     ("ledge",    "BP_Piece_Ledge",    "GetawayPiece",             {"mesh": "MI_VB_Ledge"},    {}),
-    ("break",    "BP_Piece_Panel",    "GetawayBreakable",         {"mesh": "MI_VB_Panel"},
-                                                                  {"scrap_material": "MI_VB_Panel"}),
+    # Hand-dressed in the editor on 2026-11-05 (commit 800940a), so this script leaves it alone -
+    # the same deal as the spikes below. See *Four pieces are hand-dressed* in this docstring.
+    # Was: {"mesh": "MI_VB_Panel"}, {"scrap_material": "MI_VB_Panel"}.
+    ("break",    "BP_Piece_Panel",    "GetawayBreakable",         {}, {}),
     ("crate",    "BP_Piece_Crate",    "GetawayBreakable",         {"mesh": "MI_VB_Crate"},
                                                                   {"scrap_material": "MI_VB_Crate"}),
     ("ramp",     "BP_Piece_Ramp",     "GetawayRamp",              {},
                                                                   {"surface_material": "MI_VB_Ramp"}),
     ("bridge",   "BP_Piece_Bridge",   "GetawayCollapsingBridge",  {"mesh": "MI_VB_Bridge"},   {}),
-    ("c4",       "BP_Piece_C4Pickup", "GetawayC4Pickup",          {"pad": "MI_VB_Dark",
-                                                                   "charge": "MI_VB_Pickup"}, {}),
+    # Hand-dressed 2026-11-05, left alone. Was: {"pad": "MI_VB_Dark", "charge": "MI_VB_Pickup"}, {}.
+    ("c4",       "BP_Piece_C4Pickup", "GetawayC4Pickup",          {}, {}),
     # Dressed by hand, so this script leaves it alone: on 2026-11-03 a run of this script put the
     # table back over a look that had been set in the editor, and the row is empty so that cannot
     # happen again. The row itself has to stay, or the catalog would point the spikes at the raw
     # C++ class instead of this Blueprint. Was: {"base": "MI_VB_Dark"}, {"point_material":
     # "MI_VB_Danger"} - put those back here to hand the spikes to the script again.
     ("spikes",   "BP_Piece_Spikes",   "GetawaySpikes",            {}, {}),
-    ("jumppad",  "BP_Piece_JumpPad",  "GetawayJumpPad",           {"base": "MI_VB_Dark",
-                                                                   "piston": "MI_VB_Pickup"}, {}),
-    ("vortex",   "BP_Piece_Vortex",   "GetawayVortex",            {"base": "MI_VB_Dark",
-                                                                   "cap": "MI_VB_Dark"},
-                                                                  {"bar_material": "MI_VB_Vortex"}),
+    # Hand-dressed 2026-11-05, left alone. Was: {"base": "MI_VB_Dark", "piston": "MI_VB_Pickup"}, {}.
+    ("jumppad",  "BP_Piece_JumpPad",  "GetawayJumpPad",           {}, {}),
+    # Hand-dressed 2026-11-05, left alone. Was: {"base": "MI_VB_Dark", "cap": "MI_VB_Dark"},
+    # {"bar_material": "MI_VB_Vortex"}.
+    ("vortex",   "BP_Piece_Vortex",   "GetawayVortex",            {}, {}),
     # The plates are architecture you stand on, so pink, and the brighter of the two floor pinks
     # because they are moving and have to be read at a glance. The hub and the spokes are the dark
     # frame they hang off, which is also the one thing that visibly turns.
     ("windmill", "BP_Piece_Windmill", "GetawayWindmill",          {"hub": "MI_VB_Dark"},
                                                                   {"blade_material": "MI_VB_Ledge",
                                                                    "arm_material": "MI_VB_Dark"}),
+    # Cyan, because the ring is purely something that helps you - the same material the C4
+    # pickup's charge wears, which is the brightest thing in the palette. The rim is the only
+    # part there is, and it is pooled, so it goes in by property rather than by component.
+    ("speedring", "BP_Piece_SpeedRing", "GetawaySpeedRing",        {},
+                                                                  {"ring_material": "MI_VB_Pickup"}),
 ]
 
 assets = unreal.EditorAssetLibrary

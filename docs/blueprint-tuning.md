@@ -115,6 +115,36 @@ hand-picked look, empty that piece's two dictionaries in `PIECES` (the spikes ar
 leave the row itself in place: the row is also what points the catalog entry at the Blueprint, so
 deleting it hands that piece back to the raw C++ class.
 
+**Five rows are empty now, not one** (2026-11-05). The panel, the jump pad, the C4 pickup and the
+vortex joined the spikes, because they were dressed by hand in the editor that afternoon
+(commit 800940a) and a script run put the table's colours back over them the same evening. There is
+no way to protect them by *recording* the hand-set value in the table instead: nothing can read a
+component material back off a Blueprint's class default object, which is the same limitation that
+stops `export_tuning.py` reporting them. Emptying the row is the only lever. The cost is that a
+fresh clone gets those five undressed, and that is accepted.
+
+### A script run that resets a colour with nothing saved and nothing to revert (2026-11-05)
+
+Worth knowing because the symptom and the cause disagree. Running `dress_pieces.py` put the panel,
+pad, pickup and vortex back to their old colours **in the editor**, while `git status` showed none
+of those four `.uasset` files as modified and the log said *"All files are already saved"* for every
+one of them.
+
+Both are true at once. `dress()` writes the materials onto the class default object, then calls
+`compile_blueprint`, then `save_loaded_asset`. The CDO write **does not dirty the package** - the
+same non-persisting write recorded further down this file - so there is nothing to save and the
+`.uasset` keeps its hand-set colours. But the **compile** propagates the CDO into the running
+editor session, so what you are looking at is the table's colours even though the asset on disk
+still holds yours.
+
+So the asset is the source of truth and it was never harmed: **closing the editor without saving
+and reopening restores the look.** Nothing to revert, nothing lost. What makes it not happen again
+is the five empty rows above, not the reopen.
+
+The trap in it is the other direction: if something else dirties one of those Blueprints while the
+wrong colours are live in the session, a **Save All** would write them to disk for real. That has
+not happened, and the empty rows mean it now cannot arise from a script run.
+
 **The script also rebuilds `BP_GetawayGameMode`'s whole Catalog from the C++ class defaults** every
 run, which is how a piece added in C++ reaches the party box at all (see *A new piece did not reach
 the game by itself* in `docs/placement.md`). So a piece's id, size and flags are C++ values only -

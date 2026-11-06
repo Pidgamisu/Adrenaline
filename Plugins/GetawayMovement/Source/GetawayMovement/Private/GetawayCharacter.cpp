@@ -1027,7 +1027,12 @@ void AGetawayCharacter::UpdateCamera(float DeltaSeconds)
 	float FovTarget = BaseFOV;
 	if (bFx)
 	{
+		// Deliberately the raw RunSpeed, not the boosted one: while a speed ring has you, going
+		// faster than a normal run should keep widening the view, not be treated as the new normal.
 		FovTarget += FMath::Min(14.f, FMath::Max(0.f, (HSpeed - M->RunSpeed) / 100.f) * 0.9f) + (M->IsSliding() ? 3.f : 0.f);
+		// A flat bump for the boost on top, which is how you know it is live and when it ends. The
+		// FInterpTo below eases it in and out, so it reads as a surge rather than a cut.
+		if (M->IsSpeedBoosted()) FovTarget += BoostFOV;
 	}
 	CurrentFOV = FMath::FInterpTo(CurrentFOV, FovTarget, DeltaSeconds, 6.f);
 	Camera->SetFieldOfView(CurrentFOV);
