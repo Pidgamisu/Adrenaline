@@ -91,6 +91,23 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   filename, nothing to set in the editor. **Not applied in the game itself**: the menu still spells
   the word out as text, and the itch page has no cover. See *The logo, the icon and the splash* in
   `docs/look.md`.
+- **The HUD** was redone 2026-11-06: bigger and glowing, then **cut back twice the same day** to
+  three things in a run - your hand top left, the clock top centre, the speedometer bottom centre -
+  and then flattened. The visor arcs are off, the curve is off, the key list is gone from the run
+  (the build phase keeps its own), and so are the `GROUND` / `SLIDE` movement state and the u/s
+  line. The lesson worth keeping is in `docs/hud.md`: **a curve needs something straight to argue
+  with and a frame to belong to**, so once the arcs and the long key lists went, the curve had
+  nothing left to read against and came out rather than being tuned down. **Seen running in a
+  screenshot, not played, and the build phase's half of it is unseen.**
+  The first version drew no text at all: canvas text is dropped silently unless its `FSlateFontInfo`
+  carries a `UFont`, which the obvious `FCoreStyle` call does not - see *The trap that cost a build*
+  in `docs/hud.md`, along with the terminal one-liner that launches the game into a round and
+  screenshots it, which is how it was checked. The size change is also a fix - the HUD used
+  to ask the engine's small and large fonts for a *multiple* of themselves and both of those are the
+  same 10 px face, so every readout was a stretched raster and "larger" would only have meant
+  blurrier. Text is now rasterised at the size it is drawn at, and **nothing in it can be tuned from
+  the Details panel yet** (the game mode sets `HUDClass` in C++ and there is no Blueprint child; six
+  clicks fix that and `docs/effects.md`'s same complaint at once). See `docs/hud.md`.
 
 ## Where the details live
 
@@ -108,6 +125,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 | `docs/controller.md` | controller support: the button map, stick tuning, why a stick can't use the mouse look code |
 | `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named, giving a piece a material |
 | `docs/look.md` | the unlit pink look: materials, the palette and what each colour is allowed to mean, lighting, bloom, the logo and where it is applied |
+| `docs/hud.md` | the in-game HUD: how text is sized, curved and made to glow, the visor frame, the knobs and why none of them is in the Details panel yet |
 | `docs/sound.md` | sound and music: the movement sound slots, what fires each, the 2D and own-sounds-only decisions, what has no audio yet |
 | `docs/itch.md` | the itch.io release: the Shipping build, butler, pushing a new version, the page |
 | `docs/itch-page.md` | the text for the itch.io page: tagline, description, tags, controls, pricing |
@@ -356,6 +374,37 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   reporting them. The row itself must stay, or the catalog points that piece at the raw C++ class.
   A fresh clone gets those five undressed, and that is the accepted cost. See *A script run that
   resets a colour with nothing saved and nothing to revert* in `docs/blueprint-tuning.md`.
+- **Music carries the game, effects are for major events only** (decided 2026-11-06). **There is no
+  movement foley.** No footsteps, no jump, no landing thump, no wall kick, no slide or wallrun loop,
+  no mantle. A track per phase does the work those would have done, and sound effects are kept for
+  things that happen rarely and on purpose: the C4 blast, a jump pad, a speed ring, a pickup, the
+  grapple, a breakable bursting, the build clock running out, GO, **YOU MADE IT**, dying.
+  Three reasons, each of which is a decision already on this list rather than a new preference.
+  **The look**: greybox *is* the look, so the game is already abstract, and realistic foley on an
+  unlit wireframe raises a question the art does not answer - whose feet, on what material.
+  **You only ever hear yourself**: the usual reason a first-person game needs footsteps is hearing a
+  rival, and `SoundsAudible()` ruled that out long ago, so what was left was flavour, which a track
+  does better. **The build phase makes no sound at all** - half of every round is a placement camera
+  with nothing moving in it, and music is the only thing that can reach it.
+  It also costs the least and risks the least: the loops were the hardest thing on the sound list
+  and are now simply gone, and a driving track trailers the game far better than footsteps for the
+  itch page video.
+  Two sounds were built before this landed and **both were cleared**: the wall kick (2026-11-05) and
+  the landing thump (2026-11-06, the same day it was made). The landing was the close call - weight
+  on impact is the one thing a screen cannot convey - and it went out because with auto-hop it fires
+  every 750 ms, which is a metronome under the track. **Both sounds were then deleted outright** (asked for the same
+  day), wavs and imported assets alike, so `Audio/Movement/` and `Content/Audio/walljump/` no longer
+  exist. What stays is the machinery: the ten slots are still wired, still tuned and still
+  documented, and `bMovementSounds` stays **on** with every slot empty - **clear a slot to express
+  this, never the master switch**, because off is how the wall kick spent a day silent with nothing
+  to say why. Both deleted sounds are recoverable from git history, and their listing ids are in
+  `CREDITS.md` under *Two sounds that were here and are gone*.
+  **The one debt it takes on is the slide cooldown.** Every other piece of movement feedback has a
+  visual - wallrun tilt, the landing camera kick, speed FOV, the speedometer - but nothing at all
+  tells you when your next slide is ready, and a sound was the obvious answer. That is now a HUD
+  job: a small tell near the crosshair. See *What this list no longer contains* in `docs/sound.md`.
+  It also makes the **Music / SFX Sound Class split** matter early rather than eventually, because a
+  music-led game with no volume slider is one players mute.
 - **The unlit pink look is the look** (confirmed 2026-11-02, by playing it at speed). The edge band
   is what carries shape and depth once the lights are off; pass one was flat without it. See
   `docs/look.md` before changing any of it.
@@ -428,9 +477,15 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
    download on it. **A short video of movement at speed is the
    highest-value thing missing** - motion is the whole pitch, and no still can show a wallrun into a
    slide into a C4 jump. See `docs/itch.md` and `docs/itch-page.md`.
-7. **Sound.** There is no audio in the project at all - no footsteps, no wallrun, no landing, no
-   explosion. `AGetawayC4` has an `ExplosionSound` slot and nothing fills it. For a game whose whole
-   appeal is movement, this is probably the biggest single improvement left per hour spent.
+7. **Sound.** Still the biggest single improvement left per hour spent, and since
+   *Music carries the game* (above) the order is short: **music first**, then the Music/SFX split,
+   then the devices you trigger, then the round and UI stings, then the breakables. All ten movement
+   slots are deliberately empty. The only sound wired is the C4 blast (`BP_C4` Explosion Sound =
+   `c4_blast`, with `ATT_World` for falloff) and **it has never been heard**, so item zero is
+   pressing Play rather than building anything. The list, with the reasoning, is *What to do next, in
+   order* in `docs/sound.md`.
+   **Read the assets, not the notes**, before believing any claim about a slot being empty: the
+   first draft of that list opened with three jobs that were already done.
 8. **Logging in Shipping.** `bUseLoggingInShipping` is not set in `Source/Getaway.Target.cs`, so a
    packaged build writes no log at all and a player who hits a crash has nothing to send you. One
    line, and worth it before the page is opened up.

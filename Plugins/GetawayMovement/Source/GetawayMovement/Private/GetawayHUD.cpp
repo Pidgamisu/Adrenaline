@@ -5,11 +5,15 @@
 #include "GetawayMovementComponent.h"
 #include "GetawayPlacementPawn.h"
 #include "GetawayPlayerState.h"
+#include "CanvasItem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "EngineFontServices.h"
+#include "Fonts/FontMeasure.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "Styling/CoreStyle.h"
 
 namespace
 {
@@ -18,6 +22,38 @@ namespace
 	const FLinearColor Warn(0.94f, 0.70f, 0.24f);
 	const FLinearColor Urgent(1.f, 0.42f, 0.3f);
 	const FLinearColor Go(0.31f, 0.82f, 0.58f);
+
+	/**
+	 * Every size on the HUD, in px before `UIScale`. They are the sizes the old HUD worked out to -
+	 * it asked for a multiple of a 10 px face, so a scale of 2.2 was 22 px - which makes `UIScale`
+	 * mean exactly what it says: 1.5 is half again the size this was always played at.
+	 */
+	namespace Px
+	{
+		constexpr float Speedo = 22.f;      // the speedometer's number
+		constexpr float Unit = 11.f;        // "best 12.30 s", "build time", the slide tell
+		constexpr float Hand = 14.f;        // what is in your hand
+		constexpr float Hint = 10.f;        // the key lists
+		constexpr float Clock = 16.f;       // the build clock and the run clock
+		constexpr float Message = 13.f;     // a line under the crosshair
+		constexpr float Row = 11.f;         // a scoreboard row
+		constexpr float MyRow = 13.f;       // ...and your own, picked out
+		constexpr float Status = 13.f;      // the placement line, "Click to place"
+		constexpr float Piece = 11.f;       // a row of your hand
+		constexpr float HeldPiece = 14.f;   // ...and the one you are holding
+		constexpr float Banner = 26.f;      // YOU MADE IT / ROUND OVER
+		constexpr float BannerSub = 15.f;   // your time under it
+		constexpr float EffectBig = 30.f;   // the round's effect, announced
+		constexpr float EffectRest = 15.f;  // ...and up in its corner
+	}
+
+	/** The eight directions a ring of halo is laid in. */
+	const FVector2D HaloDirs[8] =
+	{
+		FVector2D(1.f, 0.f), FVector2D(-1.f, 0.f), FVector2D(0.f, 1.f), FVector2D(0.f, -1.f),
+		FVector2D(0.7071f, 0.7071f), FVector2D(-0.7071f, 0.7071f),
+		FVector2D(0.7071f, -0.7071f), FVector2D(-0.7071f, -0.7071f)
+	};
 
 	/** 1st, 2nd, 3rd, 4th. The teen rule costs a line and a wrong "11st" would be remembered. */
 	FString Ordinal(int32 N)
@@ -38,19 +74,278 @@ namespace
 	}
 }
 
-void AGetawayHUD::Centred(const FString& Text, UFont* Font, float Scale, float CX, float Y, const FLinearColor& Color)
+/* ============================================================ type, curve and glow */
+
+FSlateFontInfo AGetawayHUD::Face(float Px, bool bBold) const
 {
-	float W = 0.f, H = 0.f;
-	GetTextSize(Text, W, H, Font, Scale);
-	DrawText(Text, Color, CX - W * 0.5f, Y, Font, Scale);
+	// Taken off the engine's own font object and then resized, rather than asked for by name from
+	// FCoreStyle the way the menu does it. The two are the same Roboto family - a UFont whose
+	// RuntimeFontSource is CoreStyleDefault returns FCoreStyle::GetDefaultFont() as its composite
+	// font, and "Bold" is a typeface in it - but **canvas text with no UFont behind it is dropped,
+	// silently**:
+	//
+	//   FCanvasSimpleTextItem keeps `Font = Cast<const UFont>(InFontInfo.FontObject)`,
+	//   FCanvasSimpleTextItem::HasValidText() is `return Font != nullptr`,
+	//   and FCanvasTextItemBase::Draw() returns early when that is false.
+	//
+	// FCoreStyle::GetDefaultFontStyle builds its font info around a composite font and leaves
+	// FontObject null, so the first version of this HUD drew every tile and not one letter, with
+	// nothing in the log to say why. Slate widgets are fine with it - which is why the menu can do
+	// it - and canvas text is not. Found 2026-11-06 by the HUD going blank.
+	UFont* Legacy = GEngine ? GEngine->GetSmallFont() : nullptr;
+	FSlateFontInfo Info = Legacy
+		? Legacy->GetLegacySlateFontInfo()
+		: FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 10.f);
+
+	// The size is the whole point: the glyphs are rasterised at whatever this says, so text is sharp
+	// at any UIScale instead of being a stretched 10 px raster.
+	Info.TypefaceFontName = bBold ? TEXT("Bold") : TEXT("Regular");
+	Info.Size = FMath::Max(4.f, Px * FMath::Max(0.01f, UIScale));
+	return Info;
 }
 
-void AGetawayHUD::RightAligned(const FString& Text, UFont* Font, float Scale, float Right, float Y, const FLinearColor& Color)
+FVector2D AGetawayHUD::Measure(const FString& Text, const FSlateFontInfo& Font) const
 {
-	float W = 0.f, H = 0.f;
-	GetTextSize(Text, W, H, Font, Scale);
-	DrawText(Text, Color, Right - W, Y, Font, Scale);
+	if (FEngineFontServices::IsInitialized())
+	{
+		if (const TSharedPtr<FSlateFontMeasure> Measurer = FEngineFontServices::Get().GetFontMeasure())
+		{
+			return FVector2D(Measurer->Measure(Text, Font, 1.f));
+		}
+	}
+	// There is no font service on a machine with no renderer, and nothing here is worth a crash:
+	// half the point size a character is a serviceable guess for one frame of a dedicated server.
+	return FVector2D(Text.Len() * Font.Size * 0.5f, Font.Size);
 }
+
+float AGetawayHUD::MeasureTo(const FString& Text, int32 Count, const FSlateFontInfo& Font) const
+{
+	if (Count <= 0) return 0.f;
+	if (FEngineFontServices::IsInitialized())
+	{
+		if (const TSharedPtr<FSlateFontMeasure> Measurer = FEngineFontServices::Get().GetFontMeasure())
+		{
+			// Measured as a range of the one string rather than as a substring, so there is no
+			// allocation per character and the kerning against the character before is kept.
+			return FVector2D(Measurer->Measure(Text, 0, Count, Font, true, 1.f)).X;
+		}
+	}
+	return Count * Font.Size * 0.5f;
+}
+
+FVector2D AGetawayHUD::Warp(float X, float Y) const
+{
+	if (WrapAmount <= 0.f || ScreenW < 1.f || ScreenH < 1.f)
+	{
+		return FVector2D(X, Y);
+	}
+
+	// How far out you are, as a fraction of half the screen. Clamped a little past the edge so a
+	// glow pass or a string that overhangs does not run away with the curve.
+	const float Half = ScreenW * 0.5f;
+	const float Out = FMath::Clamp((X - Half) / Half, -1.3f, 1.3f);
+
+	// Squared, so the middle of the screen is flat and the bend builds up towards the edges. This is
+	// what a cylinder around the eye does: the surface leans away, and anything printed on it loses
+	// height the further round it goes.
+	const float Keep = 1.f - WrapAmount * Out * Out;
+	const float Middle = ScreenH * 0.5f;
+	return FVector2D(X, Middle + (Y - Middle) * Keep);
+}
+
+void AGetawayHUD::Blit(const FText& Text, const FSlateFontInfo& Font, float X, float Y, const FLinearColor& Colour)
+{
+	if (!Canvas) return;
+
+	// Belt and braces after losing a whole HUD to this once: a font info with no UFont behind it
+	// would draw nothing and say nothing, so take the old blurry path rather than go blank.
+	if (!Font.FontObject)
+	{
+		UFont* Legacy = GEngine ? GEngine->GetSmallFont() : nullptr;
+		const float Fallback = (Legacy && Legacy->LegacyFontSize > 0)
+			? Font.Size / static_cast<float>(Legacy->LegacyFontSize) : 1.f;
+		DrawText(Text.ToString(), Colour, X, Y, Legacy, Fallback);
+		return;
+	}
+
+	FCanvasTextItem Item(FVector2D(X, Y), Text, Font, Colour);
+	// The blend mode is left alone on purpose: FCanvasSimpleTextItem::GetTextBlendMode has a
+	// check() that the mode is one of the translucent ones whenever the runtime font cache is in
+	// use, which it always is here, so asking for additive would fire an assert rather than glow.
+	Item.Scale = FVector2D(1.f, 1.f);
+	Canvas->DrawItem(Item);
+}
+
+void AGetawayHUD::Glow(const FString& Text, const FSlateFontInfo& Font, float X, float Y, const FLinearColor& Colour)
+{
+	const int32 Rings = FMath::Clamp(GlowRings, 0, 4);
+	// Widened by the text's own size against a middling 14 px line, or the banners would wear the
+	// same hairline halo as a hint line and read as flat next to them. Square-rooted, because a
+	// radius straight off the point size swamped the small print.
+	const float Radius = S(GlowRadius) * FMath::Sqrt(FMath::Max(1.f, Font.Size / 14.f));
+
+	// Made once and handed to all seventeen draws. FText::FromString allocates, and a halo of two
+	// rings around every piece of every line is the one place on this HUD where that would add up.
+	const FText Label = FText::FromString(Text);
+
+	if (Rings > 0 && Radius > 0.f && GlowStrength > 0.f && Colour.A > 0.f)
+	{
+		for (int32 Ring = 1; Ring <= Rings; ++Ring)
+		{
+			FLinearColor Halo = Colour;
+			// Falls off with the square of the ring, so ring two is a quarter the brightness of ring
+			// one and ring three is barely there. Eight copies of it overlap around every glyph.
+			Halo.A = Colour.A * GlowStrength / static_cast<float>(Ring * Ring);
+			for (const FVector2D& Dir : HaloDirs)
+			{
+				Blit(Label, Font, X + Dir.X * Radius * Ring, Y + Dir.Y * Radius * Ring, Halo);
+			}
+		}
+	}
+
+	Blit(Label, Font, X, Y, Colour);
+}
+
+void AGetawayHUD::Bent(const FString& Text, const FSlateFontInfo& Font, float X, float Y, const FLinearColor& Colour,
+	float AnchorX)
+{
+	if (Text.IsEmpty() || Colour.A <= 0.f) return;
+
+	// Where the line hangs from. One height for the whole line, taken at the alignment's own anchor,
+	// so a right-aligned column does not wobble as the names in it change length.
+	const float Hang = (AnchorX == TNumericLimits<float>::Max()) ? X : AnchorX;
+	const float Base = Warp(Hang, Y).Y;
+
+	const float Bend = FMath::Clamp(TextBend, 0.f, 1.f);
+	if (Bend <= 0.f || WrapAmount <= 0.f)
+	{
+		Glow(Text, Font, X, Base, Colour);
+		return;
+	}
+
+	// Three samples say whether this line bends enough to be worth cutting up: its two ends and its
+	// middle, because a string that straddles the centre of the screen has both ends at the same
+	// height and a hump between them.
+	const float Width = Measure(Text, Font).X;
+	const float YA = Warp(X, Y).Y;
+	const float YB = Warp(X + Width * 0.5f, Y).Y;
+	const float YC = Warp(X + Width, Y).Y;
+	const float Bow = (FMath::Max3(YA, YB, YC) - FMath::Min3(YA, YB, YC)) * Bend;
+
+	// Flat enough: one draw. Most lines land here - anything short, and anything near the middle of
+	// the screen - which is what keeps the glow affordable.
+	if (Bow < 1.f)
+	{
+		Glow(Text, Font, X, Base + (YA - Base) * Bend, Colour);
+		return;
+	}
+
+	// Otherwise walk it a character at a time and break wherever the bow has moved on. The step is
+	// a tenth of the line's own bow, so a line is never cut into more than about ten pieces however
+	// hard it curves - a 2 px joint under a glow is invisible, and a thousand draw calls for one
+	// hint line is not. Each piece is drawn as a string, so spacing and kerning inside it are the
+	// font's own.
+	const float Step = FMath::Max(1.f, Bow * 0.1f);
+	const int32 Last = Text.Len();
+	int32 Start = 0;
+	float StartAt = 0.f;
+	float Advance = 0.f;
+	float PieceY = Base;
+	for (int32 i = 0; i < Last; ++i)
+	{
+		const float Reach = MeasureTo(Text, i + 1, Font);
+		const float Here = Base + (Warp(X + (Advance + Reach) * 0.5f, Y).Y - Base) * Bend;
+
+		if (i == Start)
+		{
+			PieceY = Here;
+		}
+		else if (FMath::Abs(Here - PieceY) >= Step)
+		{
+			Glow(Text.Mid(Start, i - Start), Font, X + StartAt, PieceY, Colour);
+			Start = i;
+			StartAt = Advance;
+			PieceY = Here;
+		}
+
+		Advance = Reach;
+	}
+	Glow(Text.Mid(Start), Font, X + StartAt, PieceY, Colour);
+}
+
+void AGetawayHUD::Centred(const FString& Text, const FSlateFontInfo& Font, float CX, float Y, const FLinearColor& Colour)
+{
+	Bent(Text, Font, CX - Measure(Text, Font).X * 0.5f, Y, Colour, CX);
+}
+
+void AGetawayHUD::RightAligned(const FString& Text, const FSlateFontInfo& Font, float Right, float Y, const FLinearColor& Colour)
+{
+	Bent(Text, Font, Right - Measure(Text, Font).X, Y, Colour, Right);
+}
+
+/* ============================================================ the furniture */
+
+void AGetawayHUD::DrawCrosshair(float CX, float CY)
+{
+	const float R = FMath::Max(1.f, S(CrosshairSize));
+
+	// Faintest and widest first, so each pass sits under the one before it rather than tinting it.
+	if (GlowStrength > 0.f && GlowRings > 0)
+	{
+		const float Step = FMath::Max(1.f, S(GlowRadius));
+		FLinearColor Halo = FLinearColor::White;
+
+		Halo.A = FMath::Clamp(GlowStrength * 0.7f, 0.f, 1.f);
+		const float Outer = R + Step * 2.f;
+		DrawRect(Halo, CX - Outer, CY - Outer, Outer * 2.f, Outer * 2.f);
+
+		Halo.A = FMath::Clamp(GlowStrength * 1.6f, 0.f, 1.f);
+		const float Inner = R + Step;
+		DrawRect(Halo, CX - Inner, CY - Inner, Inner * 2.f, Inner * 2.f);
+	}
+
+	DrawRect(FLinearColor::White, CX - R, CY - R, R * 2.f, R * 2.f);
+}
+
+void AGetawayHUD::DrawVisorFrame()
+{
+	if (!bVisorFrame || VisorAlpha <= 0.f || ScreenW < 1.f) return;
+
+	// Stitched out of tiles rather than drawn with DrawLine: FBatchedElements::AddLine forces alpha
+	// to 1 on the way in ("some legacy code relies on Color.A being ignored", BatchedElements.cpp),
+	// so a canvas line cannot be faint. Tiles are translucent, and the gaps between stitches hide
+	// the fact that each one is level while the arc it belongs to is not.
+	const int32 Stitches = FMath::Clamp(VisorStitches, 8, 160);
+	const float Inset = ScreenW * 0.08f;
+	const float Step = (ScreenW - Inset * 2.f) / static_cast<float>(Stitches);
+	const float Dash = Step * 0.55f;
+	const float Thick = FMath::Max(1.f, S(2.f));
+
+	const float Rows[2] = { S(10.f), ScreenH - S(10.f) };
+	for (const float RowY : Rows)
+	{
+		for (int32 i = 0; i < Stitches; ++i)
+		{
+			// Faded out at both ends, so the arc trails off instead of stopping dead.
+			const float T = (Stitches > 1) ? i / static_cast<float>(Stitches - 1) : 0.5f;
+			const float Fade = FMath::Clamp(FMath::Min(T, 1.f - T) / 0.18f, 0.f, 1.f);
+			if (Fade <= 0.f) continue;
+
+			const float X = Inset + Step * (i + 0.5f) - Dash * 0.5f;
+			const float Y = Warp(X + Dash * 0.5f, RowY).Y;
+
+			FLinearColor Halo = VisorColour;
+			Halo.A = VisorAlpha * 0.3f * Fade;
+			DrawRect(Halo, X - Thick, Y - Thick, Dash + Thick * 2.f, Thick * 3.f);
+
+			FLinearColor Core = VisorColour;
+			Core.A = VisorAlpha * Fade;
+			DrawRect(Core, X, Y, Dash, Thick);
+		}
+	}
+}
+
+/* ============================================================ messages */
 
 void AGetawayHUD::ShowMessage(const FString& Text, float Seconds, FLinearColor Colour, int32 Key)
 {
@@ -90,21 +385,40 @@ void AGetawayHUD::DrawMessages(float CX, float CY)
 	const double Now = World->GetTimeSeconds();
 	Messages.RemoveAll([Now](const FGetawayMessage& M) { return M.Until <= Now; });
 
-	UFont* Small = GEngine->GetSmallFont();
-	float Y = CY + 48.f;
+	const FSlateFontInfo Font = Face(Px::Message);
+	const float Step = S(26.f);
+	float Y = CY + S(48.f);
+
+	// Lifted off the speedometer if a full stack of lines would reach it. At UIScale 1.5 on a short
+	// window - a 720p Play-in-Editor one, say - the lines coming down from the crosshair and the
+	// readout coming up from the bottom edge would otherwise meet in the middle.
+	const float Floor = ScreenH - S(190.f);
+	const float Needs = Messages.Num() * Step;
+	if (Y + Needs > Floor)
+	{
+		Y = FMath::Max(CY + S(20.f), Floor - Needs);
+	}
+
 	for (const FGetawayMessage& Line : Messages)
 	{
 		FLinearColor Colour = Line.Colour;
 		Colour.A = FMath::Clamp(static_cast<float>(Line.Until - Now) / FMath::Max(0.05f, MessageFadeTime), 0.f, 1.f);
-		Centred(Line.Text, Small, 1.3f, CX, Y, Colour);
-		Y += 26.f;
+		Centred(Line.Text, Font, CX, Y, Colour);
+		Y += Step;
 	}
 }
+
+/* ============================================================ the frame */
 
 void AGetawayHUD::DrawHUD()
 {
 	Super::DrawHUD();
 	if (!Canvas || !GEngine) return;
+
+	// Kept for the curve. Everything that bends reads these rather than being handed them, because
+	// the bend is a property of where you are on the screen and nothing else.
+	ScreenW = Canvas->ClipX;
+	ScreenH = Canvas->ClipY;
 
 	// The front end draws none of this: no crosshair over the menu, no speedometer for a camera on
 	// a rail, and no scoreboard for a round nobody is playing. Checked before the crosshair rather
@@ -114,9 +428,12 @@ void AGetawayHUD::DrawHUD()
 		if (MenuGS && MenuGS->GetPhase() == EGetawayPhase::Menu) return;
 	}
 
-	const float CX = Canvas->ClipX * 0.5f;
-	const float CY = Canvas->ClipY * 0.5f;
-	DrawRect(FLinearColor::White, CX - 2.f, CY - 2.f, 4.f, 4.f);
+	const float CX = ScreenW * 0.5f;
+	const float CY = ScreenH * 0.5f;
+
+	// Under everything else, and the same in both phases: it is the surface the rest is printed on.
+	DrawVisorFrame();
+	DrawCrosshair(CX, CY);
 
 	// Before either early return below, so a line still draws during placement and in the frames
 	// where the pawn is being swapped over.
@@ -149,9 +466,6 @@ void AGetawayHUD::DrawHUD()
 	const UGetawayMovementComponent* Move = Player ? Player->GetGetawayMovement() : nullptr;
 	if (!Move) return;
 
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Small = GEngine->GetSmallFont();
-
 	// cm/s, because that is what every tuning property in the editor is in - RunSpeed, SmashSpeed,
 	// SlideMinSpeed and the rest - so the number on screen is the number you type in the Details
 	// panel. It showed the lab's Source units (cm/s / 2.5) until 2026-11-06, inherited from the
@@ -159,28 +473,20 @@ void AGetawayHUD::DrawHUD()
 	// against what the speedometer said. It also hid a real one: a slide reading "300" is 750 cm/s,
 	// comfortably over a 550 smash threshold, so the threshold looked broken when it was not.
 	const float Speed = Player->GetVelocity().Size2D();
-	const FString State = Move->GetStateName();
-	FLinearColor StateColor = Dim;
-	if (State == TEXT("SLIDE")) StateColor = Warn;
-	else if (State == TEXT("WALLRUN")) StateColor = Live;
-	else if (State == TEXT("MANTLE")) StateColor = Go;
-	else if (State == TEXT("AIR")) StateColor = FLinearColor::White;
 
-	const float Bottom = Canvas->ClipY;
+	const float Bottom = ScreenH;
 	// Sliding is on a cooldown, so say when the next one is ready. Without this a crouch at speed
-	// that does nothing reads as a dropped input rather than as the rule.
+	// that does nothing reads as a dropped input rather than as the rule. The only thing left above
+	// the number, and only while the clock is running.
 	const float SlideWait = Move->GetSlideCooldownLeft();
 	if (SlideWait > 0.f)
 	{
-		Centred(FString::Printf(TEXT("slide  %.1fs"), SlideWait), Small, 1.1f, CX, Bottom - 172.f, Dim);
+		Centred(FString::Printf(TEXT("slide  %.1fs"), SlideWait), Face(Px::Unit), CX, Bottom - S(128.f), Dim);
 	}
-	Centred(State, Small, 1.4f, CX, Bottom - 150.f, StateColor);
-	Centred(FString::Printf(TEXT("%d cm/s"), FMath::RoundToInt32(Speed)), Big, 2.2f, CX, Bottom - 125.f, FLinearColor::White);
-	// The lab's units kept on the small line, where m/s used to be. m/s was worth having when the
-	// big number was u/s, but against a cm/s readout it is the same digits shifted by two places;
-	// u/s is the one that still says something, because Reference/getaway-lab.html shows u/s and it
-	// is the reference for how movement should feel. 1 u = 2.5 cm.
-	Centred(FString::Printf(TEXT("%d u/s"), FMath::RoundToInt32(Speed / 2.5f)), Small, 1.1f, CX, Bottom - 62.f, Dim);
+	// Sat lower than it used to be, because the movement state above it and the u/s line under it
+	// are both gone (2026-11-06) and it would otherwise float in the middle of an empty third of
+	// the screen. See *The strip* in docs/hud.md.
+	Centred(FString::Printf(TEXT("%d cm/s"), FMath::RoundToInt32(Speed)), Face(Px::Speedo, true), CX, Bottom - S(100.f), FLinearColor::White);
 
 	// What is in your hand. One line for both items rather than one line each, because the hand
 	// holds a single thing (AGetawayCharacter::ItemCapacity) and a second line reading "none" for
@@ -212,24 +518,16 @@ void AGetawayHUD::DrawHUD()
 	{
 		HandLine = TEXT("HANDS  empty");
 	}
-	DrawText(HandLine, HandColour, 24.f, 24.f, Small, 1.4f);
+	Bent(HandLine, Face(Px::Hand, true), S(24.f), S(24.f), HandColour);
 
-	// The keys, and only the ones that are any use to you: the hook's key when you are holding one
-	// or swinging on it, C4's when you are carrying a charge or have one stuck to something.
-	const bool bPad = Player->IsUsingGamepad();
-	FString Hint;
-	if (Hooks > 0 || bRopeOut)
-	{
-		Hint += bPad ? TEXT("LT hook  |  ") : TEXT("Left click hook  |  ");
-	}
-	Hint += bPad
-		? TEXT("RB throw C4  |  RT detonate  |  View gives up the run")
-		: TEXT("G throw C4  |  F detonate  |  Backspace gives up the run");
-	DrawText(Hint, Dim, 24.f, 50.f, Small, 1.f);
+	// There is no key list here any more (2026-11-06). It named the hook, C4's two keys and the
+	// forfeit, and it sat under your hand for the whole run - but a run is where you already know
+	// your keys, and the placement phase, which teaches a camera nothing else explains, keeps its
+	// own. See *The strip* in docs/hud.md.
 
 	// The run only keeps it in the corner: it was announced in the middle of the screen as the build
 	// phase opened, and playing that again as you set off would be telling you the same thing twice.
-	DrawEffectBanner(GS, CX, CY, -1.f, 24.f);
+	DrawEffectBanner(GS, CX, CY, -1.f, S(24.f));
 }
 
 /* ============================================================ the round's effect */
@@ -241,10 +539,6 @@ void AGetawayHUD::DrawEffectBanner(const AGetawayGameState* GS, float CX, float 
 	// been given, and you are not left reading it over the top of the game.
 	if (!GS || !GS->HasActiveEffect()) return;
 
-	// The large font for the name, which spends two seconds at twice the size of anything else on
-	// screen: the small one does not have the pixels for it and goes soft when it is blown up.
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Small = GEngine->GetSmallFont();
 	const EGetawayEffect Effect = GS->GetActiveEffect();
 	const FString Name = AGetawayGameState::GetEffectName(Effect);
 
@@ -258,15 +552,16 @@ void AGetawayHUD::DrawEffectBanner(const AGetawayGameState* GS, float CX, float 
 	// Eased, so it leaves the middle of the screen gently rather than snapping away from your eye.
 	const float A = FMath::InterpEaseInOut(0.f, 1.f, T, 2.f);
 
-	const float Scale = FMath::Lerp(1.9f, 1.f, A);
-	float W = 0.f, H = 0.f;
-	GetTextSize(Name, W, H, Big, Scale);
+	// Rasterised at whatever size it is passing through this frame, so the travel is sharp all the
+	// way rather than a stretched 30 px face shrinking.
+	const FSlateFontInfo Font = Face(FMath::Lerp(Px::EffectBig, Px::EffectRest, A), true);
+	const FVector2D Size = Measure(Name, Font);
 	// Measured at the size it is being drawn at this frame, so the travel reads as one movement
 	// rather than as a jump at the end.
-	const float X = FMath::Lerp(CX - W * 0.5f, RestX, A);
-	const float Y = FMath::Lerp(CY - 110.f, 76.f, A);
+	const float X = FMath::Lerp(CX - Size.X * 0.5f, RestX, A);
+	const float Y = FMath::Lerp(CY - S(110.f), S(76.f), A);
 
-	DrawText(Name, Warn, X, Y, Big, Scale);
+	Bent(Name, Font, X, Y, Warn);
 
 	// The explanation is for the moment you are reading it and no longer, so it fades out with the
 	// move and the name travels on alone.
@@ -275,7 +570,7 @@ void AGetawayHUD::DrawEffectBanner(const AGetawayGameState* GS, float CX, float 
 		const FString Blurb = AGetawayGameState::GetEffectBlurb(Effect);
 		FLinearColor Colour = Dim;
 		Colour.A = 1.f - A;
-		Centred(Blurb, Small, FMath::Lerp(1.4f, 1.1f, A), CX, Y + H + 8.f, Colour);
+		Centred(Blurb, Face(FMath::Lerp(Px::BannerSub, Px::Unit, A)), CX, Y + Size.Y + S(8.f), Colour);
 	}
 }
 
@@ -289,12 +584,13 @@ void AGetawayHUD::DrawScoreboard(const AGetawayGameState* GS, const AGetawayPlay
 	// Alone there is nothing to stand against, and the line would just sit there reading "1".
 	if (Standings.Num() < 2) return;
 
-	UFont* Small = GEngine->GetSmallFont();
-	const float Right = Canvas->ClipX - 32.f;
-	float Y = 24.f;
+	const FSlateFontInfo Small = Face(Px::Row);
+	const FSlateFontInfo Me = Face(Px::MyRow, true);
+	const float Right = ScreenW - S(32.f);
+	float Y = S(24.f);
 
-	RightAligned(FString::Printf(TEXT("ROUND %d"), GS->GetRoundNumber()), Small, 1.1f, Right, Y, Dim);
-	Y += 22.f;
+	RightAligned(FString::Printf(TEXT("ROUND %d"), GS->GetRoundNumber()), Small, Right, Y, Dim);
+	Y += S(24.f);
 
 	for (const AGetawayPlayerState* PS : Standings)
 	{
@@ -313,8 +609,8 @@ void AGetawayHUD::DrawScoreboard(const AGetawayGameState* GS, const AGetawayPlay
 
 		const bool bMe = (PS == Mine);
 		RightAligned(FString::Printf(TEXT("%s  %d   %s"), *PS->GetPlayerName(), PS->GetPoints(), *How),
-			Small, bMe ? 1.3f : 1.1f, Right, Y, bMe ? FLinearColor::White : Colour);
-		Y += 22.f;
+			bMe ? Me : Small, Right, Y, bMe ? FLinearColor::White : Colour);
+		Y += S(24.f);
 	}
 }
 
@@ -322,8 +618,7 @@ void AGetawayHUD::DrawScoreboard(const AGetawayGameState* GS, const AGetawayPlay
 
 void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const AGetawayGameState* GS, float CX)
 {
-	UFont* Small = GEngine->GetSmallFont();
-	const float Bottom = Canvas->ClipY;
+	const float Bottom = ScreenH;
 
 	// Who the shared build is still waiting on. Counted off the replicated PlayerArray, so a client
 	// can draw it without a game mode.
@@ -344,30 +639,29 @@ void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const A
 	// off the game state, which is what makes it draw on a client at all.
 	if (GS && GS->IsPlacementTimed())
 	{
-		UFont* Big = GEngine->GetLargeFont();
 		const float Left = GS->GetPlacementTimeLeft();
 		const FLinearColor Clock = bImDone ? Go : (Left <= 5.f ? Urgent : (Left <= 10.f ? Warn : Live));
 
-		Centred(FString::Printf(TEXT("%.1f s"), Left), Big, 1.6f, CX, 24.f, Clock);
+		Centred(FString::Printf(TEXT("%.1f s"), Left), Face(Px::Clock, true), CX, S(24.f), Clock);
 		Centred(bImDone ? TEXT("you are done - the clock is for the others") : TEXT("build time"),
-			Small, 1.1f, CX, 64.f, bImDone ? Go : Dim);
+			Face(Px::Unit), CX, S(64.f), bImDone ? Go : Dim);
 	}
 
 	// This round's effect, announced as the build phase opens: in the middle of the screen where you
 	// cannot miss it, then up to the corner so it is out of the way while you build. It is said here
 	// rather than at the start of the run because it is meant to change what you place.
-	DrawEffectBanner(GS, CX, Canvas->ClipY * 0.5f, GS ? GS->GetPlacementElapsed() : -1.f, 40.f);
+	DrawEffectBanner(GS, CX, ScreenH * 0.5f, GS ? GS->GetPlacementElapsed() : -1.f, S(40.f));
 
 	// The dealt hand, with the slot you are holding picked out. It is yours alone: everyone drafts
 	// their own three pieces now, so what you see here is nobody else's business.
 	const int32 Count = Placing->GetHandCount();
 	if (Count == 0)
 	{
-		DrawText(TEXT("Hand empty"), Dim, CX - 110.f, Bottom - 120.f, Small, 1.3f);
+		Bent(TEXT("Hand empty"), Face(Px::Status), CX - S(110.f), Bottom - S(120.f), Dim);
 	}
 	else
 	{
-		float Y = Bottom - 120.f - Count * 22.f;
+		float Y = Bottom - S(120.f) - Count * S(24.f);
 		for (int32 i = 0; i < Count; ++i)
 		{
 			FGetawayPieceDef Def;
@@ -375,8 +669,8 @@ void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const A
 			const bool bHeld = (i == Placing->GetHandSlot());
 			const FString Line = FString::Printf(TEXT("%s %s  (%.0f x %.0f x %.0f)"),
 				bHeld ? TEXT(">") : TEXT(" "), *Def.DisplayName, Def.Size.X, Def.Size.Y, Def.Size.Z);
-			DrawText(Line, bHeld ? Live : Dim, 40.f, Y, Small, bHeld ? 1.4f : 1.1f);
-			Y += 22.f;
+			Bent(Line, bHeld ? Face(Px::HeldPiece, true) : Face(Px::Piece), S(40.f), Y, bHeld ? Live : Dim);
+			Y += S(24.f);
 		}
 	}
 
@@ -411,33 +705,31 @@ void AGetawayHUD::DrawPlacementHUD(const AGetawayPlacementPawn* Placing, const A
 	else Status = FString::Printf(TEXT("%s to place"), PlaceVerb);
 
 	const FLinearColor StatusColour = bImDone ? Go : ((bCanBuild && P.CanPlace()) ? Live : Urgent);
-	DrawText(Status, StatusColour, CX - 90.f, Bottom - 90.f, Small, 1.3f);
+	Bent(Status, Face(Px::Status), CX - S(90.f), Bottom - S(90.f), StatusColour);
 
 	// A ramp or a bridge plays differently depending on which way round it is, so say which way.
 	if (P.bDirectional)
 	{
-		DrawText(FString::Printf(TEXT("Facing %s  -  %s turns it"), *Placing->GetFacingName(), TurnKey),
-			Dim, CX - 90.f, Bottom - 68.f, Small, 1.1f);
+		Bent(FString::Printf(TEXT("Facing %s  -  %s turns it"), *Placing->GetFacingName(), TurnKey),
+			Face(Px::Unit), CX - S(90.f), Bottom - S(66.f), Dim);
 	}
 
-	DrawText(bPad
+	const FSlateFontInfo Hint = Face(Px::Hint);
+	Bent(bPad
 			? TEXT("Left stick + triggers fly  |  LB faster  |  D-pad picks a piece  |  X turns it")
 			: TEXT("WASD + Space/C fly  |  Shift faster  |  wheel picks a piece  |  R turns it"),
-		Dim, 40.f, 24.f, Small, 1.f);
-	DrawText(bPad
+		Hint, S(40.f), S(24.f), Dim);
+	Bent(bPad
 			? TEXT("A places  |  Start when you are done  |  everyone sets off together")
 			: TEXT("Click places  |  Enter when you are done  |  everyone sets off together"),
-		Dim, 40.f, 48.f, Small, 1.f);
+		Hint, S(40.f), S(50.f), Dim);
 }
 
 /* ============================================================ running */
 
 void AGetawayHUD::DrawRunClock(const AGetawayGameState* GS, float CX)
 {
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Small = GEngine->GetSmallFont();
-
-	Centred(FString::Printf(TEXT("%.2f s"), GS->GetRunTime()), Big, 1.6f, CX, 24.f,
+	Centred(FString::Printf(TEXT("%.2f s"), GS->GetRunTime()), Face(Px::Clock, true), CX, S(24.f),
 		GS->IsRoundOver() ? Go : Dim);
 
 	// The hurry-up, once the first player is home. It is the only thing that can end the run under
@@ -448,14 +740,14 @@ void AGetawayHUD::DrawRunClock(const AGetawayGameState* GS, float CX)
 		const FString Line = GS->IsGraceRunning()
 			? FString::Printf(TEXT("hurry  %.1f s"), Left)
 			: FString::Printf(TEXT("%.0f s left"), Left);
-		Centred(Line, Small, 1.2f, CX, 64.f, Left <= 5.f ? Urgent : Warn);
+		Centred(Line, Face(Px::Unit + 1.f), CX, S(64.f), Left <= 5.f ? Urgent : Warn);
 	}
 	else
 	{
 		const float Best = GS->GetBestTime();
 		if (Best >= 0.f)
 		{
-			Centred(FString::Printf(TEXT("best %.2f s"), Best), Small, 1.1f, CX, 64.f, Dim);
+			Centred(FString::Printf(TEXT("best %.2f s"), Best), Face(Px::Unit), CX, S(64.f), Dim);
 		}
 	}
 }
@@ -466,9 +758,6 @@ void AGetawayHUD::DrawFinishedBanner(const AGetawayGameState* GS, const AGetaway
 	// on it. This is only for the gap in between.
 	if (!GS || GS->IsRoundOver() || !Mine || !Mine->HasFinished()) return;
 
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Small = GEngine->GetSmallFont();
-
 	const FString Place = Mine->GetFinishPlace() > 0 ? FString::Printf(TEXT("  -  %s"), *Ordinal(Mine->GetFinishPlace())) : TEXT("");
 	const FString Time = FString::Printf(TEXT("%.2f seconds%s"), Mine->GetFinishTime(), *Place);
 
@@ -476,28 +765,26 @@ void AGetawayHUD::DrawFinishedBanner(const AGetawayGameState* GS, const AGetaway
 	// looking at where you landed, so it gets the full banner.
 	if (!Cast<AGetawayPlacementPawn>(GetOwningPawn()))
 	{
-		const float Y = Canvas->ClipY * 0.34f;
-		Centred(TEXT("YOU MADE IT"), Big, 2.6f, CX, Y, Go);
-		Centred(Time, Small, 1.5f, CX, Y + 56.f, Go);
-		Centred(TEXT("watching the others..."), Small, 1.1f, CX, Y + 84.f, Dim);
+		const float Y = ScreenH * 0.34f;
+		Centred(TEXT("YOU MADE IT"), Face(Px::Banner, true), CX, Y, Go);
+		Centred(Time, Face(Px::BannerSub), CX, Y + S(56.f), Go);
+		Centred(TEXT("watching the others..."), Face(Px::Unit), CX, Y + S(86.f), Dim);
 		return;
 	}
 
 	// In the fly camera now, where the big one would sit on top of the course you are watching.
 	// Under the run clock at the top, which is where the other player's remaining time already is.
-	Centred(FString::Printf(TEXT("you made it  -  %s"), *Time), Small, 1.2f, CX, 92.f, Go);
+	Centred(FString::Printf(TEXT("you made it  -  %s"), *Time), Face(Px::Unit + 1.f), CX, S(92.f), Go);
 }
 
 void AGetawayHUD::DrawRoundBanner(const AGetawayGameState* GS, const AGetawayPlayerState* Mine, float CX)
 {
 	if (!GS->IsRoundOver()) return;
 
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Small = GEngine->GetSmallFont();
-	const float Y = Canvas->ClipY * 0.34f;
+	const float Y = ScreenH * 0.34f;
 
 	const bool bHome = Mine && Mine->HasFinished();
-	Centred(bHome ? TEXT("FINISHED") : TEXT("ROUND OVER"), Big, 2.6f, CX, Y, bHome ? Go : Urgent);
+	Centred(bHome ? TEXT("FINISHED") : TEXT("ROUND OVER"), Face(Px::Banner, true), CX, Y, bHome ? Go : Urgent);
 
 	if (Mine)
 	{
@@ -506,13 +793,13 @@ void AGetawayHUD::DrawRoundBanner(const AGetawayGameState* GS, const AGetawayPla
 				(GS->GetBestTime() >= 0.f && FMath::IsNearlyEqual(GS->GetBestTime(), Mine->GetFinishTime(), 0.001f))
 					? TEXT("  -  best yet") : TEXT(""))
 			: TEXT("you did not make it");
-		Centred(Line, Small, 1.5f, CX, Y + 56.f, bHome ? Go : Dim);
+		Centred(Line, Face(Px::BannerSub), CX, Y + S(56.f), bHome ? Go : Dim);
 
 		const int32 Got = Mine->GetLastRoundPoints();
 		Centred(Got > 0 ? FString::Printf(TEXT("+%d  (%d)"), Got, Mine->GetPoints())
 			: FString::Printf(TEXT("no points  (%d)"), Mine->GetPoints()),
-			Small, 1.4f, CX, Y + 84.f, Got > 0 ? Go : Dim);
+			Face(Px::BannerSub), CX, Y + S(86.f), Got > 0 ? Go : Dim);
 	}
 
-	Centred(TEXT("back to building..."), Small, 1.1f, CX, Y + 112.f, Dim);
+	Centred(TEXT("back to building..."), Face(Px::Unit), CX, Y + S(116.f), Dim);
 }
