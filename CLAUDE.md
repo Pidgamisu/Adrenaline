@@ -27,13 +27,16 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   writes **no log**, so a crash in a packaged build leaves nothing to read. **Two machines in two
   different states have now played it** (2026-11-03). See *It is packaged* and *Two machines, two states* in
   `docs/multiplayer.md`, and `docs/itch.md`.
-- **On itch.io:** <https://rpidgey.itch.io/adrenaline>, and **the page is public** - an anonymous
-  HEAD request returns 200, where it returned 404 when the project was made. So a push is now a
-  publish: the build goes downloadable the moment it processes. Build **#2293004 (version 2)** is
-  live on the `windows` channel, pushed 2026-11-03 after a map edit; patching made it a 129 MB
-  upload rather than 609. Updating a release is two commands, package then push - see *Pushing an
-  update* in `docs/itch.md`. The page itself is still **empty**: no text, no cover image, no
-  screenshots, no video. The text is all drafted in `docs/itch-page.md`.
+- **On itch.io:** <https://rpidgey.itch.io/adrenaline>, **restricted, behind a password, and
+  deliberately so** (corrected 2026-11-06). **Two people have played it and that is the intent for
+  now.** This file previously claimed the page was public on the strength of an anonymous HEAD
+  request returning 200 - that was wrong, and the mistake is worth knowing: a restricted itch page
+  serves its *password gate* with a 200, so the HEAD check cannot tell restricted from public. It
+  only ever distinguished "exists" from "does not exist". Build **#2293004 (version 2)** is live on
+  the `windows` channel, pushed 2026-11-03 after a map edit; patching made it a 129 MB upload
+  rather than 609. Updating a release is two commands, package then push - see *Pushing an update*
+  in `docs/itch.md`. The page itself is still **empty**: no text, no cover image, no screenshots,
+  no video. The text is all drafted in `docs/itch-page.md`.
 - **Front end:** a menu with ADRENALINE over the course turning slowly, a name box, Host, an IP box
   and Join, and Quit; Escape in a game gives Resume / Leave to menu / Quit. Built 2026-11-02,
   **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
@@ -62,6 +65,11 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   turning over it, which hands you one grapple hook. **Built but not played.** Your hand holds
   **one item**, C4 and hooks counted together, so a C4 pad and a hook pad near each other are a
   choice between them. See *The grapple pickup* in `docs/placement.md`.
+  A fifteenth, the **void** - a sphere that pulled you toward a lethal centre - was built and
+  **scrapped the same day** after five versions and four plays. The source is parked in
+  `docs/archive/scrapped-void/`. Read *The void, and why it was scrapped* in `docs/placement.md`
+  before building anything like it; the short version is that it moved you instead of letting you
+  move, and no amount of tuning or payoff rescued that.
 - **Effects:** a layer on top of the round, built and **played 2026-11-03 - all three work**.
   Every other round (1 plain, 2 with, 3 plain) both players are given the same effect before
   anybody builds: double jump, one C4, or 60% gravity. One at a time, gone at the end of the round.
@@ -76,6 +84,13 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker -
   which is also why the placement ghost and the C4 explosion are both built geometry rather than
   debug draw or Niagara.
+  **There is a logo now** (2026-11-06): a pink-and-black square split by a white diagonal with an
+  outlined A over it, already the look in one picture. The master is `Branding/adrenaline-logo.png`
+  and `Tools/make_brand.py` turns it into the packaged exe's icon (`Build/Windows/Application.ico`)
+  and both splash screens (`Content/Splash/Splash.bmp` and `EdSplash.bmp`) - all three picked up by
+  filename, nothing to set in the editor. **Not applied in the game itself**: the menu still spells
+  the word out as text, and the itch page has no cover. See *The logo, the icon and the splash* in
+  `docs/look.md`.
 
 ## Where the details live
 
@@ -92,7 +107,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 | `docs/falling-slopes-cleanup.md` | fall deaths, the "everything touches something" rule, pieces on slopes, between-round cleanup |
 | `docs/controller.md` | controller support: the button map, stick tuning, why a stick can't use the mouse look code |
 | `docs/blueprint-tuning.md` | `BP_Character`, `BP_GetawayGameMode`, tuning values in the editor, where the game mode is named, giving a piece a material |
-| `docs/look.md` | the unlit pink look: materials, the palette and what each colour is allowed to mean, lighting, bloom |
+| `docs/look.md` | the unlit pink look: materials, the palette and what each colour is allowed to mean, lighting, bloom, the logo and where it is applied |
 | `docs/sound.md` | sound and music: the movement sound slots, what fires each, the 2D and own-sounds-only decisions, what has no audio yet |
 | `docs/itch.md` | the itch.io release: the Shipping build, butler, pushing a new version, the page |
 | `docs/itch-page.md` | the text for the itch.io page: tagline, description, tags, controls, pricing |
@@ -313,6 +328,26 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   **There is no air friction in this game to reduce**: `FallingLateralFriction` is 0 and
   `CalcVelocity` applies no drag at all while airborne, so speed through the air is already
   lossless and the window has nothing to do until you touch down.
+- **Every piece must grant ability or test precision. None may take ability away** (decided
+  2026-11-06, after building the void wrong and playing it three times). This is the most useful
+  thing the void taught, and it is about the whole catalog rather than one piece. The pad, ring,
+  vortex, grapple and windmill all *grant* you movement; the spikes and the panel *test your
+  precision* - you can wallrun straight past a spiked wall if you keep off it. The first void did
+  neither: it pulled you in, lifted you off the floor and damped your input to 0.45 of normal, so
+  once the field had you the outcome was decided and your job was to watch. In a game whose entire
+  appeal is movement control, **reducing movement control is the one thing a piece cannot do** -
+  and no amount of tuning helped, because every number was on the wrong axis.
+  Note how plausible the wrong turn was: the observation that prompted it ("you can still move at
+  full speed in it, so the pull never matters") was correct, and damping the input is the obvious
+  fix. The right fix was to give the player a reason to be in there. So `InputScale` is gone,
+  `WishAnalog` is back to being unscaled by anything, and the void got a **payoff** instead: graze
+  the lethal core and it slings you out with a speed boost and a low-friction window scaled by how
+  close you cut. The question went from "can I escape it" (no) to "how close dare I cut it" (your
+  call), which is the Ultimate Chicken Horse bargain. **That did not rescue it either, and the void
+  was scrapped** - a piece whose basic verb is wrong cannot be fixed by a payoff bolted onto it.
+  The rule stands whatever happens to that piece: check a new piece against it **before** writing
+  code. See *The void, and why it was scrapped*
+  in `docs/placement.md`.
 - **Hand-dressed pieces are protected by emptying their row, not by recording the colour**
   (settled 2026-11-05, after `dress_pieces.py` put its table back over an afternoon's editor work).
   Five rows in `PIECES` are now `{}, {}` - spikes, panel, jump pad, C4 pickup, vortex. The table
@@ -386,9 +421,10 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
    shards, in every build. The `ExplosionEffect` slot still overrides it. **Looked at and confirmed
    working in a Shipping build 2026-11-03**, along with the placement ghost and the HUD messages -
    see *The explosion* in `docs/look.md`.
-6. **Finish the itch.io page.** The Shipping build is uploaded and the page is **public** at
+6. **Finish the itch.io page.** The Shipping build is uploaded and the page is **restricted behind
+   a password, intentionally** - two people have played it - at
    <https://rpidgey.itch.io/adrenaline>, but it has no cover image, no screenshots and no video,
-   and none of the drafted text is in - so anyone who finds it now sees a blank page with a
+   and none of the drafted text is in - so anyone let through the gate sees a blank page with a
    download on it. **A short video of movement at speed is the
    highest-value thing missing** - motion is the whole pitch, and no still can show a wallrun into a
    slide into a C4 jump. See `docs/itch.md` and `docs/itch-page.md`.
@@ -397,5 +433,5 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
    appeal is movement, this is probably the biggest single improvement left per hour spent.
 8. **Logging in Shipping.** `bUseLoggingInShipping` is not set in `Source/Getaway.Target.cs`, so a
    packaged build writes no log at all and a player who hits a crash has nothing to send you. One
-   line, and worth it before the page goes public.
+   line, and worth it before the page is opened up.
 9. Before each new piece, check the *still unverified* / *not proved* notes in the matching `docs/` file for things I haven't played yet.

@@ -31,3 +31,6 @@ Config/DefaultEditor.ini
 # OS clutter
 Thumbs.db
 .DS_Store
+
+# Pillow, installed next to Tools/make_brand.py by its own pip line. A dependency, not source.
+Tools/pylibs/

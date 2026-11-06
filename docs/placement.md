@@ -1247,3 +1247,78 @@ colour rule, because it helps you.
 - **Coming back on death has not been played**, on either pickup: not the restock itself, not what
   it does to the C4 pads that were tuned around an 8 s clock, and not whether running off the
   course on purpose to restock turns out to be worth doing.
+
+## The void, and why it was scrapped (2026-11-06)
+
+**A fifteenth piece was built and removed on the same day. Don't build it again without reading
+this.** A see-through sphere that pulled you toward its middle and killed you at the centre. Five
+versions, four plays, scrapped - *"it still feels awful, I think it's time to scrap it."*
+
+The source is parked in `docs/archive/scrapped-void/` rather than deleted, because it was never
+committed. It is not in the build, not in the catalog and not in the movement component.
+
+### Why it failed, which is the part worth keeping
+
+**Every piece in this catalog either grants you movement or tests your precision. The void did
+neither.** Pad, ring, vortex, grapple, windmill: all grants. Spikes and the panel: precision - you
+can wallrun straight past a spiked wall if you keep off it. The void pulled you somewhere you did
+not want to go and then killed you there, and no version of that ever produced a moment of skill.
+
+The first version was a **capture**: a strong pull that lifted you off the floor and damped your
+input to 0.45. At 360 cm/s of run against a 500 cm/s pull, with the floor gone and the pull
+*strengthening* the deeper you fell in, it was arithmetically inescapable - a death sentence with a
+two-second delay where you mashed keys and watched. In a game whose entire appeal is movement
+control, **reducing movement control is the one thing a piece cannot do.**
+
+The redesign went the other way and made it a gravity-well slingshot: damping and lift gone, uniform
+field, and grazing the lethal core paid a speed boost and a low-friction window scaled by how close
+you cut, with a translucent ball to aim at. On paper that fixed everything - it was a route you
+chose, with death as the price of greed, and it used the project's own levers to pay out. It still
+felt awful.
+
+**That is the actual lesson, and it is more useful than the first one:** a piece whose basic verb is
+wrong cannot be rescued by a payoff bolted onto it. The sphere's problem was never the reward
+schedule, it was that a volume which moves you is a thing that happens *to* you, and this game is
+about what you do. Nothing in five passes changed that, because every pass changed numbers and
+mechanisms around an unchanged centre.
+
+### Four passes of tuning that were all on the wrong axis
+
+Worth recording because each looked like the fix at the time, and the pattern - plausible local fix,
+no improvement - is the signal that the piece is wrong rather than the numbers:
+
+1. **The pull did nothing.** `MaxPullSpeed` was a cap on *your* velocity projected onto the pull, and
+   the pull points where you are already heading whenever you run at something, so a sprint spent
+   the whole allowance before the field added anything. Also, zeroing the vertical pull on the
+   ground threw most of it away, because a floor-standing sphere has its core above your head.
+2. **It worked in the air and nowhere else.** `SourceFriction` drops
+   `max(Speed, StopSpeed) * Friction * dt`, so at rest that is a 1250 cm/s^2 floor against a 700
+   cm/s^2 pull: the pull was *incapable* of moving a grounded player. Fixed by paying the friction
+   back on the field's own share, the same trick `ApplyVortexLift` uses for gravity.
+3. **You could still run out of it** - so input damping went in, and made it worse rather than better
+   (see above).
+4. **The slingshot redesign**, which was a real design rather than a number, and also did not land.
+
+Two of those four were genuine bugs with real lessons, and both survive this piece:
+
+- **Source friction eats anything handed to you**, which is why the speed ring raises your ceiling
+  and the jump pad takes the drag away. See *A speed boost raises your ceiling* and *A jump pad
+  takes the drag away* in CLAUDE.md. A third answer - pay the drag back on the piece's own share -
+  worked and is gone with the code; `docs/archive/scrapped-void/GetawayVoid.cpp` has it if a future
+  piece needs it.
+- **A limit on "your speed in the direction a piece is pushing" measures what *you* did, not what
+  the piece did**, whenever the piece picks its own direction. Every other piece hands you speed
+  along a line you chose, so a ceiling on your speed is the right shape for all of them.
+
+### If a void-shaped thing ever comes back
+
+Not as a volume that moves you. The ideas that survive contact with the above:
+
+- **A kill volume with no pull at all** - floating spikes, essentially. Legible, and it tests
+  precision, which is a thing this game does. It is also boring, which is an honest reason not to.
+- **A hazard that makes *other pieces* dangerous** rather than acting on a running player: something
+  that only matters when a pad or a ring or a hook has already committed you to a line. The danger
+  is then in your own route choice, which is where this game keeps its difficulty.
+- Whatever it is, it should pass the test in *Every piece must grant ability or test precision* in
+  CLAUDE.md before any code is written. That decision is the one thing this day produced that was
+  worth the day.

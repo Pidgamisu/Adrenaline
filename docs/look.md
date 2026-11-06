@@ -321,3 +321,74 @@ Both build targets compile and link with no errors and no warnings.
   through it. That is deliberate and might still be wrong.
 - **Whether it is enough to move packaging to Shipping.** The guards are right by inspection and
   nothing in the effect is debug draw, but nothing has been packaged yet at all.
+
+## The logo, the icon and the splash (2026-11-06)
+
+A logo arrived: a 2000x2000 square, a pink field above a white diagonal and a black field below
+it, with a tall outlined **A** straddling the line. It is the look in one picture - pink against
+black, shape carried by a line rather than by a fill - so it needed no restyling to sit next to
+everything else. The master is in the repository at `Branding/adrenaline-logo.png`, which is a new
+top-level folder for source art, the way `Audio/` is for source sound. Nothing in `Content/` is
+generated from it, so there is no asset to re-import and nothing to do in the editor.
+
+It is applied in two places, and both are picked up by **filename alone**: no project setting, no
+Details panel, nothing to click.
+
+| File | What it is |
+|---|---|
+| `Build/Windows/Application.ico` | The packaged `Getaway.exe`'s icon. UnrealBuildTool compiles it into the executable's resources, and the staging step copies it beside the exe, so it is what Explorer, the taskbar, the Alt-Tab list and anyone downloading the build from itch sees. |
+| `Content/Splash/Splash.bmp` | The window the packaged game shows while it loads. |
+| `Content/Splash/EdSplash.bmp` | The same for the editor. |
+
+`Tools/make_brand.py` builds all three out of the master. It only needs running again if the logo
+changes. It needs Pillow, which Unreal's bundled Python does not ship; its docstring has the one
+`pip install --target Tools/pylibs` line that fixes that, and `Tools/pylibs/` is in `.gitignore`.
+
+### The splash
+
+720x370, matching the engine's own. Black field, the mark on the left at 196 px, **A D R E N A L
+I N E** to the right in Roboto Bold with the letters spaced out by hand - the same face and the
+same trick as the menu's title, so the splash and the front end read as one thing - a pink rule
+under the word, and `FIRST PERSON MOVEMENT PARTY GAME` under that in pink.
+
+The mark gets a **one-pixel pink hairline round it**. Without it the logo's lower half, which is
+black, merges into the black splash and the square loses its bottom and right edges.
+
+The game's and the editor's splash are the same picture laid out differently. The editor draws its
+own text over the bottom of its splash - the game name, the engine version, the copyright line and
+"Loading..." - in rects running from `bmHeight - 60` downwards, so `EdSplash.bmp` centres its
+content in the top 306 px and leaves the bottom 64 clear. The game's splash is *custom*, which is
+what stops the engine writing the project name over it, so that one uses the full height.
+
+### Two engine details that decide the file formats
+
+Both read out of UE 5.8's source rather than guessed, and both are the kind of thing that fails
+silently:
+
+- **BMP, not PNG.** `GetSplashFilename` in `GenericPlatformSplash.cpp` looks for `Splash.png`
+  first and only falls back to `.bmp` - but `WinPlatform.Automation.cs` stages exactly one file,
+  `Content/Splash/Splash.bmp`. A PNG would look right every time you tested it in the editor and
+  be **missing from every package**.
+- **Uncompressed icon entries.** Pillow stores 256 px icon entries as embedded PNG by default, and
+  the resource compiler UBT runs over the icon rejects those. The script passes
+  `bitmap_format="bmp"` so every entry is a plain DIB.
+
+### Why each icon size is drawn separately
+
+The A is thin outlines, and a straight downsample of them turns to grey mush below about 48 px.
+So the icon holds **seven separate drawings** (256, 128, 64, 48, 32, 24, 16), and the small ones
+have their white strokes fattened first - by 5, 3, 2 and 1 pixels on a 256 px working copy at 16,
+24, 32 and 48. Judged by eye against a 4x blow-up of every size. At 16 px the A is a chunky mark
+rather than an outline, which is the best that can be done with a line that fine; from 24 up it
+reads properly.
+
+### Still unverified
+
+- **The icon on a packaged build.** Nothing has been packaged since it was added, so UBT's
+  resource step and the staged copy are both right by inspection only. The `.ico` itself was read
+  back and holds all seven sizes as plain DIBs.
+- **Both splashes on screen.** The editor's shows on the next editor start; the game's needs a
+  package. Neither has been looked at.
+- **The logo anywhere in the game itself.** The menu still spells ADRENALINE out as text. Putting
+  the mark on the front end would mean a texture asset and a change to
+  `UGetawayMenuWidget::NativeOnInitialized`, and was deliberately left out of this pass.

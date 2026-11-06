@@ -100,7 +100,9 @@ visitor returned 404, which is how to check that from a terminal without logging
 
     Invoke-WebRequest -Uri "https://rpidgey.itch.io/adrenaline" -Method Head -UseBasicParsing
 
-404 means draft or restricted; 200 means the whole world can see it. **Worth running before any
+404 means draft; **200 means only that the page exists** - a restricted page serves its password
+gate with a 200, so this cannot tell restricted from public (the error made on 2026-11-03, below).
+Check visibility on the dashboard instead. **Worth running before any
 push**, because a build pushed to a public page is downloadable the moment it finishes processing.
 
 Then every release is one command, via the wrapper in `Tools/itch/`:
@@ -177,10 +179,23 @@ there to diff against. Processing finished inside 15 seconds this time, not 75.
 `(from #2287901)` is the patch chain - a player on version 1 downloads the 129 MiB diff, not the
 whole game again.
 
-**The page was public by this point.** An anonymous HEAD request returned **200**, not the 404 it
-gave at creation. Nothing records when it changed. The consequence: a push is now a *publish* - the
-build is downloadable by anyone the moment processing ends, with no second click. **Run the HEAD
-check before every push**; that is exactly what it is for.
+**The page was NOT public, and this paragraph used to say it was** (corrected 2026-11-06). It is
+**restricted, behind a password**, deliberately: two people have played it and that is the intent
+for now.
+
+The mistake is worth keeping, because the check that produced it is still recommended above. An
+anonymous HEAD request returned **200**, not the 404 it gave at creation, and that was read as
+"public". It is not: a restricted itch page serves its **password gate** with a 200, because the
+gate is a real page. So the HEAD check only ever distinguished *exists* from *does not exist* - it
+cannot tell restricted from public, which is precisely the distinction it was being used for.
+
+**To actually check visibility, read it off the dashboard** - Edit project ▸ Visibility & access -
+or open the URL in a browser with no itch session and see whether you get the game page or a
+password box. A 200 proves nothing on its own.
+
+The consequence that *was* drawn from it is also wrong: a push is not a publish while the page is
+restricted. The build becomes downloadable to whoever has the password, which is the two people who
+already have it.
 
 ### A trap: running the package command from a bash shell
 
@@ -303,7 +318,8 @@ path with.
   project is <https://rpidgey.itch.io/adrenaline>.
 - ~~**Nothing has been uploaded.**~~ **Done 2026-11-03** - see *The first push* above, and
   *Pushing an update* for version 2. Build `#2293004` is live on the `windows` channel, and the
-  page is **public**, so that build is downloadable by anyone right now.
+  page is **restricted behind a password**, so that build is downloadable by the two people who
+  have it - not by anyone. See *The page was NOT public* above.
 - **Nobody has downloaded and run a build from the page.** Every look at a packaged build so far
   has been the folder on this machine, not an install pulled from itch.
 - **Whether the itch app honours `.itch.toml` is still unknown.** It needs the draft installed

@@ -79,6 +79,16 @@ FVector UGetawayMovementComponent::FeetLocation() const
 
 float UGetawayMovementComponent::WishAnalog() const
 {
+	/*
+	 * How hard the player is asking to move, 0 to 1 - and the one place input authority is decided.
+	 *
+	 * **Nothing scales this, and nothing should.** A hazard briefly multiplied it (2026-11-06, the
+	 * void, since scrapped) to stop you running out of its field, and that is the one thing a piece
+	 * in this game must not do: every piece in the catalog either grants you movement or tests your
+	 * precision, and this game is movement control. If a piece ever needs the player to be worse at
+	 * moving, the piece is wrong. See *Every piece must grant ability or test precision* in
+	 * CLAUDE.md, and *The void, and why it was scrapped* in docs/placement.md.
+	 */
 	return FMath::Clamp(Acceleration.Size2D() / FMath::Max(GetMaxAcceleration(), 1.f), 0.f, 1.f);
 }
 

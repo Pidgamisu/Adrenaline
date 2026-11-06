@@ -10,9 +10,15 @@ array, each fired at the moment it belongs to, plus the tuning that shapes them.
 before any audio existed, so that finding a wave and hearing it is a Details-panel job from then on,
 with no further C++.
 
-**Footsteps are in and played** (2026-11-04): six cuts of a run cycle, in `Audio/Footsteps/`. Every
-other slot is still empty, and an empty slot is simply silent. See *Still unverified* at the
-bottom.
+**What is filled in so far**: footsteps (2026-11-04, played, and not a success - see below) and the
+wall kick, `Audio/Movement/WallKick.wav`, added 2026-11-05. Every other slot is empty, and an empty
+slot is simply silent. See *Still unverified* at the bottom.
+
+**Mind `bMovementSounds` when adding one.** It is the master switch for all ten slots, and it was
+turned off after the footsteps played badly. With it off the wall kick is silent too, with nothing
+to say why. To hear the wall kick without the footsteps coming back, turn `bMovementSounds` back
+**on** and empty the `FootstepSounds` array - an empty pool makes `UpdateFootsteps` return
+immediately, so footsteps cost nothing and stay silent while every other slot works.
 
 ## The slots, and what fires each
 

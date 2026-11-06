@@ -6,7 +6,9 @@ Check each license allows use in a commercial game on Steam, and whether it requ
 | Asset / pack | Folder | Source (link) | License | Attribution required? | Added |
 |---|---|---|---|---|---|
 | GlowGrid Starter | `Content/ThirdParty/GlowGridStarter/` | Fab, free pack - [listing URL still to add](https://www.fab.com/library) | Fab Standard License, Personal tier (to confirm on the listing) | No, under the Standard License | 2026-11-02 |
-| Suspenseful boom (C4 blast) | `Audio/C4/` | **Still to confirm** - downloaded as `dragon-studio-suspenseful-boom-451863.mp3` | **Still to confirm** | **Still to confirm** | 2026-11-04 |
+| Suspenseful boom (C4 blast) | `Audio/C4/`, `Content/Audio/C4/` | Pixabay sound effects, listing id `451863` (`dragon-studio-suspenseful-boom-451863`) | Pixabay Content License, royalty-free | No | 2026-11-04 |
+| Footstep run cycle | `Audio/Footsteps/`, `Content/Audio/Footsteps/` | Pixabay sound effects - **listing not identified**, see below | Pixabay Content License, royalty-free | No | 2026-11-04 |
+| Jump landing, used as the wall kick | `Audio/Movement/` | Pixabay sound effects, listing id `398256` (`u_qqkrn9bn55-jumplanding-398256`) | Pixabay Content License, royalty-free | No | 2026-11-05 |
 
 ## GlowGrid Starter
 
@@ -44,18 +46,29 @@ Neither blocks greyboxing with the kit now.
 
 *(Fill in for any pack whose license requires attribution.)*
 
-## Suspenseful boom (C4 blast)
+## Pixabay sound effects
 
-Added 2026-11-04 as `Audio/C4/C4_Blast.wav` and `C4_Blast_Short.wav`, prepared from a downloaded
-mp3 by `Tools/prep_sound.py`. See *The blast actually chosen* in `docs/sound.md`.
+Every sound in the game so far came from **Pixabay's sound effects**, royalty-free and with no
+attribution required - stated by the project owner on 2026-11-05, and recorded here on that word. I
+have not opened the individual listings to confirm them one by one, so this is a record of what was
+stated rather than an audit.
 
-**The source and license are not recorded yet, and this must be settled before the itch.io page
-goes any further.** The file arrived as `dragon-studio-suspenseful-boom-451863.mp3`, which has the
-shape of a Pixabay download, but that is a guess from a filename and not good enough: Pixabay's
-audio license changed in January 2023 and older uploads are not covered by the current terms. The
-same download also appears to have been re-exported as `Untitled song (Nov 4, 2026 12:56 PM).mp3` -
-the two files have the same five events at the same spacing to within a millisecond - so whatever
-covers one covers both.
+**The number at the end of a Pixabay download filename is the listing id**, and it is the only trail
+back to the source once the file has been renamed: `u_qqkrn9bn55-jumplanding-398256.mp3` is listing
+`398256`. Keep the original filename, or paste the listing URL into the table above, before
+renaming anything. Two of the three are traceable that way.
 
-Needed: where it was downloaded from, the listing link, the license it was offered under, and
-whether that license requires attribution in a commercial release.
+Three things worth knowing:
+
+- **The footstep run cycle has no id.** It arrived as `Untitled song (Nov 4, 2026 12:56 PM).mp3`, a
+  re-export with the original name already lost, so there is nothing to trace it back to. It is
+  covered by the same statement, but if the provenance of that one ever has to be proved, the
+  listing will have to be found again. The dry cuts in `Audio/Footsteps/Dry/` are what it became.
+- **The wall kick and the jump landing are the same sound.** `Audio/Movement/WallKick.wav` was cut
+  from `u_qqkrn9bn55-jumplanding-398256.mp3` - the two have identical decay to the millisecond
+  (-20 dB at 90 ms, -30 at 254, -45 at 349). Fine as a deliberate choice; worth not using the same
+  sample for both the landing and the wall kick, or it will be audibly repetitive.
+- **Pixabay hosts user uploads.** The license it grants is only as good as the uploader's right to
+  grant it, which is the standard risk with any user-upload library. Acceptable for an itch.io
+  release; worth a second look before anything larger, which is the same note as *Revisit client
+  authority before Steam*.
