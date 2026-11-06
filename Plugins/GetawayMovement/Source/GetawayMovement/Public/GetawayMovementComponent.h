@@ -46,6 +46,8 @@ struct FGetawayMantleFit
  *   rather than something you tap over and over.
  * - Wallrun: a wall beside you (not in front) catches you; reduced gravity that ramps up late; Space kicks off.
  * - Mantle: jump into a ledge holding forward; you keep most of your speed going over the top.
+ * - Grapple: a hook the round effect hands you. Not a movement mode - a pull added to whatever you
+ *   are already doing, so you keep air strafing and steer it with the camera.
  * - Double jump, auto-hop, jump buffering, smashing through AGetawayBreakable at speed, pushing loose scraps.
  *
  * All distances are centimetres. The lab displayed "u/s" where 1 u = 2.5 cm, so 320 u/s = 800 cm/s.
@@ -179,6 +181,61 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Mantle", meta = (ClampMin = "0"))
 	float MantleMaxHeight = 170.f;
+
+	/* ---------------- Grapple ---------------- */
+
+	/*
+	 * The grappling hook, which is a round effect rather than something you always have: the
+	 * character fires it (AGetawayCharacter::FireGrapple traces for the anchor) and this is the
+	 * pull, because the pull is movement and movement lives here.
+	 *
+	 * It is deliberately not a movement mode of its own. You stay in falling (or on the ground),
+	 * which means Source air strafing, the slide, a wallrun you happen to catch and everything
+	 * else carry on working while the rope is attached - so "you can still move while grappled"
+	 * costs nothing and the hook reads as a force added to the movement rather than as a ride.
+	 */
+
+	/** How hard the rope reels you in (cm/s^2). The same shape as GroundAccelerate: it only ever adds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "0"))
+	float GrapplePull = 4500.f;
+
+	/** The fastest the rope itself will drag you along its own line (cm/s). Speed you earned
+	 *  elsewhere is never taken off you - this caps what the pull adds, not how fast you may go. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "0"))
+	float GrappleMaxSpeed = 1800.f;
+
+	/**
+	 * How far the pull leans toward where you are looking, instead of straight at the anchor.
+	 *
+	 * This is the steering. 0 winches you at the hook on a straight line whatever you do; 0.35
+	 * bends the line enough that looking off to one side swings you round the anchor in an arc.
+	 * The lean can never pass 90 degrees, so you can never pull yourself *away* from the anchor.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "0", ClampMax = "1"))
+	float GrappleViewSteer = 0.35f;
+
+	/**
+	 * How much of gravity the rope holds up while you are in the air, 1 being all of it.
+	 *
+	 * At 1 the line never sags: a level grapple carries you level, like a zip line. Lower it for a
+	 * rope that loses the fight with gravity, which swings more and reaches less.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "0", ClampMax = "1"))
+	float GrappleGravityPayback = 1.f;
+
+	/** Get this close to the anchor and the rope lets go, because you have arrived (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "20"))
+	float GrappleReleaseDistance = 150.f;
+
+	/**
+	 * How much short of the anchor something has to block the line before it counts as cut (cm).
+	 *
+	 * The slack is what stops the anchor's own surface, and anything sitting flush against it,
+	 * reading as the thing in the way. Swing behind a wall and the rope does cut, which is the
+	 * answer you want: a hook through solid geometry would be stranger than losing it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "0"))
+	float GrappleCutSlack = 60.f;
 
 	/* ---------------- Breakables ---------------- */
 
@@ -406,6 +463,29 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	float GetBoostedRunSpeed() const { return RunSpeed * GetSpeedBoostScale(); }
 
+	/**
+	 * Hook on, at this world point. Called by AGetawayCharacter::FireGrapple once its trace has
+	 * found something; the character owns the charge, this owns the pull.
+	 *
+	 * AnchorActor is what was hit, kept weakly so that smashing the panel you hooked (or blowing
+	 * up the crate) drops the rope by itself. Pass null for a hook into something that cannot go
+	 * away, which is treated as a hook into the level.
+	 *
+	 * Like a vortex, the hook wins over a wallrun or a mantle: it is a route, and the thing you
+	 * were doing a moment ago is not.
+	 */
+	void StartGrapple(const FVector& Anchor, AActor* AnchorActor);
+
+	/** Let go. Your velocity is left exactly as it is: breaking a grapple never slows you down. */
+	void StopGrapple();
+
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	bool IsGrappling() const { return bGrappling; }
+
+	/** Where the hook is stuck, for the rope the character draws. Meaningless unless IsGrappling. */
+	UFUNCTION(BlueprintPure, Category = "Getaway")
+	FVector GetGrappleAnchor() const { return GrappleAnchor; }
+
 	/* ---------------- State ---------------- */
 
 	UFUNCTION(BlueprintPure, Category = "Getaway")
@@ -488,6 +568,13 @@ private:
 	// Vortex lift
 	void ApplyVortexLift(float DeltaSeconds);
 
+	// Grapple. The pull, and the three things that end it short of a second click.
+	void ApplyGrapplePull(float DeltaSeconds);
+	/** The full look direction, pitch included - ViewForward is flat, and a hook is aimed upward. */
+	FVector ViewDirection() const;
+	/** True when something solid has come between you and the anchor. */
+	bool IsGrappleLineCut(const FVector& From, const FVector& ToAnchorDir, float Distance) const;
+
 	// Sound. All of it no-ops unless this character is the one this machine is playing.
 	bool SoundsAudible() const;
 	void PlayMovementSound(USoundBase* Sound, float VolumeScale = 1.f, float Pitch = 1.f) const;
@@ -539,6 +626,16 @@ private:
 	bool bVortexBlocksWallrun = false;
 	bool bVortexOffered = false;
 	bool bVortexActive = false;
+
+	/**
+	 * The live hook: where it is stuck and what it is stuck to. The actor is weak on purpose - a
+	 * breakable you hooked can be smashed by somebody else while you are hanging off it, and the
+	 * pointer going stale is how the rope finds out.
+	 */
+	bool bGrappling = false;
+	FVector GrappleAnchor = FVector::ZeroVector;
+	TWeakObjectPtr<AActor> GrappleActor;
+	bool bGrappleHadActor = false;
 
 	FVector MantleStart = FVector::ZeroVector;
 	FVector MantleEnd = FVector::ZeroVector;

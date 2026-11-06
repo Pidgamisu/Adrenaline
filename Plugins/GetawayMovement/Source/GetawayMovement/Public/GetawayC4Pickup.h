@@ -18,8 +18,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FGetawayPickupTakenSignature, AGeta
  *
  * It never blocks movement - the trigger only overlaps pawns and the meshes have no collision, so you can sprint,
  * slide or wallrun straight through it. While depleted the floating brick and its light go away and only the pad is
- * left, then it comes back after RespawnDelay. Walking onto a pad while full takes nothing: it waits until you have
- * room, and a pickup that respawns under your feet is taken on the spot.
+ * left, and it comes back when the player who took it dies (bReturnsOnDeath). Walking onto a pad with a full hand
+ * takes nothing: it waits until you have room, and a pickup that comes back under your feet is taken on the spot.
+ *
+ * **It is per player**, and that falls out of where the count lives rather than being arranged: only the machine
+ * that owns a character hands anything to it, so each player's copy of this actor has its own availability. If you
+ * take this pad, your rival can still take their own charge from the same pad, and each of you sees your own empty.
  *
  * Works with no assets (engine BasicShapes). Drop one in a level, or make a Blueprint child to restyle it.
  */
@@ -54,13 +58,31 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Pickup", meta = (ClampMin = "1"))
 	int32 ChargesGranted = 1;
 
-	/** Seconds before it comes back after being taken. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Pickup", meta = (ClampMin = "0"))
-	float RespawnDelay = 8.f;
-
-	/** Off means one use only: it stays depleted. */
+	/**
+	 * It comes back when the player who took it dies, not on a clock (decided 2026-11-05, after
+	 * playing the timer). One charge per life, so dying is what restocks you - which also means a
+	 * pad is spent for as long as you keep yourself alive, and that is the whole point of it.
+	 *
+	 * The character that took it is held weakly and that is the entire test: a death destroys it,
+	 * so there is no event to subscribe to and nothing to tell the pickup. It also means a pickup
+	 * frees itself between rounds, when every character is thrown away.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Pickup")
-	bool bRespawns = true;
+	bool bReturnsOnDeath = true;
+
+	/*
+	 * Named "returns" rather than "respawns" on purpose: the game mode already has a
+	 * bRespawnOnDeath, which is about the *player* coming back, and these two would otherwise read
+	 * as the same flag in two places. Note they do interact - with the game mode's off, a death
+	 * ends your run, so the pad never comes back for you that round.
+	 */
+
+	/**
+	 * Seconds before it comes back on its own as well, or 0 for never - which is the default now
+	 * that death is what brings it back. It was 8 s until 2026-11-05.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Pickup", meta = (ClampMin = "0"))
+	float RespawnDelay = 0.f;
 
 	/** How far the charge bobs up and down (cm) and how fast it spins (degrees/s). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Pickup", meta = (ClampMin = "0"))
@@ -96,6 +118,9 @@ private:
 	void CheckWaitingPlayers();
 
 	void SetAvailable(bool bNew);
+
+	/** Who took it, held weakly: the pointer going stale is how the pickup hears about a death. */
+	TWeakObjectPtr<AGetawayCharacter> Taker;
 
 	bool bAvailable = true;
 	float Age = 0.f;

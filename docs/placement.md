@@ -61,7 +61,7 @@ down on slopes* and *Only attached things follow a slope* in `docs/falling-slope
 
 ### The catalog
 
-Thirteen pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
+Fourteen pieces. Eight are sized from the lab's `PTYPES` table (lab metres x 100, Y-up swapped to
 Z-up), six of them retuned by hand since, the last three on 2026-11-05: floor 400x400x50, wall 400x50x400, ledge 300x300x150,
 breakable panel 400x50x400, crate 250x250x250, ramp 600x400x200, collapsing bridge 1000x400x60, and
 the C4 pickup. The ninth is
@@ -71,8 +71,10 @@ added 2026-10-27, surface mounted the same way - see *The jump pad* below. The e
 **vortex** (200x200x400), added 2026-10-31, a free-standing column - see *The anti-gravity vortex*
 below. The twelfth is the **windmill** (350x700x540), added 2026-11-03 - see *The paddle wheel*.
 The thirteenth is the **speed ring** (100x300x300), added 2026-11-05, a hoop you run through for
-three seconds of extra speed - see *The speed ring* at the end of this file. Thirteen in all; the
-party box deals `HandSize` (3) of them at random without repeats.
+three seconds of extra speed - see *The speed ring* at the end of this file. The fourteenth is the
+**grapple pickup** (110x110x110), added 2026-11-05: the same pad as the C4 pickup with a hook
+turning above it, and the second thing a player can carry - see *The grapple pickup* at the end of
+this file. Fourteen in all; the party box deals `HandSize` (3) of them at random without repeats.
 
 Edit the catalog on a Blueprint child of `GetawayGameMode` - it is `EditDefaultsOnly`.
 
@@ -1012,3 +1014,92 @@ tilt needed its sign flipped.
   not built into a course and run.
 - **A ring on a slope, or stuck in mid-air against a wall.** It takes the free-standing placement
   rules unchanged, so this is inherited rather than new behaviour, but it was not tried.
+
+## The grapple pickup
+
+> Added 2026-11-05, the day after the hook itself. **Built but not played.**
+
+The fourteenth piece, and the second thing a player can carry. `AGetawayGrapplePickup` is a
+near-copy of `AGetawayC4Pickup` on purpose: the same 110 cm pad, the same per-player rule, the same
+coming back on death, the same trigger that overlaps pawns and nothing else so you can run, slide or
+wallrun through it at full tilt. What floats above the pad is a hook rather than a brick - a shank
+and a bend made of chords of a circle, so the shape is four numbers (`HookHeight`, `HookThickness`,
+`ShankLength`, `BendRadius`) and not a mesh.
+
+The hook *it gives you* is the one from `docs/effects.md`: read that for how it flies.
+
+### Your hand holds one item
+
+The rule that makes this piece interesting, and the reason it is not simply "C4 but a rope":
+
+**`AGetawayCharacter::ItemCapacity` is 1, and it counts C4 charges and grapple hooks together.** A
+pickup of either kind gives you nothing while you are holding anything, so a C4 pad and a hook pad
+in the same stretch of course are a *choice* rather than a shopping trip. Both pads also lock
+themselves to you while your hand is full - they wait, and hand over the moment it is empty, which
+is the same waiting behaviour the C4 pickup already had for a full load.
+
+- **Throwing counts as spending.** A charge stuck to a wall waiting for F has left your hand, so you
+  may pick up a hook while it sits there. Firing the hook is the same: the shot goes when it
+  catches, so the moment you are swinging you are free to collect something else.
+- **It replaced "carry up to two C4"** (decided 2026-10-15, retired 2026-11-05), so `MaxCharges` is
+  1 now as well. `ItemCapacity` 2 with `MaxCharges` 2 puts the old behaviour back, and the two caps
+  are separate on purpose: the hand is a cap across both items and never a floor, so C4 can still be
+  limited on its own.
+- **One line of HUD for the hand**, not one per item: `GRAPPLE`, `GRAPPLE out`, `C4`, or
+  `HANDS empty`. Two lines where one always said "none" was the thing the single hand made silly.
+
+### A pickup comes back when you die
+
+Changed 2026-11-05, straight after playing the 8 s timer, and it applies to **both** pickups - C4's
+as well as the hook's.
+
+A pad you have emptied stays empty for as long as you keep yourself alive. Dying is what restocks
+you, so it is one charge or one hook **per life**, and the pickups stop being a tap you stand next
+to and start being a thing you spend.
+
+- **`bReturnsOnDeath`** (on) is the rule; **`RespawnDelay`** is now 0 rather than 8 and adds a timer
+  on top if you want one back.
+- **It is named "returns", not "respawns"**, because `AGetawayGameMode::bRespawnOnDeath` already
+  means the *player* coming back. The two do interact: with the game mode's flag off a death ends
+  your run, so the pad never comes back for you that round.
+- **The pickup watches the character that took it weakly**, and that is the whole mechanism - a
+  death destroys the character, so the stale pointer *is* the news. Nothing subscribes to anything,
+  nothing has to be told, and it falls out for free that every pickup frees itself between rounds,
+  where all the characters are thrown away anyway. `IsDead()` is checked as well as validity, so the
+  pad is ready by the time you are back at the start rather than a beat after it.
+- **The loop it opens, and it is not played yet:** dying is free since 2026-10-31 - you go back to
+  the start and keep your run - so deliberately running off the course is now a way to restock. That
+  may be fine (it costs you the whole run-up, which in a race is expensive) or it may want a rule.
+
+### Both pads are per player, and always were
+
+Worth writing down because it is easy to doubt: if you take a C4 pad, your rival can still take
+*their own* charge from that same pad, and each of you sees your own pad empty.
+
+Nothing arranges that. `TryGive` only ever hands out on the machine that owns the character
+(`IsLocallyControlled`), because what you are carrying is that machine's count - client authority
+again - and `bAvailable` is plain local state on each machine's copy of the actor, not replicated.
+So a pickup is per player by construction, and making it *shared* would be the change that costs
+work: routing the grant through the server like `AGetawayBreakable::Break` and replicating the
+count. Decided for C4 on 2026-10-18 and inherited by the hook; see CLAUDE.md.
+
+### Getting it into the party box
+
+Like every piece: the catalog entry is in `AGetawayGameMode`'s constructor, but
+**`BP_GetawayGameMode` stores the whole array**, so run `Content/Python/dress_pieces.py` from
+Tools > Execute Python Script... once. That rebuilds the Blueprint's catalog from C++ and makes
+`BP_Piece_GrapplePickup` with the pad in `MI_VB_Dark` and the hook in `MI_VB_Pickup` - cyan, by the
+colour rule, because it helps you.
+
+### Still unverified (the grapple pickup)
+
+- **Nothing about it has been played**, including whether the hook reads as a hook at 800 cm/s and
+  whether the pad is wide enough to collect from without aiming.
+- **The one-item hand has not been played either.** The question it raises is whether losing the
+  second C4 charge is felt: a double rocket jump is no longer possible, and nobody has tried to miss
+  it yet.
+- **Two machines.** The grant runs on the machine that owns the character, exactly like the C4
+  pickup's, so it is inherited rather than new - but it has not been watched.
+- **Coming back on death has not been played**, on either pickup: not the restock itself, not what
+  it does to the C4 pads that were tuned around an 8 s clock, and not whether running off the
+  course on purpose to restock turns out to be worth doing.

@@ -9,6 +9,8 @@ class UCameraComponent;
 class UGetawayMovementComponent;
 class UStaticMeshComponent;
 class AGetawayC4;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UInputAction;
 class UInputMappingContext;
 struct FInputActionValue;
@@ -75,6 +77,18 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
 	TObjectPtr<UStaticMeshComponent> Nose;
+
+	/**
+	 * The grapple rope: one cylinder, stretched between your hand and the hook every frame it is
+	 * out, and hidden the rest of the time.
+	 *
+	 * Real geometry rather than a debug line, for the same reason the placement ghost and the C4
+	 * blast are: `DrawDebugLine` is compiled out of a Shipping build, so a rope made of one would
+	 * be invisible in the thing people actually download. Unlike the body it is *not* OwnerNoSee -
+	 * your own rope is the main thing you are looking at.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Getaway")
+	TObjectPtr<UStaticMeshComponent> Rope;
 
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	UGetawayMovementComponent* GetGetawayMovement() const;
@@ -226,14 +240,46 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Getaway")
 	bool IsUsingGamepad() const { return bUsingGamepad; }
 
+	/* ---------------- What you are carrying ---------------- */
+
+	/**
+	 * How many things you may hold at once, C4 charges and grapple hooks counted together.
+	 *
+	 * One, and that is the rule rather than a tuning value: your hand holds a single item, and no
+	 * pickup will hand you another until you have spent the one you are holding. A C4 pad and a
+	 * grapple pad in the same stretch of course is therefore a choice between them, not a shopping
+	 * trip - and a hook in hand is a reason to go and use it.
+	 *
+	 * It replaces the old "carry up to two charges of C4" (decided 2026-10-15, retired 2026-11-05
+	 * when the hook became a pickup too). Set this to 2 and raise `MaxCharges` back to 2 for the
+	 * old behaviour; the hand is a cap across both items and never a floor, so `MaxCharges` still
+	 * limits C4 on its own.
+	 *
+	 * Throwing counts as spending. A charge stuck to a wall waiting for F is out of your hand, so
+	 * you may pick up a hook while it sits there.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Items", meta = (ClampMin = "1"))
+	int32 ItemCapacity = 1;
+
+	/** Everything in your hand: C4 charges plus grapple hooks. */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Items")
+	int32 GetItemsHeld() const { return GetChargesLeft() + GetGrappleShotsLeft(); }
+
+	/** True while a pickup of any kind would give you something. */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Items")
+	bool HasRoomForItem() const { return GetItemsHeld() < FMath::Max(1, ItemCapacity); }
+
 	/* ---------------- C4 ---------------- */
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|C4")
 	TSubclassOf<AGetawayC4> C4Class;
 
-	/** How many charges you can carry at once. */
+	/**
+	 * How many charges of C4 you can carry at once. One since 2026-11-05: your hand holds a single
+	 * item, and `ItemCapacity` caps the total anyway - this is the C4-only half of that.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|C4", meta = (ClampMin = "1"))
-	int32 MaxCharges = 2;
+	int32 MaxCharges = 1;
 
 	/**
 	 * Charges you spawn with. C4 is a collectable resource: a thrown charge is spent for good, so you restock from an
@@ -267,13 +313,104 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Getaway|C4")
 	int32 GetChargesLeft() const;
 
-	/** True while there is room for more charges, i.e. while a pickup would do something. */
+	/**
+	 * True while there is room for more charges, i.e. while a C4 pickup would do something.
+	 *
+	 * Both caps have to pass: `MaxCharges` for C4 itself, and `ItemCapacity` for your hand as a
+	 * whole - so holding a grapple hook closes the C4 pads as well, which is the point of the hand.
+	 */
 	UFUNCTION(BlueprintPure, Category = "Getaway|C4")
-	bool HasRoomForCharges() const { return ChargesHeld < MaxCharges; }
+	bool HasRoomForCharges() const { return ChargesHeld < MaxCharges && HasRoomForItem(); }
 
 	/** Hand over charges, up to MaxCharges. Returns how many were actually taken, 0 if already full. */
 	UFUNCTION(BlueprintCallable, Category = "Getaway|C4")
 	int32 AddCharges(int32 Count);
+
+	/* ---------------- Grapple ---------------- */
+
+	/*
+	 * The grappling hook. The character aims it, spends the charge and draws the rope; the pull
+	 * itself is UGetawayMovementComponent's, because the pull is movement.
+	 *
+	 * You only have one at all on a Grapple round - GrappleShots is 0 otherwise - and the shot is
+	 * spent when the hook *catches*, so a click at open sky costs nothing.
+	 */
+
+	/** How far the hook reaches (cm). 3500 is 35 m, about four of the 1000 cm bridge end to end. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "100"))
+	float GrappleRange = 3500.f;
+
+	/** How thick the rope draws (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "0.5"))
+	float RopeThickness = 5.f;
+
+	/**
+	 * The rope's colour. Cyan by the game's own rule: pink is architecture, cyan is the things that
+	 * help you, lime kills you. See *The colour rule* in docs/look.md.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple")
+	FLinearColor RopeColour = FLinearColor(0.40f, 1.f, 0.95f);
+
+	/** Multiplies the lot; above 1 is what blooms. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "0"))
+	float RopeBrightness = 1.8f;
+
+	/** Where the rope leaves you, measured from the camera in its own axes: forward, right, up. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple")
+	FVector RopeHandOffset = FVector(30.f, 20.f, -22.f);
+
+	/**
+	 * What the rope is made of. Additive and unlit like everything else in this world, so the line
+	 * glows rather than being shaded - and a dynamic instance of it is tinted RopeColour.
+	 *
+	 * A soft reference resolved on the first frame a rope is drawn, not a constructor
+	 * `FObjectFinder`: the same reasoning as `AGetawayBlast::BlastMaterial`, which would otherwise
+	 * warn on every editor start until `adrenaline_look.py` has been run.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple")
+	TSoftObjectPtr<UMaterialInterface> RopeMaterial =
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Materials/M_VB_Pane.M_VB_Pane")));
+
+	/**
+	 * Left click: hook whatever you are looking at, inside GrappleRange.
+	 *
+	 * Spends the shot only if something is hit. Does nothing at all on a round that did not hand
+	 * you a hook, which is why a spare mouse button is safe to put this on.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Grapple")
+	void FireGrapple();
+
+	/** Left click again: let go. Your speed is yours to keep, and the shot does not come back. */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Grapple")
+	void ReleaseGrapple();
+
+	/** True while the rope is attached, on this machine or (for a rival) as last replicated. */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Grapple")
+	bool IsGrappling() const;
+
+	/** True while there is a hook in your hand, so the HUD can name the key for it. */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Grapple")
+	bool HasGrappleHook() const { return GrappleShots > 0; }
+
+	/** Hooks in hand. 1 from a pickup or a Grapple round, 0 once you have fired it. */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Grapple")
+	int32 GetGrappleShotsLeft() const { return FMath::Clamp(GrappleShots, 0, MaxGrappleShots); }
+
+	/** How many hooks you can carry at once. `ItemCapacity` caps the hand as a whole on top of it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Grapple", meta = (ClampMin = "1"))
+	int32 MaxGrappleShots = 1;
+
+	/** True while a grapple pickup would give you something: room in the hand, and room for a hook. */
+	UFUNCTION(BlueprintPure, Category = "Getaway|Grapple")
+	bool HasRoomForGrappleShots() const { return GrappleShots < MaxGrappleShots && HasRoomForItem(); }
+
+	/**
+	 * Hand over hooks, up to MaxGrappleShots and up to what the hand has room for. Returns how many
+	 * were actually taken, 0 if there was no room - the same shape as AddCharges, and read the same
+	 * way by AGetawayGrapplePickup.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Getaway|Grapple")
+	int32 AddGrappleShots(int32 Count);
 
 	/* ---------------- Round effects ---------------- */
 
@@ -303,6 +440,13 @@ public:
 	/** Gravity on a Low Gravity round, as a fraction of the tuned 2.04. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "0.05", ClampMax = "1"))
 	float EffectGravityScale = 0.6f;
+
+	/**
+	 * Hooks you get on a Grapple round. One, deliberately: a single hook is a decision about where
+	 * in the course you spend it, and two would just be a way of travelling.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Effects", meta = (ClampMin = "0"))
+	int32 EffectGrappleShots = 1;
 
 	/** Give this character whatever this round's effect is. Called from BeginPlay. */
 	UFUNCTION(BlueprintCallable, Category = "Getaway|Effects")
@@ -454,6 +598,8 @@ private:
 	void OnCrouchReleased(const FInputActionValue& Value);
 	void OnThrow(const FInputActionValue& Value);
 	void OnDetonate(const FInputActionValue& Value);
+	/** One button for both halves of the hook: throw it if it is in, let go if it is out. */
+	void OnGrapple(const FInputActionValue& Value);
 	void OnRestart(const FInputActionValue& Value);
 	void OnBackToPlacement(const FInputActionValue& Value);
 
@@ -468,6 +614,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CrouchAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> ThrowAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DetonateAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> GrappleAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RestartAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BackToPlacementAction;
 
@@ -478,6 +625,41 @@ private:
 	/** Unthrown charges in hand. */
 	UPROPERTY(Transient)
 	int32 ChargesHeld = 0;
+
+	/* ---------------- Grapple ---------------- */
+
+	/** Hooks in hand. One item at a time, so this and ChargesHeld are never both positive. */
+	int32 GrappleShots = 0;
+
+	/** Stretch the rope between hand and hook, or hide it. Every machine, every character. */
+	void UpdateRope();
+
+	/** The tinted dynamic instance, built on the first frame a rope is actually drawn. */
+	bool EnsureRopeMaterial();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> RopeDynamic;
+
+	/**
+	 * The rope as everybody else sees it. Cosmetic and nothing more: the pull stays on the machine
+	 * that owns the character, like the rest of the movement, and these two only exist so a rival's
+	 * hook is something you can watch rather than guess at.
+	 *
+	 * Pushed by the owning client through ServerSetGrapple whenever the rope goes out or comes in -
+	 * including when it ends itself, by arriving or being cut - and skipped for the owner, who is
+	 * the one doing the telling.
+	 */
+	UPROPERTY(Replicated)
+	bool bRemoteGrappling = false;
+
+	UPROPERTY(Replicated)
+	FVector_NetQuantize100 RemoteGrappleAnchor = FVector::ZeroVector;
+
+	UFUNCTION(Server, Unreliable)
+	void ServerSetGrapple(bool bOn, FVector_NetQuantize100 Anchor);
+
+	/** What we last told the server, so the push happens on change rather than every frame. */
+	bool bSentGrappling = false;
 
 	/** The last state this character's owner reported. Only simulated proxies are told about it. */
 	UPROPERTY(ReplicatedUsing = OnRep_NetMove)

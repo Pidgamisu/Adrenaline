@@ -64,6 +64,7 @@ FString AGetawayGameState::GetEffectName(EGetawayEffect Effect)
 	case EGetawayEffect::DoubleJump: return TEXT("DOUBLE JUMP");
 	case EGetawayEffect::Loaded:     return TEXT("LOADED");
 	case EGetawayEffect::LowGravity: return TEXT("LOW GRAVITY");
+	case EGetawayEffect::Grapple:    return TEXT("GRAPPLE HOOK");
 	default:                         return FString();
 	}
 }
@@ -75,6 +76,7 @@ FString AGetawayGameState::GetEffectBlurb(EGetawayEffect Effect)
 	case EGetawayEffect::DoubleJump: return TEXT("jump again in mid-air");
 	case EGetawayEffect::Loaded:     return TEXT("you start with one C4");
 	case EGetawayEffect::LowGravity: return TEXT("everybody floats");
+	case EGetawayEffect::Grapple:    return TEXT("left click to hook, one shot");
 	default:                         return FString();
 	}
 }

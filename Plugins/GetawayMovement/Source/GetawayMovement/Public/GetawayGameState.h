@@ -48,6 +48,8 @@ enum class EGetawayEffect : uint8
 	Loaded,
 	/** Everybody floats: higher jumps, slower falls, and a C4 launch that throws you further. */
 	LowGravity,
+	/** One grappling hook: left click to pull yourself to whatever you are looking at. */
+	Grapple,
 };
 
 /**

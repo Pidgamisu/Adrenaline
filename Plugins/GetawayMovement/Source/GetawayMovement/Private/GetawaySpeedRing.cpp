@@ -11,10 +11,17 @@
 
 namespace
 {
+	/*
+	 * Prefixed "Ring" because a unity build merges several .cpp files into one translation unit,
+	 * so a name in an anonymous namespace still has to be unique across the module: these two
+	 * clashed with AGetawayVortex's identical pair the first time the build happened to put the two
+	 * files in the same blob.
+	 */
+
 	/** Half extent of the trigger before the catalog scales it, so the piece is 100 local units. */
-	constexpr float HalfLocal = 50.f;
+	constexpr float RingHalfLocal = 50.f;
 	/** The cylinder mesh is 100 units across and 100 tall, centred - the same assumption the vortex makes. */
-	constexpr float CylinderLocal = 100.f;
+	constexpr float RingCylinderLocal = 100.f;
 	/** Segments are pooled in the constructor and the spares hidden, exactly as the vortex pools its bars. */
 	constexpr int32 MaxSegments = 24;
 	/** World gap between the outside of the rim and the edge of the piece's own box. */
@@ -32,7 +39,7 @@ AGetawaySpeedRing::AGetawaySpeedRing()
 	// hole rather than the piece. It starts life filling the cube in case anything reads it before
 	// OnConstruction runs.
 	Trigger = CreateDefaultSubobject<UBoxComponent>(TEXT("Trigger"));
-	Trigger->InitBoxExtent(FVector(HalfLocal, HalfLocal, HalfLocal));
+	Trigger->InitBoxExtent(FVector(RingHalfLocal, RingHalfLocal, RingHalfLocal));
 	Trigger->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Trigger->SetCollisionObjectType(ECC_WorldDynamic);
 	Trigger->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -100,7 +107,7 @@ void AGetawaySpeedRing::LayOutRing()
 	// axis of the hole. The centreline radius is pulled in far enough that the outside of the rim
 	// still sits inside the box the catalog gave the piece, so a 300 cm ring really is 300 cm
 	// across and its lowest point rests on the floor it is standing on.
-	const float Outer = FMath::Min(HalfLocal * SafeY, HalfLocal * SafeZ);
+	const float Outer = FMath::Min(RingHalfLocal * SafeY, RingHalfLocal * SafeZ);
 	const float Radius = FMath::Max(10.f, Outer - RingThickness * 0.5f - EdgeGap);
 
 	// The hole, which is the rest of the piece. Inset to the inside of the rim: a box's inscribed
@@ -109,7 +116,7 @@ void AGetawaySpeedRing::LayOutRing()
 	const float Inner = FMath::Max(10.f, Radius - RingThickness * 0.5f);
 	if (Trigger)
 	{
-		Trigger->SetBoxExtent(FVector(HalfLocal, Inner / SafeY, Inner / SafeZ));
+		Trigger->SetBoxExtent(FVector(RingHalfLocal, Inner / SafeY, Inner / SafeZ));
 	}
 
 	// Thickness and dash length are the same in the world however the piece is scaled, by dividing
@@ -144,9 +151,9 @@ void AGetawaySpeedRing::LayOutRing()
 		// stays along the piece's X and the non-uniform catalog scale cannot shear it.
 		Segment->SetRelativeRotation(FRotator(0.f, 0.f, FMath::RadiansToDegrees(Angle)));
 		Segment->SetRelativeScale3D(FVector(
-			RingThickness / (CylinderLocal * SafeX),
-			RingThickness / (CylinderLocal * SPlane),
-			DashLength / (CylinderLocal * SPlane)));
+			RingThickness / (RingCylinderLocal * SafeX),
+			RingThickness / (RingCylinderLocal * SPlane),
+			DashLength / (RingCylinderLocal * SPlane)));
 		Segment->SetRelativeLocation(FVector(
 			0.f,
 			Radius * FMath::Cos(Angle) / SafeY,

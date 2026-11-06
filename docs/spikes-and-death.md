@@ -225,7 +225,10 @@ placed the thing (and still refuses to pay you for your own trap).
   starts down and there is no half-reset state to get wrong. The price is that **your C4 goes with
   it** - a respawn hands you `StartingCharges` (0), so dying costs you any charges you had picked
   up. **Asked and confirmed 2026-10-31**, so it is settled rather than assumed: dying should cost
-  something now that it does not cost the round.
+  something now that it does not cost the round. Since 2026-11-05 it also *gives* something back:
+  the pickups themselves come back when you die (`bReturnsOnDeath`), so what a death costs you is
+  the item in your hand and the walk from the start, not the pad you took it from. See *A pickup
+  comes back when you die* in `docs/placement.md`.
 - **Which route a death takes is read when you die**, not when the timer fires, and captured into
   the lambda. Flipping the knob mid-run can therefore change what the *next* death does but cannot
   land a player halfway between a respawn and the fly camera.

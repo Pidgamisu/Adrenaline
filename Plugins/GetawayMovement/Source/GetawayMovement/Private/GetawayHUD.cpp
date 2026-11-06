@@ -172,18 +172,50 @@ void AGetawayHUD::DrawHUD()
 	Centred(FString::Printf(TEXT("%d u/s"), Ups), Big, 2.2f, CX, Bottom - 125.f, FLinearColor::White);
 	Centred(FString::Printf(TEXT("%.1f m/s"), Player->GetVelocity().Size2D() / 100.f), Small, 1.1f, CX, Bottom - 62.f, Dim);
 
-	// What you are holding, and nothing else. It used to read "C4  1 / 2" - the count over the
-	// carry cap - which was reported as the HUD claiming you had two charges when you had one. The
-	// cap now only shows up as the word "full", where it is the useful thing to know.
+	// What is in your hand. One line for both items rather than one line each, because the hand
+	// holds a single thing (AGetawayCharacter::ItemCapacity) and a second line reading "none" for
+	// whichever you are not carrying is noise. The rope being out gets its own word, because then
+	// the click in your hand is a release rather than a throw.
 	const int32 Held = Player->GetChargesLeft();
-	const FString C4Line = (Held <= 0)
-		? FString(TEXT("C4  none"))
-		: FString::Printf(TEXT("C4  x%d%s"), Held, (Held >= Player->MaxCharges) ? TEXT("  full") : TEXT(""));
-	DrawText(C4Line, (Held > 0) ? Urgent : Dim, 24.f, 24.f, Small, 1.4f);
-	DrawText(Player->IsUsingGamepad()
-			? TEXT("RB throw C4  |  RT detonate  |  View gives up the run")
-			: TEXT("G throw C4  |  F detonate  |  Backspace gives up the run"),
-		Dim, 24.f, 50.f, Small, 1.f);
+	const int32 Hooks = Player->GetGrappleShotsLeft();
+	const bool bRopeOut = Player->IsGrappling();
+
+	FString HandLine;
+	FLinearColor HandColour = Dim;
+	if (bRopeOut)
+	{
+		HandLine = TEXT("GRAPPLE  out");
+		HandColour = Live;
+	}
+	else if (Hooks > 0)
+	{
+		HandLine = (Hooks > 1) ? FString::Printf(TEXT("GRAPPLE  x%d"), Hooks) : FString(TEXT("GRAPPLE"));
+		HandColour = Live;
+	}
+	else if (Held > 0)
+	{
+		// The count only shows up when you can hold more than one, which at ItemCapacity 1 is never.
+		HandLine = (Held > 1) ? FString::Printf(TEXT("C4  x%d"), Held) : FString(TEXT("C4"));
+		HandColour = Urgent;
+	}
+	else
+	{
+		HandLine = TEXT("HANDS  empty");
+	}
+	DrawText(HandLine, HandColour, 24.f, 24.f, Small, 1.4f);
+
+	// The keys, and only the ones that are any use to you: the hook's key when you are holding one
+	// or swinging on it, C4's when you are carrying a charge or have one stuck to something.
+	const bool bPad = Player->IsUsingGamepad();
+	FString Hint;
+	if (Hooks > 0 || bRopeOut)
+	{
+		Hint += bPad ? TEXT("LT hook  |  ") : TEXT("Left click hook  |  ");
+	}
+	Hint += bPad
+		? TEXT("RB throw C4  |  RT detonate  |  View gives up the run")
+		: TEXT("G throw C4  |  F detonate  |  Backspace gives up the run");
+	DrawText(Hint, Dim, 24.f, 50.f, Small, 1.f);
 
 	// The run only keeps it in the corner: it was announced in the middle of the screen as the build
 	// phase opened, and playing that again as you set off would be telling you the same thing twice.

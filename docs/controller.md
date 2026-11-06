@@ -19,6 +19,7 @@ assets to make and nothing to wire up in the editor.
 | B | Crouch, second option | - |
 | RB | Throw C4 | G |
 | RT | Detonate | F |
+| LT | Throw the grapple hook, and let go of it. Only on a Grapple round | Left click |
 | D-pad Down | Restart | R |
 | View / Back / Select | Give up the run, back to the placement camera | Backspace |
 

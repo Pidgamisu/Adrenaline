@@ -89,12 +89,22 @@ void AGetawayC4Pickup::Tick(float DeltaSeconds)
 			CheckWaitingPlayers();
 		}
 	}
-	else if (bRespawns)
+	else
 	{
-		RespawnCountdown -= DeltaSeconds;
-		if (RespawnCountdown <= 0.f)
+		// Back on death rather than on a clock. A destroyed character makes the weak pointer stale,
+		// and IsDead covers the beat between dying and being destroyed - so the pad is ready again
+		// by the time you are back at the start rather than some seconds after it.
+		if (bReturnsOnDeath && (!Taker.IsValid() || Taker->IsDead()))
 		{
 			Respawn();
+		}
+		else if (RespawnDelay > 0.f)
+		{
+			RespawnCountdown -= DeltaSeconds;
+			if (RespawnCountdown <= 0.f)
+			{
+				Respawn();
+			}
 		}
 	}
 }
@@ -120,6 +130,7 @@ bool AGetawayC4Pickup::TryGive(AActor* Other)
 	const int32 Taken = Player->AddCharges(ChargesGranted);
 	if (Taken <= 0) return false;
 
+	Taker = Player;
 	SetAvailable(false);
 	RespawnCountdown = FMath::Max(RespawnDelay, 0.f);
 	OnTaken.Broadcast(this, Player);
@@ -138,6 +149,7 @@ void AGetawayC4Pickup::CheckWaitingPlayers()
 
 void AGetawayC4Pickup::Respawn()
 {
+	Taker = nullptr;
 	SetAvailable(true);
 	CheckWaitingPlayers(); // someone may be standing on it
 }

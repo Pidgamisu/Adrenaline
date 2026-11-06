@@ -1,8 +1,9 @@
 # Round effects
 
-> Built and **played 2026-11-03 - all three work.** Read this before touching anything that hands
-> a player an ability for one round only. The one part not yet played is how the banner now
-> presents itself: see *The banner* below.
+> The first three were built and **played 2026-11-03 - all three work.** The fourth, the **grapple
+> hook**, was built 2026-11-05 and **has not been played at all**. Read this before touching
+> anything that hands a player an ability for one round only. The other part not yet played is how
+> the banner now presents itself: see *The banner* below.
 
 Every other round, both players are given the same effect before anybody builds. One at a time, the
 same for everybody, and gone the moment the round is.
@@ -12,6 +13,7 @@ same for everybody, and gone the moment the round is.
 | **Double jump** | One jump in the air. The tuned default is `AirJumps` 0, so this is the only way to get one |
 | **Loaded** | You start the run carrying one C4, and can hold only the one |
 | **Low gravity** | Gravity at 60% - higher jumps, slower falls, and a C4 launch that throws you much further |
+| **Grapple hook** | One hook. Left click pulls you to whatever you are looking at; click again to let go. Also a piece you can place - see below |
 
 Round 1 is plain, round 2 has an effect, round 3 is plain, round 4 has one. `EffectEveryNthRound`
 is the rule: an effect lands on every round the number divides, so 2 gives 2, 4, 6. Round 1 is
@@ -25,7 +27,7 @@ character applies it on the machine that owns it.
 
 | Where | What it does |
 |---|---|
-| `EGetawayEffect` in `GetawayGameState.h` | The list. `None`, `DoubleJump`, `Loaded`, `LowGravity` |
+| `EGetawayEffect` in `GetawayGameState.h` | The list. `None`, `DoubleJump`, `Loaded`, `LowGravity`, `Grapple` |
 | `AGetawayGameMode::PickEffectForRound` | Draws one, or `None` on a plain round. Server only |
 | `AGetawayGameState::ActiveEffect` | Replicated, plus `GetEffectName` / `GetEffectBlurb` for the HUD |
 | `AGetawayCharacter::ApplyRoundEffect` | What an effect *means*, applied in `BeginPlay` |
@@ -45,7 +47,7 @@ character applies it on the machine that owns it.
   machine tunes its own character and nobody else's. A proxy has its movement component switched
   off and its position streamed, so there is nothing on it worth tuning.
 
-## The three, in detail
+## The four, in detail
 
 - **Double jump** calls `UGetawayMovementComponent::SetAirJumps`, which exists for this and sets
   `AirJumpsLeft` as well as `AirJumps`. Writing the property alone is not enough: the component has
@@ -62,6 +64,33 @@ character applies it on the machine that owns it.
   stays relative to whatever the character is tuned to (2.04 → about 1.22). `AGetawayC4::Launch`
   reads `GravityScale` too, which is why a rocket jump goes so much further on these rounds - that
   falls out of it rather than being coded, and it is the best thing about this effect.
+
+- **Grapple hook** is the only one of the four that is a *button* rather than a changed number, so
+  it is split across three files: `AGetawayCharacter::FireGrapple` aims it and spends the shot,
+  `UGetawayMovementComponent::StartGrapple` / `ApplyGrapplePull` do the pulling, and the character
+  draws the rope. Three things about it are decisions rather than details:
+  - **It is not a movement mode.** You stay in falling, or on the ground, and the pull is simply
+    velocity added every frame on top of whatever you were doing - so Source air strafing, the
+    slide, even catching a wallrun mid-swing all keep working while the rope is attached. "You can
+    still move while grappled" therefore cost nothing to build; a `MOVE_Custom` grapple would have
+    had to re-implement all of it.
+  - **The pull leans toward where you are looking** (`GrappleViewSteer`, 0.35), rather than running
+    straight down the rope. That is the steering: look off to one side and you swing round the
+    anchor in an arc instead of being winched into it. Normalising a unit vector plus a shorter one
+    can never turn it a full 90 degrees, which is the geometry behind "you can never pull yourself
+    *away* from the hook" - it holds at any value of the knob.
+  - **It ends itself.** Arriving (within `GrappleReleaseDistance`, 150 cm), the line being cut by
+    geometry, or the thing you hooked being destroyed all drop the rope, and so does dying. The
+    weak pointer to the anchor actor is the whole of that last test: smash the panel somebody is
+    hanging off and their rope goes with it, with nothing told about anything.
+  - **Breaking it never slows you.** `StopGrapple` does not touch your velocity, by any of those
+    routes. The arc you are on is what you spent the hook for.
+  - **It is also a pickup**, since 2026-11-05: `AGetawayGrapplePickup` is a placeable piece that
+    hands one over, so the hook is not only an effect-round gift. The effect round and the pickup
+    write the same counter, `GrappleShots`, and both are capped by the **one-item hand** -
+    `AGetawayCharacter::ItemCapacity` 1, counting C4 and hooks together. The consequence worth
+    knowing for the effect: on a Grapple round everybody starts holding a hook, so every C4 pad on
+    the course is shut to them until they fire it. See *The grapple pickup* in `docs/placement.md`.
 
 ## The banner
 
@@ -118,6 +147,29 @@ child of `AGetawayHUD` and point `HUDClass` at it if you want to tune them in th
 | `EffectC4Charges` | 1 | Charges you start a Loaded round with |
 | `EffectC4MaxCharges` | 1 | How many you may hold on a Loaded round |
 | `EffectGravityScale` | 0.6 | Gravity on a Low Gravity round, as a fraction of normal |
+| `EffectGrappleShots` | 1 | Hooks you get on a Grapple round, capped by `MaxGrappleShots` and the hand |
+
+`BP_Character`, **Getaway|Grapple** - the hook as a thing you aim and look at:
+
+| Knob | Default | What it does |
+|---|---|---|
+| `GrappleRange` | 3500 | How far the hook reaches, in cm. 35 m |
+| `RopeThickness` | 5 | How thick the rope draws, in cm |
+| `RopeColour` | cyan | The colour rule: cyan is the things that help you |
+| `RopeBrightness` | 1.8 | Above 1 is what blooms |
+| `RopeHandOffset` | (30, 20, -22) | Where the rope leaves you, measured from the camera |
+| `RopeMaterial` | `M_VB_Pane` | Additive and unlit, tinted to `RopeColour` in a dynamic instance |
+
+`BP_Character`'s **movement component**, **Getaway|Grapple** - the hook as a force:
+
+| Knob | Default | What it does |
+|---|---|---|
+| `GrapplePull` | 4500 | How hard it reels you in, cm/s^2. Only ever adds speed |
+| `GrappleMaxSpeed` | 1800 | The fastest the rope itself will drag you along its line. Speed you earned elsewhere is never taken off you |
+| `GrappleViewSteer` | 0.35 | How far the pull leans toward your view. 0 winches you straight in |
+| `GrappleGravityPayback` | 1 | How much of gravity the rope holds up. 1 is a zip line, lower sags and swings |
+| `GrappleReleaseDistance` | 150 | Get this close and it lets go, because you have arrived |
+| `GrappleCutSlack` | 60 | How far short of the anchor something must block the line to count as cutting it |
 
 ## Decided along the way
 
@@ -132,6 +184,13 @@ child of `AGetawayHUD` and point `HUDClass` at it if you want to tune them in th
   with you. Those still do not.
 - **The effect is announced, not hidden.** A one-line message as the run starts plus the name
   top-left for the whole run. Guessing why you are floating is not a mechanic.
+- **One hook, spent on the catch.** A click that hits nothing costs nothing and says "nothing in
+  reach" - one hook a round is meant to be a decision about *where* in the course to spend it, and
+  losing it to a click at open sky would be a decision nobody made. Letting go costs nothing
+  either, because the shot went when the hook caught.
+- **A grapple round says nothing on any other round.** `bGrappleHook` on the character is what
+  tells `FireGrapple` and the HUD whether this player has a hook at all, which is why left click is
+  silent the rest of the time rather than answering every click with a line of text.
 
 ## Still unverified
 
@@ -142,5 +201,13 @@ child of `AGetawayHUD` and point `HUDClass` at it if you want to tune them in th
 - **Two machines have never seen it**, like everything else in the project. `ActiveEffect` is one
   replicated enum set 30 seconds before any character spawns, so a client should always have it in
   hand by the time it matters - but that is reasoning, not a play-test.
-- **The pool is drawn at random**, so it can take a few rounds to see all three. `bNoRepeatEffect`
+- **The pool is drawn at random**, so it can take a few rounds to see all four. `bNoRepeatEffect`
   means you will at least never get the same one twice in a row.
+- **The grapple hook has never been played** (built 2026-11-05). Everything about its feel is a
+  first pass: whether 4500 of pull and a 1800 ceiling is a hook or a catapult, whether 0.35 of view
+  steer is enough to swing with, and whether holding all of gravity up makes it too much like a zip
+  line. The rope cutting on geometry is the most likely thing to annoy: swing behind a corner and
+  you lose it, which is deliberate, but `GrappleCutSlack` is the knob if it fires when it should not.
+- **A rival's rope has never been seen.** `bRemoteGrappling` and `RemoteGrappleAnchor` are pushed
+  to the server on the frame the rope goes out or comes in, which should be enough for something
+  cosmetic, but no second machine has watched one.

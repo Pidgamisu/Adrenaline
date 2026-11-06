@@ -7,6 +7,7 @@
 #include "GetawayCollapsingBridge.h"
 #include "GetawayFinish.h"
 #include "GetawayGameState.h"
+#include "GetawayGrapplePickup.h"
 #include "GetawayHUD.h"
 #include "GetawayJumpPad.h"
 #include "GetawayMenuCamera.h"
@@ -61,7 +62,8 @@ AGetawayGameMode::AGetawayGameMode()
 
 	// Every effect there is. It is a Blueprint default so one can be retired without a rebuild;
 	// *when* one lands is EffectEveryNthRound, and what each one does is on AGetawayCharacter.
-	EffectPool = { EGetawayEffect::DoubleJump, EGetawayEffect::Loaded, EGetawayEffect::LowGravity };
+	EffectPool = { EGetawayEffect::DoubleJump, EGetawayEffect::Loaded, EGetawayEffect::LowGravity,
+		EGetawayEffect::Grapple };
 
 	Catalog.Add(MakePiece(TEXT("floor"), TEXT("Floor"), FVector(400.f, 400.f, 50.f), AGetawayPiece::StaticClass()));
 	Catalog.Add(MakePiece(TEXT("wall"), TEXT("Wall"), FVector(400.f, 50.f, 400.f), AGetawayPiece::StaticClass()));
@@ -81,6 +83,11 @@ AGetawayGameMode::AGetawayGameMode()
 	Catalog.Add(MakePiece(TEXT("bridge"), TEXT("Collapsing bridge"), FVector(1000.f, 400.f, 60.f), AGetawayCollapsingBridge::StaticClass(), true, true));
 	// The pickup builds its own meshes, so it is placed at its own size; Size is only the ghost.
 	Catalog.Add(MakePiece(TEXT("c4"), TEXT("C4 pickup"), FVector(110.f, 110.f, 110.f), AGetawayC4Pickup::StaticClass(), false));
+	// The hook comes from a pad of its own, the same furniture at the same size. Your hand holds one
+	// item across both, so placing one of each in a stretch of course is offering a choice rather
+	// than a shopping trip - see AGetawayCharacter::ItemCapacity.
+	Catalog.Add(MakePiece(TEXT("grapple"), TEXT("Grapple pickup"), FVector(110.f, 110.f, 110.f),
+		AGetawayGrapplePickup::StaticClass(), false));
 	// Surface mounted: the same three numbers as a wall, read as a plate - 400 x 400 across the
 	// face it sticks to, 50 thick out from it. It cannot be placed without something to stick to.
 	Catalog.Add(MakePiece(TEXT("spikes"), TEXT("Spikes"), FVector(400.f, 400.f, 50.f), AGetawaySpikes::StaticClass(), true, false, true));

@@ -28,6 +28,10 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "Kismet/GameplayStatics.h"
+#include "MaterialDomain.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -124,10 +128,23 @@ AGetawayCharacter::AGetawayCharacter(const FObjectInitializer& ObjectInitializer
 	Nose->SetOwnerNoSee(true);
 	Nose->SetMobility(EComponentMobility::Movable);
 
+	// The rope. Attached to the capsule so it travels with you, but its world transform is written
+	// every frame it is out, so the attachment is only there to keep it tidy in the outliner.
+	Rope = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Rope"));
+	Rope->SetupAttachment(GetCapsuleComponent());
+	Rope->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Rope->SetGenerateOverlapEvents(false);
+	Rope->SetMobility(EComponentMobility::Movable);
+	Rope->SetVisibility(false);
+	// Your own rope is the thing you are watching, so unlike Body and Nose this is not OwnerNoSee.
+	// It casts no shadow and takes no light either: the whole world here is unlit and additive.
+	Rope->SetCastShadow(false);
+
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	if (Cylinder.Succeeded())
 	{
 		Body->SetStaticMesh(Cylinder.Object);
+		Rope->SetStaticMesh(Cylinder.Object);
 	}
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (Cube.Succeeded())
@@ -141,6 +158,10 @@ void AGetawayCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	// The owner already knows where it is - it is the one telling everyone else.
 	DOREPLIFETIME_CONDITION(AGetawayCharacter, NetMove, COND_SimulatedOnly);
+	// Same bargain for the rope: the owner draws its own from the movement component, so it is only
+	// the other machines that need telling.
+	DOREPLIFETIME_CONDITION(AGetawayCharacter, bRemoteGrappling, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AGetawayCharacter, RemoteGrappleAnchor, COND_SkipOwner);
 }
 
 UGetawayMovementComponent* AGetawayCharacter::GetGetawayMovement() const
@@ -214,6 +235,7 @@ void AGetawayCharacter::BuildDefaultInput()
 	CrouchAction   = MakeAction(TEXT("IA_GetawayCrouch"), EInputActionValueType::Boolean);
 	ThrowAction    = MakeAction(TEXT("IA_GetawayThrowC4"), EInputActionValueType::Boolean);
 	DetonateAction = MakeAction(TEXT("IA_GetawayDetonate"), EInputActionValueType::Boolean);
+	GrappleAction  = MakeAction(TEXT("IA_GetawayGrapple"), EInputActionValueType::Boolean);
 	RestartAction  = MakeAction(TEXT("IA_GetawayRestart"), EInputActionValueType::Boolean);
 	BackToPlacementAction = MakeAction(TEXT("IA_GetawayBackToPlacement"), EInputActionValueType::Boolean);
 
@@ -244,6 +266,9 @@ void AGetawayCharacter::BuildDefaultInput()
 	MappingContext->MapKey(CrouchAction, EKeys::LeftControl);
 	MappingContext->MapKey(ThrowAction, EKeys::G);
 	MappingContext->MapKey(DetonateAction, EKeys::F);
+	// The left mouse button is free during a run - the placement camera uses it to place a piece,
+	// and that context is cleared the moment this character takes over (see SetupPlayerInputComponent).
+	MappingContext->MapKey(GrappleAction, EKeys::LeftMouseButton);
 	MappingContext->MapKey(RestartAction, EKeys::R);
 	MappingContext->MapKey(BackToPlacementAction, EKeys::BackSpace);
 
@@ -258,6 +283,9 @@ void AGetawayCharacter::BuildDefaultInput()
 	MappingContext->MapKey(CrouchAction, EKeys::Gamepad_FaceButton_Right);
 	MappingContext->MapKey(ThrowAction, EKeys::Gamepad_RightShoulder);
 	MappingContext->MapKey(DetonateAction, EKeys::Gamepad_RightTrigger);
+	// LT for the hook: LB is crouch and has to be held for a slide, so a trigger is what is left
+	// on that hand. See docs/controller.md for the rest of the map.
+	MappingContext->MapKey(GrappleAction, EKeys::Gamepad_LeftTrigger);
 	MappingContext->MapKey(RestartAction, EKeys::Gamepad_DPad_Down);
 	MappingContext->MapKey(BackToPlacementAction, EKeys::Gamepad_Special_Left);
 
@@ -307,6 +335,7 @@ void AGetawayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	Input->BindAction(CrouchAction, ETriggerEvent::Completed, this, &AGetawayCharacter::OnCrouchReleased);
 	Input->BindAction(ThrowAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnThrow);
 	Input->BindAction(DetonateAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnDetonate);
+	Input->BindAction(GrappleAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnGrapple);
 	Input->BindAction(RestartAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnRestart);
 	Input->BindAction(BackToPlacementAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnBackToPlacement);
 }
@@ -433,6 +462,20 @@ void AGetawayCharacter::OnCrouchReleased(const FInputActionValue&)
 void AGetawayCharacter::OnThrow(const FInputActionValue&) { ThrowC4(); }
 void AGetawayCharacter::OnDetonate(const FInputActionValue&) { DetonateC4(); }
 
+void AGetawayCharacter::OnGrapple(const FInputActionValue&)
+{
+	// One button, both halves. Click to hook, click again to let go - which is also why a release
+	// never costs you anything: the shot was spent when the hook caught.
+	if (IsGrappling())
+	{
+		ReleaseGrapple();
+	}
+	else
+	{
+		FireGrapple();
+	}
+}
+
 void AGetawayCharacter::OnRestart(const FInputActionValue&)
 {
 	// Reopening the level is a single-player convenience: on a client it would drop the connection,
@@ -486,6 +529,12 @@ void AGetawayCharacter::Die(AActor* KilledBy)
 	// Stop where you are. This character is finished either way - it is destroyed a beat later,
 	// whether that beat ends in a respawn at the start or in the fly camera - and sliding on
 	// after the spikes went through you reads as the trap having missed.
+	if (UGetawayMovementComponent* Move = GetGetawayMovement())
+	{
+		// The hook goes with you. Explicitly, because DisableMovement stops the component ticking
+		// and the rope would otherwise be left hanging off a corpse.
+		Move->StopGrapple();
+	}
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		Move->StopMovementImmediately();
@@ -590,7 +639,11 @@ int32 AGetawayCharacter::GetChargesLeft() const
 
 int32 AGetawayCharacter::AddCharges(int32 Count)
 {
-	const int32 Room = FMath::Max(0, MaxCharges - ChargesHeld);
+	// Two caps, the smaller one winning: C4's own, and the hand across both items. Holding a
+	// grapple hook therefore shuts the C4 pads, and the pad's own HasRoomForCharges check will
+	// already have turned you away before this is reached.
+	const int32 Room = FMath::Min(FMath::Max(0, MaxCharges - ChargesHeld),
+		FMath::Max(0, FMath::Max(1, ItemCapacity) - GetItemsHeld()));
 	const int32 Taken = FMath::Clamp(Count, 0, Room);
 	ChargesHeld += Taken;
 	if (Taken > 0)
@@ -692,6 +745,172 @@ void AGetawayCharacter::ServerDetonateC4_Implementation()
 	DetonateC4();
 }
 
+/* ============================================================ grapple */
+
+bool AGetawayCharacter::IsGrappling() const
+{
+	// Our own rope is whatever the movement component says; somebody else's is whatever last
+	// arrived over the wire.
+	if (IsLocallyControlled() || GetLocalRole() == ROLE_AutonomousProxy)
+	{
+		const UGetawayMovementComponent* Move = GetGetawayMovement();
+		return Move && Move->IsGrappling();
+	}
+	return bRemoteGrappling;
+}
+
+void AGetawayCharacter::FireGrapple()
+{
+	UGetawayMovementComponent* Move = GetGetawayMovement();
+	UWorld* World = GetWorld();
+	if (!Move || !World || !Camera) return;
+
+	if (GrappleShots <= 0)
+	{
+		// Worded like the C4's own empty-handed line, because it means the same thing now that the
+		// hook is something you pick up: there is one on the course, go and get it.
+		Notify(TEXT("No grapple. Find a pickup"), 1.2f, FLinearColor(1.f, 0.42f, 0.3f), 7005);
+		return;
+	}
+
+	const FVector Start = Camera->GetComponentLocation();
+	const FVector End = Start + GetControlRotation().Vector() * GrappleRange;
+
+	// ECC_Visibility: what you can see is what you can hook. It also means the things with no
+	// blocking collision - a vortex column, the spikes' overlap volume - cannot be hooked, which is
+	// the right answer for all of them.
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(GetawayGrapple), false, this);
+	if (!World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	{
+		// A miss costs nothing. One hook a round is a decision about where to spend it, and losing
+		// it to a click at open sky would be a decision nobody made.
+		Notify(TEXT("Nothing in reach"), 1.f, FLinearColor(0.64f, 0.66f, 0.71f), 7005);
+		return;
+	}
+
+	--GrappleShots; // spent on the catch, not on the click
+	Move->StartGrapple(Hit.ImpactPoint, Hit.GetActor());
+}
+
+int32 AGetawayCharacter::AddGrappleShots(int32 Count)
+{
+	// The same two caps AddCharges answers to, and the same return: how many were actually taken.
+	const int32 Room = FMath::Min(FMath::Max(0, MaxGrappleShots - GrappleShots),
+		FMath::Max(0, FMath::Max(1, ItemCapacity) - GetItemsHeld()));
+	const int32 Taken = FMath::Clamp(Count, 0, Room);
+	GrappleShots += Taken;
+	if (Taken > 0)
+	{
+		Notify(IsUsingGamepad() ? TEXT("Grapple hook. LT to fire") : TEXT("Grapple hook. Left click to fire"),
+			1.4f, FLinearColor(0.37f, 0.77f, 0.84f), 7006);
+	}
+	return Taken;
+}
+
+void AGetawayCharacter::ReleaseGrapple()
+{
+	if (UGetawayMovementComponent* Move = GetGetawayMovement())
+	{
+		Move->StopGrapple();
+	}
+}
+
+void AGetawayCharacter::ServerSetGrapple_Implementation(bool bOn, FVector_NetQuantize100 Anchor)
+{
+	// Cosmetic, so it is taken at face value like the rest of client authority. Writing the
+	// properties is what marks them dirty for the other clients.
+	bRemoteGrappling = bOn;
+	RemoteGrappleAnchor = Anchor;
+}
+
+bool AGetawayCharacter::EnsureRopeMaterial()
+{
+	if (RopeDynamic) return true;
+
+	UMaterialInterface* Base = RopeMaterial.LoadSynchronous();
+	if (!Base)
+	{
+		// Noisy in the log, quiet on screen: the same choice the placement ghost and the blast make.
+		// The engine default material is *lit*, so in this unlit world it draws as a black line.
+		UE_LOG(LogTemp, Warning, TEXT("Getaway: no grapple rope material at '%s'. Run "
+			"Content/Python/adrenaline_look.py in the editor to build it. Falling back to the "
+			"engine default material, which is lit, so the rope will look black."),
+			*RopeMaterial.ToString());
+		Base = UMaterial::GetDefaultMaterial(MD_Surface);
+	}
+
+	RopeDynamic = UMaterialInstanceDynamic::Create(Base, this);
+	if (!RopeDynamic) return false;
+
+	// Both colours the same. The edge band is measured in centimetres and the rope is a few across,
+	// so the band would swallow the whole thing anyway - and a rope wants to read as one bright
+	// line rather than as a tube with a rim.
+	RopeDynamic->SetVectorParameterValue(TEXT("Color"), RopeColour);
+	RopeDynamic->SetVectorParameterValue(TEXT("EdgeColor"), RopeColour);
+	RopeDynamic->SetScalarParameterValue(TEXT("Brightness"), RopeBrightness);
+	RopeDynamic->SetScalarParameterValue(TEXT("FaceOpacity"), 1.f);
+
+	if (Rope) Rope->SetMaterial(0, RopeDynamic);
+	return true;
+}
+
+void AGetawayCharacter::UpdateRope()
+{
+	if (!Rope) return;
+
+	const bool bMine = IsLocallyControlled() || GetLocalRole() == ROLE_AutonomousProxy;
+	const UGetawayMovementComponent* Move = GetGetawayMovement();
+	const bool bOut = bMine ? (Move && Move->IsGrappling()) : bRemoteGrappling;
+
+	// Tell the others when it changes, and only then. This is also what reports the three ends the
+	// rope finds for itself - arriving, being cut, and its anchor being destroyed - because those
+	// happen inside the movement component with nobody watching.
+	if (bMine && bOut != bSentGrappling)
+	{
+		bSentGrappling = bOut;
+		const FVector Anchor = (bOut && Move) ? Move->GetGrappleAnchor() : FVector::ZeroVector;
+		if (HasAuthority())
+		{
+			bRemoteGrappling = bOut;
+			RemoteGrappleAnchor = Anchor;
+		}
+		else if (GetNetMode() != NM_Standalone)
+		{
+			ServerSetGrapple(bOut, Anchor);
+		}
+	}
+
+	if (!bOut)
+	{
+		if (Rope->IsVisible()) Rope->SetVisibility(false);
+		return;
+	}
+
+	if (!EnsureRopeMaterial()) return;
+
+	const FVector Anchor = bMine && Move ? Move->GetGrappleAnchor() : FVector(RemoteGrappleAnchor);
+	// Out of the hand for your own, out of the shoulder for everybody else's - a remote player has
+	// a cylinder for a body and no hand to speak of.
+	const FVector Hand = bMine && Camera
+		? Camera->GetComponentLocation() + GetControlRotation().RotateVector(RopeHandOffset)
+		: GetActorLocation() + FVector(0.f, 0.f, 40.f);
+
+	const FVector Span = Anchor - Hand;
+	const float Length = Span.Size();
+	if (Length < 1.f)
+	{
+		if (Rope->IsVisible()) Rope->SetVisibility(false);
+		return;
+	}
+
+	// The basic cylinder is 100 cm tall and 100 across at scale 1, standing on its Z axis.
+	const float Radius = FMath::Max(0.5f, RopeThickness) / 100.f;
+	Rope->SetWorldLocationAndRotation(Hand + Span * 0.5f, FRotationMatrix::MakeFromZ(Span).ToQuat());
+	Rope->SetWorldScale3D(FVector(Radius, Radius, Length / 100.f));
+	if (!Rope->IsVisible()) Rope->SetVisibility(true);
+}
+
 /* ============================================================ camera */
 
 void AGetawayCharacter::AddViewPunch(float Degrees)
@@ -753,6 +972,7 @@ void AGetawayCharacter::Tick(float DeltaSeconds)
 	}
 
 	UpdateBody();
+	UpdateRope();
 }
 
 /* ============================================================ client-authoritative networking */
@@ -946,6 +1166,13 @@ void AGetawayCharacter::ApplyRoundEffect()
 		// The cap matters because a C4 pickup anybody placed in an earlier round is still standing.
 		MaxCharges = FMath::Max(1, EffectC4MaxCharges);
 		ChargesHeld = FMath::Clamp(EffectC4Charges, 0, MaxCharges);
+		break;
+
+	case EGetawayEffect::Grapple:
+		// A hook in your hand from the first frame. Note what the one-item hand then means for the
+		// round: until you fire it, the C4 pads on the course are closed to you - which is the
+		// trade the hand exists to create, and it is dealt before anybody builds.
+		GrappleShots = FMath::Clamp(EffectGrappleShots, 0, MaxGrappleShots);
 		break;
 
 	case EGetawayEffect::LowGravity:

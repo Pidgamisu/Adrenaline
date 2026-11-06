@@ -108,6 +108,11 @@ PIECES = [
     # part there is, and it is pooled, so it goes in by property rather than by component.
     ("speedring", "BP_Piece_SpeedRing", "GetawaySpeedRing",        {},
                                                                   {"ring_material": "MI_VB_Pickup"}),
+    # The hook pad: the dark plinth the C4 pickup and the jump pad stand on, with the hook itself in
+    # the brightest cyan there is, because it is the thing you are meant to run at. The hook's bend
+    # is pooled, so it goes in by property like the vortex's bars.
+    ("grapple",  "BP_Piece_GrapplePickup", "GetawayGrapplePickup", {"pad": "MI_VB_Dark"},
+                                                                  {"hook_material": "MI_VB_Pickup"}),
 ]
 
 assets = unreal.EditorAssetLibrary

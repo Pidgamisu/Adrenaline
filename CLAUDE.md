@@ -58,9 +58,16 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   the jump, wallrun or slide that comes next. **Played the day it was built and signed off at the
   defaults** - the first piece that needed no retune after playing. See *The speed ring* in
   `docs/placement.md`.
+  The fourteenth is the **grapple pickup** (added 2026-11-05): the C4 pickup's pad with a hook
+  turning over it, which hands you one grapple hook. **Built but not played.** Your hand holds
+  **one item**, C4 and hooks counted together, so a C4 pad and a hook pad near each other are a
+  choice between them. See *The grapple pickup* in `docs/placement.md`.
 - **Effects:** a layer on top of the round, built and **played 2026-11-03 - all three work**.
   Every other round (1 plain, 2 with, 3 plain) both players are given the same effect before
   anybody builds: double jump, one C4, or 60% gravity. One at a time, gone at the end of the round.
+  The fourth is the **grapple hook** (added 2026-11-05): one hook, left click to throw it at what
+  you are looking at and click again to let go, and you keep air strafing and steer the swing with
+  the camera the whole time. **Built but not played at all** - every number in it is a first pass.
   The effect lands big in the middle of the screen as the build phase opens, holds 2 s and then
   travels to the top left corner, where it stays for the round; **that part is not played.** See
   `docs/effects.md`.
@@ -154,20 +161,36 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   climbed. Asked and left that way deliberately - a 2 m block reads as a wall, not a step.
   Raising `MantleMaxHeight` past 200 on `BP_Character` would hand climbing back, and make
   everything else that tall climbable with it. Don't.
+- **One item in your hand** (decided 2026-11-05, replacing "carry up to two charges" of C4).
+  `ItemCapacity` on the character is 1 and counts C4 charges and grapple hooks together, so no
+  pickup of either kind gives you anything until you have spent what you are carrying. Throwing or
+  firing counts as spending - a charge stuck to a wall waiting for F has left your hand. It makes a
+  C4 pad and a hook pad placed near each other a choice rather than a shopping trip, and it is why
+  `MaxCharges` is 1 now. `ItemCapacity` 2 with `MaxCharges` 2 restores the old behaviour. The cost
+  is the double rocket jump, which nobody has tried to miss yet. See *Your hand holds one item* in
+  `docs/placement.md`.
 - **C4:**
-  - Carry up to two charges at a time, G to throw, F to detonate.
+  - One charge at a time, G to throw, F to detonate.
   - **C4 is a collectable resource** (decided 2026-10-15, replacing "charges return when they detonate"): a thrown
     charge is spent for good. You spawn with `StartingCharges` (0 by default) and restock by running through an
-    `AGetawayC4Pickup`, which grants `ChargesGranted` (**1** since 2026-10-19, was 2, so a full load of
-    `MaxCharges` 2 costs two pickups) and respawns after `RespawnDelay` (8 s) so a placed pickup
-    stays useful for a whole round. `StartingCharges = MaxCharges` restores the old always-loaded behaviour.
+    `AGetawayC4Pickup`, which grants `ChargesGranted` (**1** since 2026-10-19).
+    Since the one-item hand (2026-11-05) a pickup also gives you nothing while you are holding a
+    grapple hook. `StartingCharges = MaxCharges` restores the old always-loaded behaviour.
   - **Inherits 100% of your velocity** when thrown.
   - Sticks to surfaces.
   - Rocket-jump style launch.
   - Bursts breakables.
   - Never damages walls or floors.
+  - **A pickup comes back when you die, not on a timer** (decided 2026-11-05, after playing the
+    8 s clock, and it applies to both pickups). One charge or one hook per life: a pad you have
+    emptied stays empty for as long as you keep yourself alive, so restocking costs you a death
+    and the walk back. `bReturnsOnDeath` on the pickup, with `RespawnDelay` above 0 to add a timer
+    as well. The pickup watches the character that took it weakly, so a death is the pointer going
+    stale and there is nothing to subscribe to - which also frees every pickup between rounds.
+    **Note the loop it opens:** dying is free (2026-10-31), so running off the course on purpose is
+    now a way to restock. Not played yet.
   - **A pickup is per player** (decided 2026-10-18, after playing): each player can collect the
-    same `AGetawayC4Pickup` once per respawn, and each sees their own pad empty. The alternative -
+    same `AGetawayC4Pickup` once per life, and each sees their own pad empty. The alternative -
     a shared pickup that the first player there takes from everyone - was considered and turned
     down: per-player is fairer in a race, and it falls straight out of client authority, since the
     charge count lives on the machine that owns the character. Making it shared means routing the

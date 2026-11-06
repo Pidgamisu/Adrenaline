@@ -49,6 +49,13 @@ FVector UGetawayMovementComponent::ViewForward() const
 	return FRotationMatrix(FRotator(0.f, Yaw, 0.f)).GetUnitAxis(EAxis::X);
 }
 
+FVector UGetawayMovementComponent::ViewDirection() const
+{
+	// Pitch included, unlike ViewForward: a grapple is aimed up at a ledge or down past a drop as
+	// often as it is aimed along the floor.
+	return CharacterOwner ? CharacterOwner->GetControlRotation().Vector() : ViewForward();
+}
+
 FVector UGetawayMovementComponent::ViewRight() const
 {
 	const float Yaw = CharacterOwner ? CharacterOwner->GetControlRotation().Yaw : 0.f;
@@ -275,6 +282,10 @@ void UGetawayMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSe
 	// takes you out of a scripted climb rather than waiting politely for it to finish.
 	ApplyVortexLift(DeltaSeconds);
 
+	// The hook, for the same reason and in the same place. It is applied every frame the rope is
+	// attached and it ends itself when you arrive, so nothing outside has to watch it.
+	ApplyGrapplePull(DeltaSeconds);
+
 	// Keep the capsule size fixed for the whole mantle, so the climb lands where it was measured.
 	if (IsMantling())
 	{
@@ -497,6 +508,129 @@ void UGetawayMovementComponent::ApplyVortexLift(float DeltaSeconds)
 	if (Analog > 0.f && VortexSteerSpeed > 0.f)
 	{
 		SourceAccelerate(Acceleration.GetSafeNormal2D(), VortexSteerSpeed * Analog, VortexSteerAccel, DeltaSeconds);
+	}
+}
+
+/* ============================================================ grapple */
+
+void UGetawayMovementComponent::StartGrapple(const FVector& Anchor, AActor* AnchorActor)
+{
+	bGrappling = true;
+	GrappleAnchor = Anchor;
+	GrappleActor = AnchorActor;
+	bGrappleHadActor = (AnchorActor != nullptr);
+
+	// A hook is a route, so it takes you out of a wallrun or a climb rather than waiting for one -
+	// the same call ApplyVortexLift makes, for the same reason.
+	if (IsWallRunning() || IsMantling())
+	{
+		SetMovementMode(MOVE_Falling);
+	}
+}
+
+void UGetawayMovementComponent::StopGrapple()
+{
+	// Velocity is deliberately untouched. Letting go of a grapple is how you spend it: the arc you
+	// are on is the whole reward, and taking any of it back would make the hook a ride rather than
+	// a move.
+	bGrappling = false;
+	GrappleActor = nullptr;
+	bGrappleHadActor = false;
+}
+
+bool UGetawayMovementComponent::IsGrappleLineCut(const FVector& From, const FVector& Dir, float Distance) const
+{
+	const UWorld* World = GetWorld();
+	if (!World) return false;
+
+	const float Reach = Distance - FMath::Max(0.f, GrappleCutSlack);
+	if (Reach <= 0.f) return false;
+
+	FCollisionQueryParams Params = MoveQueryParams();
+	if (AActor* Anchor = GrappleActor.Get())
+	{
+		// Whatever is holding the hook is not in the way of its own rope.
+		Params.AddIgnoredActor(Anchor);
+	}
+
+	// ECC_Visibility, the same channel AGetawayCharacter::FireGrapple hooks with, so anything solid
+	// enough to hook is solid enough to cut.
+	FHitResult Hit;
+	return World->LineTraceSingleByChannel(Hit, From, From + Dir * Reach, ECC_Visibility, Params);
+}
+
+void UGetawayMovementComponent::ApplyGrapplePull(float DeltaSeconds)
+{
+	if (!bGrappling) return;
+
+	// Hooked something that has since been smashed or blown up. The weak pointer going stale is the
+	// whole test - nothing has to tell the rope its anchor is gone.
+	if (bGrappleHadActor && !GrappleActor.IsValid())
+	{
+		StopGrapple();
+		return;
+	}
+
+	if (!HasValidData() || DeltaSeconds < MIN_TICK_TIME) return;
+
+	const FVector Here = UpdatedComponent->GetComponentLocation();
+	FVector ToAnchor = GrappleAnchor - Here;
+	const float Distance = ToAnchor.Size();
+
+	// You made it. The rope lets go at arm's length rather than reeling you into the surface and
+	// fighting you over the last metre, and you keep every bit of the speed it gave you.
+	if (Distance <= FMath::Max(20.f, GrappleReleaseDistance))
+	{
+		StopGrapple();
+		return;
+	}
+	ToAnchor /= Distance;
+
+	if (IsGrappleLineCut(Here, ToAnchor, Distance))
+	{
+		StopGrapple();
+		return;
+	}
+
+	// The steering, and the reason the camera is worth turning while you hang off this: the pull
+	// leans toward where you are looking instead of running straight at the hook. Normalising a
+	// unit vector plus a shorter one can never swing it a full 90 degrees, so the dot check is belt
+	// and braces - but it is what makes "you can never pull away from the anchor" true whatever
+	// GrappleViewSteer is set to.
+	FVector PullDir = ToAnchor;
+	if (GrappleViewSteer > 0.f)
+	{
+		const FVector Leaned = (ToAnchor + ViewDirection() * GrappleViewSteer).GetSafeNormal();
+		if (!Leaned.IsNearlyZero() && FVector::DotProduct(Leaned, ToAnchor) > 0.f)
+		{
+			PullDir = Leaned;
+		}
+	}
+
+	// Source-shaped, like SourceAccelerate: add toward the cap, never past it, never take any away.
+	// Somebody who arrives on the rope already faster than GrappleMaxSpeed keeps the lot, which is
+	// what lets a hook extend a run rather than flatten it to one speed.
+	const float Along = FVector::DotProduct(Velocity, PullDir);
+	if (Along < GrappleMaxSpeed)
+	{
+		Velocity += PullDir * FMath::Min(GrapplePull * DeltaSeconds, GrappleMaxSpeed - Along);
+	}
+
+	// Gravity is applied inside the move that follows this, so the rope pays it back rather than
+	// sagging by gravity * frame time every frame - the same bargain ApplyVortexLift makes, and
+	// what keeps a level grapple level on a slow machine as well as a fast one.
+	if (!IsMovingOnGround() && GrappleGravityPayback > 0.f)
+	{
+		Velocity.Z += -GetGravityZ() * DeltaSeconds * GrappleGravityPayback;
+	}
+
+	// Hooked something above you from a standing start: come off the floor, or the pull would grind
+	// you along it. Standing on the ground and hooking something level with you still drags you
+	// along the ground, which is a fine way to get going.
+	if (IsMovingOnGround() && Velocity.Z > 50.f)
+	{
+		EndSlide();
+		SetMovementMode(MOVE_Falling);
 	}
 }
 
