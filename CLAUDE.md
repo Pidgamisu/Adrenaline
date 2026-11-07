@@ -115,6 +115,7 @@ This file is kept short on purpose. The history and the how-it-works notes are i
 
 | File | Read it before touching |
 |---|---|
+| `docs/todo.md` | what is outstanding, in one list: the play-test backlog first, then jobs, the itch page, sound, features |
 | `docs/test-course.md` | `/Game/Maps/TestCourse`, its layout and what each obstacle tests |
 | `docs/placement.md` | the placement phase, build clock, catalog, piece positioning, directional pieces, the objective |
 | `docs/multiplayer.md` | replication, client authority, running the two-player test in the editor, packaging and LAN play with friends, the menu and Escape |
