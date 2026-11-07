@@ -1,4 +1,4 @@
-# Playing on a controller
+﻿# Playing on a controller
 
 Added 2026-10-31. Keyboard and mouse are untouched: every pad binding is an extra key on an
 existing action, or a second action that runs beside the mouse one. You can swap between the two
@@ -17,9 +17,16 @@ assets to make and nothing to wire up in the editor.
 | A | Jump. Hold it to auto-hop, press again in the air to double jump | Space |
 | LB | Crouch, and a slide at speed | Left Shift / C / Left Ctrl |
 | B | Crouch, second option | - |
-| RB | Throw C4 | G |
-| RT | Detonate | F |
+| RB | Throw C4 | Left click, or G |
+| RT | Detonate | Left click again, or F |
 | LT | Throw the grapple hook, and let go of it. Only on a Grapple round | Left click |
+
+The mouse half of those three rows is **one button** (2026-11-06): left click uses whatever is in
+your hand and the order decides what that means - let go of a rope that is out, set off a charge
+that is live, throw the charge or fire the hook you are holding. It can be one button because the
+hand holds one item (`ItemCapacity` 1). The pad keeps three, because RB, RT and LT are sitting there
+either way and a dedicated button is never worse than a modal one; nothing stops the pad being
+collapsed onto one button later if the split turns out to be the thing that confuses people.
 | D-pad Down | Restart | R |
 | View / Back / Select | Give up the run, back to the placement camera | Backspace |
 

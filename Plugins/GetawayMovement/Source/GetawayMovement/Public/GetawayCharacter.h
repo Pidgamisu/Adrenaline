@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/NetSerialization.h"
@@ -53,7 +53,8 @@ struct FGetawayNetMove
 
 /**
  * First-person player for the Getaway movement. Works with no assets: input actions and key bindings are created
- * in code (WASD, mouse, Space / wheel jump, C / Shift / Ctrl crouch, G throw C4, F detonate, R restart).
+ * in code (WASD, mouse, Space / wheel jump, C / Shift / Ctrl crouch, left click to use what is in your
+ * hand - throw C4, set it off, fire the hook - with G and F still there for C4, and R restart).
  * Make a Blueprint child to tweak values in the Details panel, or set them here.
  */
 UCLASS(Blueprintable)
@@ -255,7 +256,7 @@ public:
 	 * old behaviour; the hand is a cap across both items and never a floor, so `MaxCharges` still
 	 * limits C4 on its own.
 	 *
-	 * Throwing counts as spending. A charge stuck to a wall waiting for F is out of your hand, so
+	 * Throwing counts as spending. A charge stuck to a wall waiting for the click is out of your hand, so
 	 * you may pick up a hook while it sits there.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Items", meta = (ClampMin = "1"))
@@ -312,6 +313,17 @@ public:
 	/** Charges in hand, ready to throw. */
 	UFUNCTION(BlueprintPure, Category = "Getaway|C4")
 	int32 GetChargesLeft() const;
+
+	/**
+	 * True while a charge you have thrown is still out there waiting for the bang.
+	 *
+	 * Read by the one-button hand (OnUseItem) to decide that a click is a detonation, and by the
+	 * HUD to say so. On the authority that is just the Charges list; on a client the list is empty
+	 * - the server spawns the brick - so this asks the world for charges owned by us, exactly as
+	 * DetonateC4 does when it predicts the blast.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Getaway|C4")
+	bool HasLiveCharges() const;
 
 	/**
 	 * True while there is room for more charges, i.e. while a C4 pickup would do something.
@@ -598,6 +610,11 @@ private:
 	void OnCrouchReleased(const FInputActionValue& Value);
 	void OnThrow(const FInputActionValue& Value);
 	void OnDetonate(const FInputActionValue& Value);
+	/**
+	 * Left click: the whole hand on one button. Lets go of a rope that is out, sets off a charge
+	 * that is live, throws the charge or fires the hook you are holding - in that order.
+	 */
+	void OnUseItem(const FInputActionValue& Value);
 	/** One button for both halves of the hook: throw it if it is in, let go if it is out. */
 	void OnGrapple(const FInputActionValue& Value);
 	void OnRestart(const FInputActionValue& Value);
@@ -615,10 +632,11 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> ThrowAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DetonateAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> GrappleAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> UseItemAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RestartAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BackToPlacementAction;
 
-	/** Charges in the air or stuck to something, waiting for F. */
+	/** Charges in the air or stuck to something, waiting for the click that sets them off. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AGetawayC4>> Charges;
 

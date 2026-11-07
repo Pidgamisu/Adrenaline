@@ -1,4 +1,4 @@
-# Placement phase and pieces
+﻿# Placement phase and pieces
 
 > Moved out of CLAUDE.md on 2026-10-26. These are dated notes; if they disagree with the code or with CLAUDE.md, the code and CLAUDE.md win.
 
@@ -1182,15 +1182,49 @@ in the same stretch of course are a *choice* rather than a shopping trip. Both p
 themselves to you while your hand is full - they wait, and hand over the moment it is empty, which
 is the same waiting behaviour the C4 pickup already had for a full load.
 
-- **Throwing counts as spending.** A charge stuck to a wall waiting for F has left your hand, so you
+- **Throwing counts as spending.** A charge stuck to a wall waiting for the click has left your hand, so you
   may pick up a hook while it sits there. Firing the hook is the same: the shot goes when it
   catches, so the moment you are swinging you are free to collect something else.
 - **It replaced "carry up to two C4"** (decided 2026-10-15, retired 2026-11-05), so `MaxCharges` is
   1 now as well. `ItemCapacity` 2 with `MaxCharges` 2 puts the old behaviour back, and the two caps
   are separate on purpose: the hand is a cap across both items and never a floor, so C4 can still be
   limited on its own.
-- **One line of HUD for the hand**, not one per item: `GRAPPLE`, `GRAPPLE out`, `C4`, or
+- **One line of HUD for the hand**, not one per item: `GRAPPLE`, `GRAPPLE out`, `C4 live`, `C4`, or
   `HANDS empty`. Two lines where one always said "none" was the thing the single hand made silly.
+
+### One button for the whole hand
+
+Added 2026-11-06, and it falls straight out of the rule above: if the hand holds one item then one
+button can use it, so **left click is now the only button you need**. `OnUseItem` takes the click
+and picks what it means, in this order:
+
+| | if | the click |
+|---|---|---|
+| 1 | a rope is out | lets go |
+| 2 | a charge is live | sets it off |
+| 3 | a charge is in your hand | throws it |
+| 4 | a hook is in your hand | fires it |
+
+**Why 2 sits above 3**, which is the only ordering question here: the click after a throw must
+always be the bang, or the change has not bought anything. It also settles the one case where two
+things really do compete - you threw a brick, ran back over a C4 pad and restocked while the first
+is still stuck, so you are holding one *and* have one live. Detonate-first means you clear the
+course and then throw again; throw-first would leave you holding a charge you could not set off
+without finding F.
+
+- **A live charge is `HasLiveCharges()`**, and it is not simply `Charges.Num()`: on a client that
+  array is always empty, because `ServerThrowC4` spawns the brick on the authority. A client asks
+  the world for C4 actors it owns instead - the same handle `DetonateC4` uses to predict its own
+  launch, and it works because an actor's `Owner` replicates down to the owning client.
+- **The HUD says `C4 live`** while one is out, in the same slot as the rest of your hand, because
+  otherwise the line reads `HANDS empty` at the exact moment the click does the most dangerous
+  thing in the game.
+- **G and F are still mapped.** Nothing was taken away; the two-key C4 works as it always did.
+- **The pad keeps three buttons** - RB throw, RT detonate, LT hook. A dedicated button is never
+  worse than a modal one and a pad has them spare. Collapsing the pad onto one button later is a
+  two-line change if the split turns out to confuse anybody.
+- **The C4 pickup now teaches the button**, since the run's HUD lists no keys any more: "Picked up
+  C4. Left click to throw, again to set off", or the RB/RT wording on a pad.
 
 ### A pickup comes back when you die
 

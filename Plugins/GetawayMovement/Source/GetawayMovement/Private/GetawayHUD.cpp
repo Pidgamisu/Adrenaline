@@ -1,4 +1,4 @@
-#include "GetawayHUD.h"
+﻿#include "GetawayHUD.h"
 
 #include "GetawayCharacter.h"
 #include "GetawayGameState.h"
@@ -502,6 +502,14 @@ void AGetawayHUD::DrawHUD()
 	{
 		HandLine = TEXT("GRAPPLE  out");
 		HandColour = Live;
+	}
+	else if (Player->HasLiveCharges())
+	{
+		// The charge has left your hand but it is still what the click does, and the detonation
+		// outranks anything you have picked up since (AGetawayCharacter::OnUseItem) - so this line
+		// wins over GRAPPLE and C4 below it.
+		HandLine = TEXT("C4  live");
+		HandColour = Urgent;
 	}
 	else if (Hooks > 0)
 	{

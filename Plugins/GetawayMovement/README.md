@@ -1,4 +1,4 @@
-# Getaway Movement (Unreal Engine 5 plugin)
+﻿# Getaway Movement (Unreal Engine 5 plugin)
 
 Port of the Getaway Movement Lab browser prototype. Source-style first-person movement, throwable C4 and simple breakables, as a drop-in C++ plugin. Written for UE 5.3 to 5.5. Single-player.
 
@@ -46,13 +46,13 @@ To make the game spawn it you also need a Blueprint child of `GetawayGameMode`, 
 | A/D + mouse in the air | Air-strafe to gain speed and curve |
 | Run along a wall beside you | Wallrun, Space to kick off |
 | W into a ledge mid-jump | Mantle |
-| G, then F | Throw C4, detonate. A thrown charge is spent: restock at an `AGetawayC4Pickup` |
-| Left click | Throw the grapple hook, and click again to let go. Pick one up at an `AGetawayGrapplePickup`, or get one from a Grapple round - see `docs/effects.md` |
+| Left click | Use what is in your hand. C4: throw it, click again to set it off. Grapple: throw the hook, click again to let go. A thrown charge is spent, so restock at an `AGetawayC4Pickup`; hooks come from an `AGetawayGrapplePickup` or a Grapple round - see `docs/effects.md` |
+| G, then F | The old C4 keys, still mapped: throw, then detonate |
 | R | Restart the level |
 
 A controller works too, keyboard and mouse untouched - swap between them mid-round. Left stick
 moves, right stick looks, A jumps, LB or B crouches and slides, RB throws C4, RT detonates and LT
-throws the grapple hook.
+throws the grapple hook - the pad keeps a button each, since it has them to spare.
 The placement camera flies on the left stick with the triggers for up and down, A places, X turns.
 Full map and the tuning in `docs/controller.md`.
 

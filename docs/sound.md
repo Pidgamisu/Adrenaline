@@ -1,4 +1,4 @@
-# Sound
+﻿# Sound
 
 Started 2026-11-04. The project had no audio of any kind before this: one unfilled `ExplosionSound`
 slot on `AGetawayC4` and nothing else.
@@ -43,7 +43,7 @@ sound.
 ### The order
 
 0. **Listen to the C4 blast.** The only sound left wired, and still unheard by anybody. Not a build
-   task - press Play, throw a charge, press F. It also confirms the audio chain works at all, which
+   task - press Play, throw a charge, click again. It also confirms the audio chain works at all, which
    everything below assumes.
 
 1. **Music: one track per phase.** The backbone now, not the garnish. Swapped off the replicated

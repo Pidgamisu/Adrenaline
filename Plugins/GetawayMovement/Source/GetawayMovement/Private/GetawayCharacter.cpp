@@ -1,4 +1,4 @@
-#include "GetawayCharacter.h"
+﻿#include "GetawayCharacter.h"
 #include "GetawayBreakable.h"
 #include "GetawayC4.h"
 #include "GetawayFinish.h"
@@ -236,6 +236,7 @@ void AGetawayCharacter::BuildDefaultInput()
 	ThrowAction    = MakeAction(TEXT("IA_GetawayThrowC4"), EInputActionValueType::Boolean);
 	DetonateAction = MakeAction(TEXT("IA_GetawayDetonate"), EInputActionValueType::Boolean);
 	GrappleAction  = MakeAction(TEXT("IA_GetawayGrapple"), EInputActionValueType::Boolean);
+	UseItemAction  = MakeAction(TEXT("IA_GetawayUseItem"), EInputActionValueType::Boolean);
 	RestartAction  = MakeAction(TEXT("IA_GetawayRestart"), EInputActionValueType::Boolean);
 	BackToPlacementAction = MakeAction(TEXT("IA_GetawayBackToPlacement"), EInputActionValueType::Boolean);
 
@@ -268,7 +269,10 @@ void AGetawayCharacter::BuildDefaultInput()
 	MappingContext->MapKey(DetonateAction, EKeys::F);
 	// The left mouse button is free during a run - the placement camera uses it to place a piece,
 	// and that context is cleared the moment this character takes over (see SetupPlayerInputComponent).
-	MappingContext->MapKey(GrappleAction, EKeys::LeftMouseButton);
+	// It is the one button for everything in your hand (OnUseItem), because the hand holds one item:
+	// throw the C4, click again to set it off, or fire and release the hook. G and F stay mapped as
+	// well, so the old two-key C4 still works for anyone who has it in their fingers.
+	MappingContext->MapKey(UseItemAction, EKeys::LeftMouseButton);
 	MappingContext->MapKey(RestartAction, EKeys::R);
 	MappingContext->MapKey(BackToPlacementAction, EKeys::BackSpace);
 
@@ -336,6 +340,7 @@ void AGetawayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	Input->BindAction(ThrowAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnThrow);
 	Input->BindAction(DetonateAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnDetonate);
 	Input->BindAction(GrappleAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnGrapple);
+	Input->BindAction(UseItemAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnUseItem);
 	Input->BindAction(RestartAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnRestart);
 	Input->BindAction(BackToPlacementAction, ETriggerEvent::Started, this, &AGetawayCharacter::OnBackToPlacement);
 }
@@ -461,6 +466,30 @@ void AGetawayCharacter::OnCrouchReleased(const FInputActionValue&)
 
 void AGetawayCharacter::OnThrow(const FInputActionValue&) { ThrowC4(); }
 void AGetawayCharacter::OnDetonate(const FInputActionValue&) { DetonateC4(); }
+
+void AGetawayCharacter::OnUseItem(const FInputActionValue&)
+{
+	// One button for the whole hand. The hand holds a single item (ItemCapacity 1), so there is
+	// never a question of which one you meant - except for the one thing that outlives your hand,
+	// a charge you have already thrown. The order is:
+	//
+	//   1. a rope that is out    -> let go
+	//   2. a charge that is live -> set it off
+	//   3. a charge in hand      -> throw it
+	//   4. a hook in hand        -> fire it
+	//
+	// 2 above 3 is the whole point: the click after a throw is always the bang. It also means a
+	// player who has restocked at a pad while the first brick is still stuck clears the course
+	// before throwing again, rather than holding a charge they cannot set off.
+	if (IsGrappling())    { ReleaseGrapple(); return; }
+	if (HasLiveCharges()) { DetonateC4();     return; }
+	if (ChargesHeld > 0)  { ThrowC4();        return; }
+	if (GrappleShots > 0) { FireGrapple();    return; }
+
+	// Nothing in either hand and nothing out there. Worded for both items, since one button now
+	// stands for both, and keyed with the C4's empty line so the two cannot stack up.
+	Notify(TEXT("Nothing in hand. Find a pickup"), 1.2f, FLinearColor(1.f, 0.42f, 0.3f), 7002);
+}
 
 void AGetawayCharacter::OnGrapple(const FInputActionValue&)
 {
@@ -648,8 +677,14 @@ int32 AGetawayCharacter::AddCharges(int32 Count)
 	ChargesHeld += Taken;
 	if (Taken > 0)
 	{
-		Notify(FString::Printf(TEXT("Picked up C4  (carrying %d)"), ChargesHeld), 1.2f,
-			FLinearColor(0.94f, 0.70f, 0.24f), 7003);
+		// Worded like the grapple pickup's line, and for the same reason: the run's HUD lists no
+		// keys any more, so the pickup is where the button gets taught.
+		const FString How = IsUsingGamepad() ? TEXT("RB to throw, RT to set off")
+		                                     : TEXT("Left click to throw, again to set off");
+		Notify(ChargesHeld > 1
+				? FString::Printf(TEXT("Picked up C4  (carrying %d)"), ChargesHeld)
+				: FString::Printf(TEXT("Picked up C4. %s"), *How),
+			1.2f, FLinearColor(0.94f, 0.70f, 0.24f), 7003);
 	}
 	return Taken;
 }
@@ -708,6 +743,28 @@ void AGetawayCharacter::ServerThrowC4_Implementation(FVector_NetQuantize100 Star
 	FVector_NetQuantize100 LaunchVelocity)
 {
 	SpawnThrownC4(Start, View, LaunchVelocity);
+}
+
+bool AGetawayCharacter::HasLiveCharges() const
+{
+	if (HasAuthority())
+	{
+		for (const TObjectPtr<AGetawayC4>& C : Charges)
+		{
+			if (IsValid(C)) return true;
+		}
+		return false;
+	}
+
+	// A client never fills Charges - ServerThrowC4 spawns the brick on the authority - but the
+	// actor's Owner replicates down to us, which is the same handle DetonateC4 uses to predict.
+	const UWorld* World = GetWorld();
+	if (!World) return false;
+	for (TActorIterator<AGetawayC4> It(World); It; ++It)
+	{
+		if (It->GetOwner() == this) return true;
+	}
+	return false;
 }
 
 void AGetawayCharacter::DetonateC4()

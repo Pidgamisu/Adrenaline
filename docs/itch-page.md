@@ -1,4 +1,4 @@
-# The itch.io page: text to paste in
+﻿# The itch.io page: text to paste in
 
 Drafted 2026-11-03. Each heading below is a field on the itch.io project edit page. Nothing here is
 final - it is a first draft to argue with, and the taglines are deliberately offered as a choice
@@ -124,7 +124,7 @@ instructions.
 > | A / D + mouse, in the air | Air-strafe for speed and curve |
 > | Space, on a wall beside you | Kick off a wallrun |
 > | W into a ledge, mid-jump | Mantle |
-> | G, then F | Throw a C4 charge, then detonate it |
+> | Left click | Use what you are carrying. C4: throw it, click again to set it off. Grapple: throw the hook, click again to let go |
 > | Escape | Menu |
 >
 > **Controller** - swap between pad and mouse mid-round, nothing to set up.
