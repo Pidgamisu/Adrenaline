@@ -16,12 +16,19 @@ Controls and the piece list are taken from `Plugins/GetawayMovement/README.md`, 
 
 Shown under the title and in listings. Pick one:
 
-1. `Draft a piece. Place it. Race your friends. Nobody scores if everybody finishes.`
+1. `Draft a piece. Place it. Race your friends. Only the fastest one down scores.`
 2. `Build the course, then race it. Wallrun, slide and blow holes in everyone else's plans.`
 3. `A first-person party platformer about making the course hard for everyone but you.`
 
 Number 1 states the hook and the scoring rule in one line, which is the thing that makes people
 understand the game. Number 2 sells the movement. Number 3 is the shortest.
+
+**Number 1 was reworded 2026-11-08**, when the scoring stopped being Ultimate Chicken Horse's. It
+used to read *"Nobody scores if everybody finishes"*, which is no longer true and was the single
+most load-bearing sentence on the page - it told people what kind of game this is. The replacement
+has to carry the same weight with a different rule: **it is a race, and building something cruel
+pays you a second point rather than cancelling everybody's.** If a better line turns up, this is
+the field to spend it on.
 
 ## Classification
 
@@ -38,9 +45,10 @@ understand the game. Number 2 sells the movement. Number 3 is the shortest.
 > under you, a bed of spikes, a stick of C4 - and you drop it anywhere in the level. Then everyone
 > runs it at once.
 >
-> Here is the catch: **nobody scores if everybody finishes.** So place a piece that stops the others
-> and not you. That spike pit is only worth putting down if you are sure you can clear it. Get
-> greedy and you will build something nobody gets past, including yourself.
+> Here is the catch: **only the first one down scores** - and if nobody else gets down at all, you
+> score twice. So place a piece that slows the others and not you. That spike pit is only worth
+> putting down if you are sure you can clear it *faster than they can*. Get greedy and you will
+> build something nobody gets past, including yourself.
 >
 > ### Movement is the whole game
 >

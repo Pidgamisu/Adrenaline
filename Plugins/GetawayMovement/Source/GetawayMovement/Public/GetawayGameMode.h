@@ -193,28 +193,58 @@ public:
 	/* ---------------- Scoring ---------------- */
 
 	/*
-	 * The whole table, as of 2026-10-19: a point for getting there, a point for getting there
-	 * first, and nothing at all in a round everybody cleared. Points come from the objective and
-	 * nowhere else - a solo-goal bonus, a scale-back on the leader's bonuses and a payout for
-	 * trap kills all used to sit here and were each taken out on purpose. See *Scoring* in
-	 * CLAUDE.md before adding anything back.
+	 * The whole table, as of 2026-11-08: **a point for being home first, and a second point if
+	 * nobody else got home at all.** Nothing else pays - not finishing second, not finishing at
+	 * all, not a trap kill.
+	 *
+	 * **This game is about speed, not about everyone arriving.** That is what separates it from
+	 * Ultimate Chicken Horse, whose central rule - nobody scores if everybody finishes - is now
+	 * `bNoPointsIfAllFinish` and is **off**. There, the game asks you to build something you alone
+	 * can clear; here it asks you to be *fastest*, and then pays you again for having built
+	 * something the others could not clear at all. See *Scoring is about speed* in CLAUDE.md
+	 * before adding anything back.
 	 */
 
-	/** Points for reaching the objective at all. */
+	/**
+	 * Points for reaching the objective at all, **0** - finishing is not worth anything by itself,
+	 * because only being first is. Set it to 1 to pay everybody who gets home.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Scoring", meta = (ClampMin = "0"))
-	int32 GoalPoints = 1;
+	int32 GoalPoints = 0;
 
-	/** Extra for being first home. Being the only one home still counts as first. */
+	/** The point for being first home. With `GoalPoints` 0 this is the whole of a normal round. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Scoring", meta = (ClampMin = "0"))
 	int32 FirstGoalBonus = 1;
 
 	/**
-	 * Ultimate Chicken Horse's central rule, and the only thing stopping the level being a straight
-	 * corridor: if everybody got there, it was too easy and nobody scores. Off only makes sense for
-	 * testing. Kept deliberately when the rest of the table was simplified away.
+	 * The second point, paid to the first player home when **nobody else got home at all**.
+	 *
+	 * "At all" and "inside the window" are the same thing, which is the neat part: the first finish
+	 * starts the `FinishGraceTime` hurry-up, so the round is already over that many seconds later.
+	 * Anybody who was going to arrive has arrived by the time this is counted.
+	 *
+	 * This is the reward for building something cruel - the job `bNoPointsIfAllFinish` used to do
+	 * in reverse, by paying nobody rather than paying you. It is the same knob an earlier table
+	 * called `SoloGoalBonus`, which was removed on 2026-10-19 and is back with a different value
+	 * and a different reason.
+	 *
+	 * Alone, you collect it every time you finish, because you were trivially the only one home.
+	 * That is deliberate and harmless; single-player scoring decides nothing.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Scoring", meta = (ClampMin = "0"))
+	int32 UncontestedBonus = 1;
+
+	/**
+	 * Ultimate Chicken Horse's central rule: if everybody got there, it was too easy and nobody
+	 * scores. **Off since 2026-11-08**, because this game pays for speed - the fastest player is
+	 * still the fastest player in a round everybody cleared, and taking their point away for the
+	 * others' success is the opposite of what the scoring is for. `UncontestedBonus` is what
+	 * rewards a hard level now.
+	 *
+	 * On, it zeroes the round for *everyone*, the first player home included.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Scoring")
-	bool bNoPointsIfAllFinish = true;
+	bool bNoPointsIfAllFinish = false;
 
 	/* ---------------- Phases ---------------- */
 

@@ -1109,23 +1109,36 @@ void AGetawayGameMode::ScoreRound()
 
 	const bool bMulti = Players.Num() > 1;
 
-	// Ultimate Chicken Horse's central rule: everybody got there, so the level was too easy and
-	// nobody is rewarded for it. Alone there is nobody to compare against, so it does not apply.
+	// Ultimate Chicken Horse's central rule, and **off** by default since 2026-11-08: everybody got
+	// there, so the level was too easy and nobody is rewarded for it. This game pays for speed, so
+	// the fastest player stays paid in a round everybody cleared. Alone there is nobody to compare
+	// against, so it never applies.
 	const bool bNullified = bNoPointsIfAllFinish && bMulti && (Finishers == Players.Num());
 
 	for (AGetawayPlayerState* PS : Players)
 	{
 		int32 Points = 0;
 
-		// A point for getting there, a point for getting there first. That is the whole system.
+		// A point for being home first, and a second point if nobody else got home at all. That is
+		// the whole system, and it is a race rather than Ultimate Chicken Horse's bargain.
 		if (PS->HasFinished() && !bNullified)
 		{
 			Points += GoalPoints;
 			// Place 1 whether or not anybody else made it: if you were the only one home, you were
-			// still first home. The old table paid a separate, larger bonus for being alone.
+			// still first home.
 			if (PS->GetFinishPlace() == 1)
 			{
 				Points += FirstGoalBonus;
+
+				// And the second point, for having built something nobody else could clear. The
+				// window the rule talks about is already closed by the time this runs: the first
+				// finish started the FinishGraceTime hurry-up, so the round ended that many seconds
+				// later and anybody who was going to arrive has arrived. So "nobody finished inside
+				// the window" and "Finishers == 1" are the same statement.
+				if (Finishers == 1)
+				{
+					Points += UncontestedBonus;
+				}
 			}
 		}
 

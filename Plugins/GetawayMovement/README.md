@@ -202,8 +202,8 @@ confirmed deliberate. Anything not listed here is the C++ default.
 | FootstepMinInterval | 0.3 s | 0.0 |
 | FallDeathZ (character) | -100 | -200 |
 | HandSize (game mode) | 3 | 2 |
-| GoalPoints (game mode) | 1 | **0** |
-| bNoPointsIfAllFinish (game mode) | true | **false** |
+| GoalPoints (game mode) | **0** (was 1) | 0 - redundant now, clear at leisure |
+| bNoPointsIfAllFinish (game mode) | **false** (was true) | false - redundant now, clear at leisure |
 | bStartInMenu (game mode) | true | false, so Play goes straight to placement |
 
 **Note what is not in that list.** `bMantleOverSmash`, `bGroundStrafeGain`, `bAirStrafeGain`,
@@ -230,10 +230,18 @@ in `export_tuning.py`'s docstring has a trap - UE's `-Script=` parser truncates 
 so a path through `Unreal Projects` silently loads nothing and quoting does not help. Copy the
 script somewhere without spaces and run it from there.
 
-Three of those turn documented behaviour *off* rather than tuning it: **AirJumps 0** removes the
-double jump, and **GoalPoints 0** with **bNoPointsIfAllFinish false** removes Ultimate Chicken Horse
-scoring. They live in the Blueprint, not the C++, so clearing the override in the Details panel puts
-each one back.
+Three of those used to turn documented behaviour *off* rather than tuning it: **AirJumps 0** removed
+the double jump, and **GoalPoints 0** with **bNoPointsIfAllFinish false** removed Ultimate Chicken
+Horse scoring. **On 2026-11-08 all three stopped being drift and became the decision** - no double
+jump, and scoring that is a race rather than UCH's bargain - and the C++ defaults were changed to
+match, so those overrides are now redundant like `SmashSpeed`'s. See *No double jump* and *Scoring
+is about speed* in `CLAUDE.md`.
+
+**Which is this table's other lesson, and a happier one than `SmashSpeed`'s.** Two of those
+overrides had been quietly playing the *right* game for days while the C++ and the docs described
+a different one. `FirstGoalBonus` was never overridden, so "first home scores one point and nobody
+else scores" was live the whole time. Drift is worth catching in both directions: the Blueprint is
+sometimes ahead of the design, not behind it.
 
 **Reading them back.** These values are inside a `.uasset`, which nothing but the editor can read -
 which is how a hand-set value drifts from what the docs claim without anyone noticing. Run

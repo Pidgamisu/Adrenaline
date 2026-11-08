@@ -64,24 +64,86 @@ to draw for the host and nobody else. Now the HUD reads nothing but the two repl
   `GetGetawayPlayerState()`, not the game mode, so the spike's guarantee still holds and is now
   per player: you can only place what *you* were dealt.
 
-### Scoring (simplified 2026-10-19)
+### Scoring: it is a race (rewritten 2026-11-08)
 
-**A point for getting there, a point for getting there first, and nothing at all in a round
-everybody cleared.** That is the whole system. It is on the game mode under *Getaway|Scoring*:
+**A point for being home first, and a second point if nobody else got home at all.** That is the
+whole system. Nothing else pays: not finishing second, not finishing at all, not a trap kill.
+
+*"The idea is different than ultimate chicken horse, it's all about speed, not just getting to the
+end. It should only be whoever finishes first gets a point then if no one finishes in that window
+afterward, the player who finished gets an additional point."*
+
+It is on the game mode under *Getaway|Scoring*:
 
 | Knob | Default | What it does |
 |---|---|---|
-| `GoalPoints` | 1 | Reaching the objective at all |
-| `FirstGoalBonus` | 1 | Extra for being first home - including when you were the only one |
-| `bNoPointsIfAllFinish` | on | Everybody got there, so the level was too easy and nobody scores |
+| `FirstGoalBonus` | 1 | Being first home. With `GoalPoints` 0 this is the whole of a normal round |
+| `UncontestedBonus` | 1 | A second point to the first finisher when nobody else got home |
+| `GoalPoints` | **0** | Reaching the objective at all. Zero, because only being first counts |
+| `bNoPointsIfAllFinish` | **off** | Ultimate Chicken Horse's rule, turned off - see below |
 
-So, with two players: one home scores 2 and the other 0; both home scores 0 each; neither home
-scores 0 each. Alone, finishing is always 2, because you were trivially first.
+So, with two players: **first home alone scores 2**, the other 0; **both home** scores 1 to the
+faster and 0 to the slower; **neither home** scores 0 each. Alone, finishing is always 2, because
+you were trivially both first and uncontested - single-player scoring decides nothing and is not
+worth a special case.
 
-- **Being the only one home is no longer worth extra by itself.** It used to pay a `SoloGoalBonus`
-  of 2 on top of the goal point - the big payoff that made a cruel level worth building. That is
-  now carried entirely by `bNoPointsIfAllFinish`: you do not get *more* for being alone, the others
-  get *nothing*, and a round everybody cleared is worth nothing to anybody.
+#### The window is `FinishGraceTime`, and it was already there
+
+The rule says "if no one finishes in that window afterward", and no new timing was needed for it,
+which is the tidiest part of this change. The first finish already starts the `FinishGraceTime`
+hurry-up - 10 s, applied by `ApplyRunDeadline(FinishGraceTime, true)`, and it can only bring the end
+nearer, never push it back. So the round is over 10 s after the first player gets home, and by the
+time `ScoreRound` runs, **"nobody finished inside the window" and "`Finishers == 1`" are the same
+statement.** Anybody who was going to arrive has arrived.
+
+That makes `FinishGraceTime` a scoring knob as much as a pacing one: it is how long the others have
+to deny you your second point. Shorten it and a cruel level pays more often; lengthen it and a
+near-miss still robs you.
+
+**Asked and confirmed at 10 s on 2026-11-08**, when the scoring became a race - *"leave it at 10."*
+It was chosen as a pacing value back on 2026-10-17, before it had anything to do with points, so it
+is worth knowing that it was looked at again under its new job and kept rather than merely
+inherited. It is one field on `BP_GetawayGameMode` under **Getaway|Run** if a two-player round ever
+makes 10 s feel wrong in either direction.
+
+#### Why Ultimate Chicken Horse's rule had to go rather than be tuned
+
+`bNoPointsIfAllFinish` zeroes the round for **everyone**, the fastest player included. In UCH that
+is exactly right, because the game there is "build something only you can clear" and a level
+everybody clears has failed. Here the game is *be fastest*, so that rule means succeeding at the
+thing the game is about can be cancelled by a rival also getting home - your point taken away for
+somebody else's run.
+
+Rewarding a hard level is now done by **paying you a second point** rather than by paying nobody.
+Same intent, opposite sign, and it can only ever add to your score. It also means a round is never
+worth nothing to everybody while anyone is running well, which matters more in a race than it does
+in a party game.
+
+`UncontestedBonus` is the same knob an earlier table called `SoloGoalBonus`, removed on 2026-10-19
+when `bNoPointsIfAllFinish` was judged to cover it. It is back at 1 instead of 2, for the opposite
+reason, which is worth knowing before anyone "simplifies" it away again.
+
+#### Most of it was already live by accident
+
+Worth recording, because it means today's change is smaller than it reads. `BP_GetawayGameMode` has
+overridden `GoalPoints` to **0** and `bNoPointsIfAllFinish` to **false** since before 2026-11-05,
+and `FirstGoalBonus` was **never** overridden - so the game has been scoring *one point to the first
+finisher and nothing to anybody else* all along. The C++ defaults were the thing that disagreed with
+the design, and the docs described the C++.
+
+The only behaviour that actually changed today is **the second point**. The two C++ defaults were
+brought into line with the Blueprint, so those overrides are now redundant and can be cleared
+whenever - the same situation `SmashSpeed` is in. See *What the Blueprints actually play at* in the
+plugin README.
+
+#### The 2026-10-19 notes, and which of them still hold
+
+- ~~**Being the only one home is no longer worth extra by itself.**~~ **Reversed 2026-11-08**: it is
+  worth extra again, as `UncontestedBonus`. The note read: *it used to pay a `SoloGoalBonus` of 2 on
+  top of the goal point - the big payoff that made a cruel level worth building. That is now carried
+  entirely by `bNoPointsIfAllFinish`.* That reasoning was sound for an Ultimate Chicken Horse
+  scoreboard and wrong for a race, because the way it carried the payoff was by taking everybody's
+  points away.
 - **`FirstGoalBonus` no longer needs company.** It used to require another finisher, with the solo
   case handled by the bonus above; now place 1 pays whether or not anybody else made it.
 - **The leader scale-back is gone.** `LeaderBonusScale` halved the leader's bonuses to soften the
@@ -89,15 +151,24 @@ scores 0 each. Alone, finishing is always 2, because you were trivially first.
   deliberate drop rather than an oversight - put it back if one player starts running away with
   sessions, and note that it needs the standings read *before* the round pays out, or a player
   counts as the leader against their own new score.
-- **The all-finish rule was kept on purpose.** It was the one part of the old table that is not a
-  points award, and it is the only thing left that rewards building something hard - without it a
-  straight corridor pays everyone. **Asked and confirmed 2026-10-19.**
+- ~~**The all-finish rule was kept on purpose.**~~ **Turned off 2026-11-08.** The note read: *it was
+  the one part of the old table that is not a points award, and it is the only thing left that
+  rewards building something hard - without it a straight corridor pays everyone. Asked and
+  confirmed 2026-10-19.* Both halves are answered rather than contradicted: building something hard
+  is rewarded by `UncontestedBonus` now, and a straight corridor does **not** pay everyone, because
+  only the fastest player scores on it at all. That is the thing a race gets for free which a party
+  game does not - there is always a winner, so the level never has to be cruel to be worth playing.
+  Note it was asked and confirmed once already; this reverses it on the strength of the scoring
+  being a race, which was not stated until now.
 - **Kills pay nothing** (decided 2026-10-19, when spikes made kills possible at all). Points come
   from the objective and nowhere else. `TrapKillPoints` existed, defaulted to 2 and was deleted
   rather than zeroed, because two points for a kill was more than winning a round is worth and a
-  dead knob in the table reads like an oversight. Killing somebody is already its own reward: it
-  keeps them off the scoreboard, which under `bNoPointsIfAllFinish` is the difference between
-  everyone scoring nothing and you scoring two.
+  dead knob in the table reads like an oversight. Killing somebody is already its own reward, and
+  **since 2026-11-08 it is a sharper one**: keeping the only other runner off the finish is exactly
+  what `UncontestedBonus` pays for, so a trap that works is the difference between scoring 1 and
+  scoring 2. Under the old rule it was the difference between everyone scoring nothing and you
+  scoring two - a bigger swing, but one that depended on your rival's failure rather than on your
+  own run.
 - **Kills are still counted.** `AGetawayGameMode::PlacePiece` records who placed each piece and
   `RegisterTrapKill(Victim, Piece)` credits the placer - your own trap catching you does not count
   - but nothing reads `GetTrapKills()` any more. It is kept for the log line, which is how you
@@ -116,12 +187,15 @@ shortened and then restored. From the server logs of those runs:
 - **Every scoring branch, each one actually observed** - but **of the old table**, which was
   simplified on 2026-10-19. The numbers below are not what the game pays now; they are kept because
   they show the branches were reached, not because the totals still hold:
-  - *Solo goal*: `home in 7.05s  +3  (3)` against `did not finish  +0  (0)`. Pays 2 now.
+  - *Solo goal*: `home in 7.05s  +3  (3)` against `did not finish  +0  (0)`. **Pays 2 now**
+    (first home, plus uncontested).
   - *Leader scale-back*: the same player winning again the next round took `+2`, the solo bonus
     halved. That rule no longer exists.
-  - *Everybody home*: `everybody got there, so nobody scores`, both players `+0`. Unchanged.
+  - *Everybody home*: `everybody got there, so nobody scores`, both players `+0`. **Changed
+    2026-11-08**: pays 1 to the faster and 0 to the slower, and that branch no longer runs at all
+    with `bNoPointsIfAllFinish` off.
   - *Some home*: three players, two finishing - first `+2`, second `+1`, the straggler `+0`.
-    Unchanged, by coincidence rather than design.
+    **Changed 2026-11-08**: first `+1`, second `+0`, straggler `+0`.
 - **Per-player finish.** `finished 1st in 4.72s` then `finished 2nd in 7.33s` in the same run, with
   the round carrying on between the two - the first player home no longer ends it for everybody.
 - **Both ways a round can end.** `round 1 over` when the last runner got home, and `round 1 over

@@ -129,7 +129,9 @@ everywhere; it exists so the scoreboard can say "dead" rather than "out".
 **Settled 2026-10-19: a kill is worth no points.** `TrapKillPoints` was 2, left over from the old
 table, which would have made one kill worth more than winning the round. Rather than retune it the
 award was removed outright - see *Scoring*. Killing somebody still pays indirectly, and heavily:
-it stops them finishing, which is what turns a round from nobody-scores into two points for you.
+it stops them finishing, which since the scoring became a race (2026-11-08) is what earns you
+`UncontestedBonus` - the second point for a round nobody else got home in. See *Scoring: it is a
+race* in `docs/round-loop.md`.
 
 Spikes themselves were play-tested on 2026-10-19 and work - killing, dying and the round carrying
 on without you. Of what was added after that play-test, **the attachment to a host was played

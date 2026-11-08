@@ -4,7 +4,9 @@
 
 **Adrenaline** (working titles were Getaway, then Vaultborne; the code, files and classes still use the Getaway name, see *Naming*).
 
-A 3D, first-person take on **Ultimate Chicken Horse**: each round, players draft a piece from a random box, place it in a shared level, then everyone races to the objective. The twist is **deep, skill-based movement** (Source/Apex/Titanfall style), so pieces should change *how* you can move (wallrun surfaces, slide ramps, breakable panels, C4 pickups, crumbling bridges, bounce pads), not only block the way. Scoring follows Ultimate Chicken Horse: no points if everyone finishes, so players try to make the level hard but still beatable for themselves.
+A 3D, first-person take on **Ultimate Chicken Horse**: each round, players draft a piece from a random box, place it in a shared level, then everyone races to the objective. The twist is **deep, skill-based movement** (Source/Apex/Titanfall style), so pieces should change *how* you can move (wallrun surfaces, slide ramps, breakable panels, C4 pickups, crumbling bridges, bounce pads), not only block the way.
+
+**Scoring does not follow Ultimate Chicken Horse** (settled 2026-11-08): *"the idea is different than ultimate chicken horse, it's all about speed, not just getting to the end."* **A point for being home first, and a second point if nobody else gets home at all.** Finishing second is worth nothing. So you are racing, and you are also rewarded for having placed something the others cannot clear - but never by having your own point taken away because they succeeded, which is what UCH's no-points-if-everyone-finishes rule does. See *Scoring is about speed* under *Decisions already made*.
 
 Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` plugin.
 
@@ -60,7 +62,9 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   `?Name=` had always been discarded. There is still no lobby - and one would not have fixed any of
   this. See *The front end* in `docs/multiplayer.md`, and the two traps at the end of it: input
   going dead after a travel, and the engine never bringing you back from a failed connection.
-- **Round loop:** shared placement phase with a build clock, the run, Ultimate Chicken Horse scoring, and deaths (spikes, falling off the course).
+- **Round loop:** shared placement phase with a build clock, the run, **race scoring** (first home
+  scores, and scores again if nobody else gets home - changed 2026-11-08 from Ultimate Chicken
+  Horse's rule, see *Scoring is about speed*), and deaths (spikes, falling off the course).
 - **Pieces:** wall, floor, ramp, breakable panel, crate, collapsing bridge, C4 pickup, spikes,
   jump pad, anti-gravity vortex, paddle wheel (the Windmill, added 2026-11-03: four level
   plates orbiting a horizontal axle that carry you up and over, and bat you off if you are
@@ -195,10 +199,11 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Some of the values below are overridden in `BP_Character` and `BP_GetawayGameMode`, and the
   Blueprint is what you play** (read out of the assets and confirmed deliberate 2026-11-05).
   Twenty-one differ from the C++ defaults quoted here. Most are tuning, but three turn documented
-  behaviour *off*: `AirJumps` **0** - **which stopped being a surprise on 2026-11-08 and became the
-  decision**, see *No double jump* below - and `GoalPoints` 0 with
-  `bNoPointsIfAllFinish` **false** (no Ultimate Chicken Horse scoring, still a surprise and still
-  worth a look). `SlideCooldown` plays at
+  behaviour *off*, and **both of those stopped being surprises on 2026-11-08 and became the
+  decisions**: `AirJumps` **0** (see *No double jump*) and `GoalPoints` 0 with
+  `bNoPointsIfAllFinish` **false** (see *Scoring is about speed*). Both pairs of C++ defaults were
+  changed to match what the Blueprint plays, so those three overrides are now redundant and can be
+  cleared at leisure. `SlideCooldown` plays at
   0.5 rather than 1.5, `WallAttachRange` at 50 rather than 60, `AirSpeedCap` at 35 rather than 75.
   The full list is *What the Blueprints actually play at* in `Plugins/GetawayMovement/README.md`,
   and `Content/Python/export_tuning.py` dumps it again at any time. Clearing an override in the
@@ -336,6 +341,29 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Destruction stays simple:** only panels and crates break, into loose scraps the player can shove around. A Finals-style fracture/collapse system was tried in the prototype and **scrapped**: it was too heavy and didn't feel like The Finals. If big destruction comes back later, use Chaos Destruction (Geometry Collections), not custom code.
 - **Camera effects:** wallrun tilt, speed FOV, shake, landing kick and mantle jiggle are wanted, with a toggle to turn them off. Note when porting camera effects: roll signs invert between the lab and Unreal. three.js rolls about a camera Z axis pointing back at the viewer; Unreal rolls about forward X in the aviation sense (positive = right side down). Copying a roll formula across verbatim tilts it the wrong way, which is exactly what happened to the wallrun tilt (fixed 2026-10-15). A camera "shaking" bug was reported in the prototype and was likely frame-timing judder. Movement should look smooth at any refresh rate.
 
+- **Scoring is about speed, not about everyone arriving** (decided 2026-11-08, replacing Ultimate
+  Chicken Horse's rule). *"The idea is different than ultimate chicken horse, it's all about speed,
+  not just getting to the end. It should only be whoever finishes first gets a point then if no one
+  finishes in that window afterward, the player who finished gets an additional point."*
+  **The whole table:** `FirstGoalBonus` **1** for being home first, `UncontestedBonus` **1** more
+  if nobody else got home at all, `GoalPoints` **0** so finishing by itself pays nothing, and
+  `bNoPointsIfAllFinish` **off**. Finishing second is worth nothing; a trap kill still pays nothing.
+  So a round is worth 0, 1 or 2 to one player and 0 to everybody else.
+  **The window was already built.** The first finish starts the `FinishGraceTime` hurry-up, so the
+  round ends that many seconds later and "nobody finished inside the window" is the same statement
+  as "there was only one finisher" by the time scoring runs. No new timer, no new replication.
+  **It stays at 10 s** - asked and confirmed the same day, under its new job as the time the others
+  have to deny you the second point, rather than just inherited from the pacing value it was chosen
+  as on 2026-10-17.
+  **Why UCH's rule had to go rather than be tuned:** it zeroes the round for *everyone*, the fastest
+  player included, so succeeding at the thing the game is about could be cancelled by a rival also
+  getting home. Rewarding a cruel level is now done by paying you a second point rather than by
+  paying nobody - the same thought, the opposite sign, and it never punishes you for somebody
+  else's run.
+  **Most of this was already live by accident**: `BP_GetawayGameMode` has overridden `GoalPoints`
+  to 0 since before 2026-11-05 while `FirstGoalBonus` was never overridden, so first-home-scores-1
+  was what you were playing and the C++ defaults were the thing that was wrong. They now match.
+  See *Scoring* in `docs/round-loop.md`.
 - **Dying puts you back at the start** (decided 2026-10-31, replacing "death ends your run for the round"). A fresh character at the PlayerStart after `DeathLingerTime`, your run state untouched, as many times as the run clock allows. Your C4 charges do not come back with you (confirmed 2026-10-31). The game mode's `bRespawnOnDeath` turns it off for the old Ultimate Chicken Horse behaviour. See `docs/spikes-and-death.md`.
 - **Finishing lifts you into the fly camera to watch** (decided 2026-11-04, after it was played
   across two machines). Crossing the line gives you a big **YOU MADE IT** with your time and place
