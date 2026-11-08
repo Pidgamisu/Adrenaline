@@ -157,15 +157,20 @@ placed on a ramp now steps instead of continuing the slope. Offered and turned d
 if it is missed, the one-line version is `Def.bSurfaceMounted ||
 Def.ActorClass->IsChildOf(AGetawayRamp::StaticClass())` as the branch condition.
 
+### Played 2026-11-07: it works as intended
+
+Signed off. Which answers the one real doubt in the decision - **the wedge of air under the downhill
+end never read as broken.** 133 cm under a 400 cm floor on an 18.4 degree ramp is what the
+arithmetic promised and it is simply not noticed in play, so `FitTolerance` refusing to bury a piece
+instead was the right trade. `bSlantOnSlopes` stays off.
+
 ### Still unverified (upright on slopes)
 
-- **Nothing has been played.** It builds clean and that is all.
-- **How big the gap reads at speed.** The table above is arithmetic, not a judgement. 133 cm of air
-  under a floor may look broken, or may never be noticed.
 - **A piece on a steep face**, where the normal's dominant axis is X or Y rather than Z. The solve
-  is written for any normal, but every slope in the game so far is a ramp face at 18.4°.
-- **Stacking.** A piece standing square on a slope presents flat faces again, so the compounding
-  that slanted stacking had is gone. What stacking on a ramp now feels like is unplayed.
+  is written for any normal, but every slope played so far is a ramp face at 18.4°.
+- ~~**Stacking.**~~ Covered by the 2026-11-07 sign-off above: a piece standing square on a slope
+  presents flat faces again, so the compounding that slanted stacking had is gone and stacking on a
+  ramp behaves.
 - **Two machines.** Nothing new crosses the wire - the client still sends a centre and a rotation
   and the server still re-tests both - but it has not been played.
 

@@ -395,7 +395,12 @@ the last player home (whose arrival ends the round outright) is left to `StartPl
 
 ### Still unverified
 
-- **None of this has been played.** Both targets compile clean; nothing has been seen on screen.
+- **None of this has been played**, and that is still true after the 2026-11-07 play-test, where it
+  was on the list and came back *"untested"*. Both targets compile clean; nothing has been seen on
+  screen. It is now the **largest single unplayed thing in the game**, and the only one left that
+  can change what happens at the end of a round: everything else on that list was either signed off
+  or given a verdict. Worth doing deliberately rather than hoping to stumble into it - finishing
+  requires actually crossing the line, which is easy to avoid for weeks while testing pieces.
 - **The compact line's position** (centred, `y = 92`, under the run clock) has not been looked at
   against the placement HUD drawn behind it.
 - **Two players at once**: that the second finisher gets the banner too, with `2nd` on it, and that

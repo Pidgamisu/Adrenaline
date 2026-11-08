@@ -8,10 +8,21 @@ A 3D, first-person take on **Ultimate Chicken Horse**: each round, players draft
 
 Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` plugin.
 
-## Where things stand (2026-10-27)
+## Where things stand (2026-11-07)
+
+> **2026-11-07 was a play-test day**, and most of the "built but not played" notes below and in
+> `docs/` were answered in one sitting. Twelve things were signed off, two came back as work (the
+> jump pad's low-friction window and the pad camera), one opened a design question (whether effects
+> should become pieces), and one was not tested (finishing and the watch camera). The verdict table
+> is at the end of `docs/todo.md`, and each verdict is written up where the feature lives.
 
 - **Movement:** ported from the browser prototype and signed off.
-- **Input:** keyboard and mouse, plus a full controller map for both the run and the placement camera (not yet play-tested with a pad in hand). See `docs/controller.md`.
+- **Input:** keyboard and mouse, plus a full controller map for both the run and the placement
+  camera. **Played with a pad 2026-11-07 and it feels bad** - the button map drew no complaint, the
+  camera tuning did: *"feels bad, will change later."* Nothing changed yet, and the order to try is
+  in `docs/controller.md`, where the thing to notice is that `StickLookExponent` is 1 (no curve at
+  all) and `StickLookRampTime` is 0 (no acceleration), so three of the four knobs are additions
+  rather than corrections. See `docs/controller.md`.
 - **Multiplayer:** client-authoritative, two players play-tested 2026-10-17. **Two machines in two
   different states played 2026-11-03 over a Tailscale tailnet, and it worked amazing** - smooth
   movement, and deaths, respawns, breakables, C4, the score and the collapsing bridge all in step.
@@ -42,7 +53,8 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   **Host played 2026-11-02. Joining works** - two processes over the loopback played a full round
   and were scored by name. **The whole front end was played 2026-11-03** in a Shipping build - the
   first time Escape has ever been pressed outside the editor: Resume, Leave to menu, Quit and a join
-  that fails all work. Only the **Cancel** button is still unclicked. **Two separate machines, in
+  that fails all work. **Cancel and the host leaving mid-game were both played 2026-11-07, so there
+  is no unpressed button left in the front end.** **Two separate machines, in
   two different states, connected through this menu on 2026-11-03.** A join that fails now gives up after 10 s and says why, and the menu
   shows your own address so others know what to type. **Player names work for the first time**:
   `?Name=` had always been discarded. There is still no lobby - and one would not have fixed any of
@@ -55,16 +67,19 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   standing in the way). **Played 2026-11-03 and it works.** Spikes and jump pads stuck to a plate
   ride round with it, which took attaching a surface-mounted piece to the **component** it was
   placed on rather than to the host actor's root - see *Spikes and pads ride a plate* in
-  `docs/placement.md`. **That part is built but not played.**
+  `docs/placement.md`. **Played 2026-11-07 and it works as intended.**
   The thirteenth is the **speed ring** (added 2026-11-05): a hoop you run through that raises your
   top speed to 1200 cm/s for three seconds, so the effect outlives the piece and you spend it on
   the jump, wallrun or slide that comes next. **Played the day it was built and signed off at the
   defaults** - the first piece that needed no retune after playing. See *The speed ring* in
   `docs/placement.md`.
   The fourteenth is the **grapple pickup** (added 2026-11-05): the C4 pickup's pad with a hook
-  turning over it, which hands you one grapple hook. **Built but not played.** Your hand holds
+  turning over it, which hands you one grapple hook. **Played 2026-11-07: it works, and neither pad
+  is clear enough to read** - *"the grapple pickup isn't very clear but neither is the c4, they will
+  be edited later"*, which is one art job across both pieces, deliberately deferred. Your hand holds
   **one item**, C4 and hooks counted together, so a C4 pad and a hook pad near each other are a
-  choice between them. See *The grapple pickup* in `docs/placement.md`.
+  choice between them - **played and signed off**, *"one c4 was intentional and feels good"*. See
+  *The grapple pickup* in `docs/placement.md`.
   A fifteenth, the **void** - a sphere that pulled you toward a lethal centre - was built and
   **scrapped the same day** after five versions and four plays. The source is parked in
   `docs/archive/scrapped-void/`. Read *The void, and why it was scrapped* in `docs/placement.md`
@@ -75,10 +90,15 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   anybody builds: double jump, one C4, or 60% gravity. One at a time, gone at the end of the round.
   The fourth is the **grapple hook** (added 2026-11-05): one hook, left click to throw it at what
   you are looking at and click again to let go, and you keep air strafing and steer the swing with
-  the camera the whole time. **Built but not played at all** - every number in it is a first pass.
+  the camera the whole time. **Played 2026-11-07 and signed off at its first-pass numbers** -
+  *"plays very well and feels like a slingshot, which is the intended effect"* - the second piece in
+  a row to need no retune, after the speed ring.
   The effect lands big in the middle of the screen as the build phase opens, holds 2 s and then
-  travels to the top left corner, where it stays for the round; **that part is not played.** See
-  `docs/effects.md`.
+  travels to the top left corner, where it stays for the round; **that part is not played.**
+  **The whole layer is now in question**: the leaning after that play-test is to stop dealing
+  effects per round and let *pieces* hand out the same abilities, which two of the four already have
+  (the C4 pad and the grapple pad). Not a decision - read *Effects may become pieces* in
+  `docs/effects.md` before building anything on the round layer. See `docs/effects.md`.
 - **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid
   band round its rim. Three passes 2026-11-02, **played and signed off at speed**. See
   `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker -
@@ -97,8 +117,7 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   (the build phase keeps its own), and so are the `GROUND` / `SLIDE` movement state and the u/s
   line. The lesson worth keeping is in `docs/hud.md`: **a curve needs something straight to argue
   with and a frame to belong to**, so once the arcs and the long key lists went, the curve had
-  nothing left to read against and came out rather than being tuned down. **Seen running in a
-  screenshot, not played, and the build phase's half of it is unseen.**
+  nothing left to read against and came out rather than being tuned down.
   The first version drew no text at all: canvas text is dropped silently unless its `FSlateFontInfo`
   carries a `UFont`, which the obvious `FCoreStyle` call does not - see *The trap that cost a build*
   in `docs/hud.md`, along with the terminal one-liner that launches the game into a round and
@@ -107,7 +126,13 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   same 10 px face, so every readout was a stretched raster and "larger" would only have meant
   blurrier. Text is now rasterised at the size it is drawn at, and **nothing in it can be tuned from
   the Details panel yet** (the game mode sets `HUDClass` in C++ and there is no Blueprint child; six
-  clicks fix that and `docs/effects.md`'s same complaint at once). See `docs/hud.md`.
+  clicks fix that and `docs/effects.md`'s same complaint at once). **Played 2026-11-07: the run's
+  HUD is readable at speed**, so cutting it back worked, and no frame cost was visible. The **build
+  phase** is *"a little cluttered, might change later but feels okay for now"* - which is the
+  verdict the run's HUD got before it was cut back twice, so if it gets a pass, take things out
+  rather than shrink them. The play-test also asked for a notification on picking something up, and
+  **both pads already notify** - so that is a prominence job, not a missing feature. See
+  `docs/hud.md`.
 
 ## Where the details live
 
@@ -281,8 +306,10 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
     and the walk back. `bReturnsOnDeath` on the pickup, with `RespawnDelay` above 0 to add a timer
     as well. The pickup watches the character that took it weakly, so a death is the pointer going
     stale and there is nothing to subscribe to - which also frees every pickup between rounds.
-    **Note the loop it opens:** dying is free (2026-10-31), so running off the course on purpose is
-    now a way to restock. Not played yet.
+    **Played 2026-11-07, and the loop it was thought to open is not one:** *"theres never a reason
+    to intentionally die since you want to go fast."* A death costs the whole run-up, which in a
+    race is worth more than a charge, so no rule is needed - and that generalises: in a game scored
+    on finishing, anything that costs you time polices itself.
   - **A pickup is per player** (decided 2026-10-18, after playing): each player can collect the
     same `AGetawayC4Pickup` once per life, and each sees their own pad empty. The alternative -
     a shared pickup that the first player there takes from everyone - was considered and turned
@@ -335,7 +362,17 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   keeps reading the *raw* `RunSpeed`, or a boosted run would look like a normal jog; the boost's own
   signal is a flat `BoostFOV` bump. Boosts refresh rather than stack. See *The speed ring* in
   `docs/placement.md`.
-- **A jump pad takes the drag away rather than raising your ceiling** (decided 2026-11-06). The
+- **A jump pad just launches you harder** (decided 2026-11-07, reversing *a jump pad takes the drag
+  away rather than raising your ceiling* of 2026-11-06 after playing it - *"honestly it doesn't feel
+  good, i think the change should be just increasing the jump pad strength"*). The low-friction
+  window goes and `LaunchSpeed` goes up. **The code still does the old thing** - see *The window is
+  coming out* in `docs/placement.md` for what it touches, including the warning to check the new
+  launch against `SmashSpeed` 1100. What follows is the reasoning that lost, kept because none of it
+  was wrong - only on the wrong axis, which is the void's lesson at a smaller scale: **a piece
+  should change what you can do at the moment you touch it, not change the rules for a while
+  afterwards.** A launch is a moment you aim at; a friction window is three seconds of the floor
+  behaving differently, which you did not ask for and cannot see. The speed ring survives the same
+  test because a raised ceiling is something you *spend*, on the jump or wallrun you pick next. The
   other half of the decision above, and the opposite lever. A ring raises `RunSpeed` so you can
   *climb* to a speed you could not hold; a pad already throws you at `LaunchSpeed` 1400, far above
   anything you can run at, and the problem is **keeping** it - Source friction eats the whole launch
@@ -457,8 +494,9 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
 3. ~~**A front end**: a menu with Host, Join and an IP box, and Escape to leave in game.~~ **Done
    2026-11-02, and fully played in a Shipping build 2026-11-03** - Resume, Leave to menu, Quit and a
    join that fails all work, the first time Escape has been pressed outside the editor. See *The
-   front end* in `docs/multiplayer.md`. What is left of it: the **Cancel** button is unclicked, a pad
-   cannot drive it, and there is no lobby or settings page.
+   front end* in `docs/multiplayer.md`. **Cancel and the host-leaves path were played 2026-11-07
+   and both work**, so every button in it has now been pressed. What is left of it: a pad cannot
+   drive it, and there is no lobby or settings page.
 4. ~~**Play with somebody on a second machine.**~~ **Done 2026-11-03** - two machines in two
    different states played over a **Tailscale** tailnet and it worked amazing. No port forwarding
    and no firewall prompt, the address read straight off the menu, which labels and sorts a
@@ -482,8 +520,9 @@ Git with Git LFS for `.uasset`, `.umap` and media files (rules in `.gitattribute
    *Music carries the game* (above) the order is short: **music first**, then the Music/SFX split,
    then the devices you trigger, then the round and UI stings, then the breakables. All ten movement
    slots are deliberately empty. The only sound wired is the C4 blast (`BP_C4` Explosion Sound =
-   `c4_blast`, with `ATT_World` for falloff) and **it has never been heard**, so item zero is
-   pressing Play rather than building anything. The list, with the reasoning, is *What to do next, in
+   `c4_blast`, with `ATT_World` for falloff) and **it was heard for the first time 2026-11-07 and
+   sounds great**, so item zero is done: the audio chain is proved end to end, which makes the
+   devices (one property and one `PlaySoundAtLocation` each) the cheapest work on the list. The list, with the reasoning, is *What to do next, in
    order* in `docs/sound.md`.
    **Read the assets, not the notes**, before believing any claim about a slot being empty: the
    first draft of that list opened with three jobs that were already done.

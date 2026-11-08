@@ -224,8 +224,12 @@ moves a pack there.
 - **The two-player test has not been re-run** since the pawn became a Blueprint. Steps are in
   `docs/multiplayer.md`. It adds no logic and the host path is unchanged, so nothing is expected to
   move, but it is the one gap left.
-- **Changing a value in `BP_Character` and feeling it has not been done.** The wiring is proved; the
-  round trip through the Details panel is not.
+- ~~**Changing a value in `BP_Character` and feeling it has not been done.**~~ **Played 2026-11-07:
+  "changes work."** The round trip through the Details panel is proved, which is the whole premise
+  of *Make tuning tweakable* in `CLAUDE.md` - a value can be dialled in while playing instead of
+  being guessed at in C++ and rebuilt. Every "first pass" number in the docs is now a knob rather
+  than a build, which is worth remembering before writing any more code to change feel: the pad's
+  `LaunchSpeed` and the whole pad look pass in `docs/controller.md` are both Details-panel jobs.
 - **No material has been seen on a piece in play.** The three slots above compile and are
   applied in the right place by reading, but nothing has been dressed and run yet: the ramp's
   procedural-mesh slot is the one most worth a look, since it is the only one whose timing could be

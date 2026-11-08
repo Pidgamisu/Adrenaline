@@ -302,13 +302,13 @@ the Host travel and Leave is also a travel. Reading the code first showed why it
 `SetIgnoreInput` back to false. Host was vulnerable precisely because it travelled *with* a panel
 still up. Leave tears its panel down first, so the flag never crosses the travel.
 
-Still not clicked: the **Cancel** button itself, as opposed to the give-up clock it shares a code
-path with.
+**Clicked 2026-11-07, and it works** - along with the host-leaves path, so there is no unpressed
+button left in the front end.
 
 ## Still unverified
 
-- **The Cancel button on a join has not been clicked**, only the give-up clock it shares a code path
-  with. The smallest open item left in the front end.
+- ~~**The Cancel button on a join has not been clicked.**~~ **Clicked 2026-11-07.** Nothing in the
+  front end is unplayed now.
 - ~~**Two machines have never connected.**~~ **Two did on 2026-11-03**, from two different states,
   over a Tailscale tailnet, and it worked - smooth movement, and every replicated system in step.
   **A stranger hosting is still unproved**, and needs port forwarding or a VPN of their own. See

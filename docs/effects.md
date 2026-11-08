@@ -1,9 +1,15 @@
 # Round effects
 
 > The first three were built and **played 2026-11-03 - all three work.** The fourth, the **grapple
-> hook**, was built 2026-11-05 and **has not been played at all**. Read this before touching
-> anything that hands a player an ability for one round only. The other part not yet played is how
-> the banner now presents itself: see *The banner* below.
+> hook**, was played 2026-11-07 and **signed off at its first-pass numbers** - *"plays very well and
+> feels like a slingshot, which is the intended effect."* Read this before touching anything that
+> hands a player an ability for one round only. The part still not played is how the banner now
+> presents itself: see *The banner* below.
+>
+> **But the whole layer is now in question**, as of the same play-test: the leaning is to stop
+> dealing effects per round and let **pieces** hand out the same abilities instead. Read *Effects
+> may become pieces* at the end of this file before building anything new on top of the round
+> layer.
 
 Every other round, both players are given the same effect before anybody builds. One at a time, the
 same for everybody, and gone the moment the round is.
@@ -195,7 +201,9 @@ child of `AGetawayHUD` and point `HUDClass` at it if you want to tune them in th
 ## Still unverified
 
 - **The banner's two seconds and its travel have not been played** in their build-phase home,
-  only in the run-start version they replaced.
+  only in the run-start version they replaced. It was put on the 2026-11-07 play-test list and came
+  back with the answer below instead - that the layer itself may go - so there is no verdict on it,
+  and no point tuning it until that is settled.
 - **The rhythm and the numbers are a first pass**: whether every other round is right, and whether
   60% gravity is the right amount, are both open.
 - **Two machines have never seen it**, like everything else in the project. `ActiveEffect` is one
@@ -203,11 +211,62 @@ child of `AGetawayHUD` and point `HUDClass` at it if you want to tune them in th
   hand by the time it matters - but that is reasoning, not a play-test.
 - **The pool is drawn at random**, so it can take a few rounds to see all four. `bNoRepeatEffect`
   means you will at least never get the same one twice in a row.
-- **The grapple hook has never been played** (built 2026-11-05). Everything about its feel is a
-  first pass: whether 4500 of pull and a 1800 ceiling is a hook or a catapult, whether 0.35 of view
-  steer is enough to swing with, and whether holding all of gravity up makes it too much like a zip
-  line. The rope cutting on geometry is the most likely thing to annoy: swing behind a corner and
-  you lose it, which is deliberate, but `GrappleCutSlack` is the knob if it fires when it should not.
+- ~~**The grapple hook has never been played.**~~ **Played 2026-11-07 and signed off unchanged** -
+  *"plays very well and feels like a slingshot, which is the intended effect."* Every number held:
+  `GrapplePull` 4500, the 1800 ceiling, `GrappleViewSteer` 0.35 and holding all of gravity up. The
+  second piece in a row to need no retune after playing, after the speed ring. **Note which word
+  came back** - slingshot, not zip line, which was the risk written down here before it was played:
+  holding gravity up does not flatten the swing, because the pull is strong enough that you arrive
+  with speed to spend rather than gliding. `GrappleCutSlack` was not complained about either, so the
+  rope cutting behind a corner is reading as deliberate.
 - **A rival's rope has never been seen.** `bRemoteGrappling` and `RemoteGrappleAnchor` are pushed
   to the server on the frame the rope goes out or comes in, which should be enough for something
   cosmetic, but no second machine has watched one.
+
+## Effects may become pieces (open question, 2026-11-07)
+
+Said after playing the grapple: *"honestly I think i should get rid of effects and just have
+objects that give you that effect, might change in the future."* **Not a decision** - written down
+so it is not re-discovered, and so nothing new gets built on the round layer in the meantime.
+
+What it would mean: no dealt effect, no every-other-round rhythm and no banner. Instead a **piece**
+hands out each ability, the way the C4 pickup and the grapple pickup already do - a pad you run
+over for a double jump, something placed for low gravity - and it is in the level because somebody
+chose to put it there.
+
+**Why it is the stronger idea, in this game specifically.** Two decisions already on the list point
+straight at it:
+
+- *Speed comes from the pieces, not from strafing* (2026-11-06) moved every source of speed into
+  the level. An effect dealt by the game mode is the last ability left that the level does not
+  grant, so it is now the odd one out rather than the norm.
+- *A hand is one normal piece and one special one* (2026-11-06) made the hand the place where the
+  round is decided. An effect arrives *before* anybody builds and applies to both players equally,
+  so it changes what you place without ever being something you chose - which is the opposite of
+  the Ultimate Chicken Horse bargain the rest of the catalog is built on.
+
+And the grapple is the proof of concept, by accident: it exists **both** ways already - as a round
+effect and as `AGetawayGrapplePickup`, a pad that grants one hook. The pickup is the version that
+fits the game, and it was built second.
+
+**What it would cost.** Less than it looks, because the abilities are not implemented in the effect
+layer - they are properties on the character and the movement component that the layer merely sets.
+
+| Effect | Where the ability actually lives | What a piece would do |
+|---|---|---|
+| Double jump | `AirJumps` on the character (Blueprint plays at 0) | Set it to 1 for the rest of the round, or for a life |
+| One C4 | `AddCharges`, which `AGetawayC4Pickup` already calls | Nothing new at all - the pickup *is* this |
+| 60% gravity | `GravityScale` on the movement component | Set it while you are in a volume, or for a duration |
+| Grapple hook | `AddGrappleShots`, which `AGetawayGrapplePickup` already calls | Nothing new - the pickup is this too |
+
+So two of the four already have their piece, and the other two are one property each. The work is
+not the abilities; it is **the catalog, the hand and the balance** - six special pieces becoming
+eight, and `bOneOfEach` dealing from a bigger special pool. That is a design pass, not a port.
+
+**What would be lost, and it is worth weighing.** The effect layer guarantees *both players get the
+same thing*, which is what makes it fair without anybody spending a piece on it, and it changes a
+round without using up a slot in the hand. Abilities as pieces means the player who draws the
+double-jump pad decides whether anybody gets one - which is more interesting and less even.
+
+If this goes ahead, `bRoundEffects` off is already the switch that turns the layer off, so the two
+can be played against each other without deleting anything.

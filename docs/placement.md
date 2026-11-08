@@ -274,19 +274,48 @@ Details worth knowing:
   (Blueprint **35** against a C++ 75), which limits how hard air strafing can bite - but that is
   air control, not friction, and it cannot slow you down.
 
-**Not played yet.** `FrictionScale` 0.3 is a first guess. It is the one value here with a real risk
-of being wrong in both directions: too high and the window does nothing, too low and a landing
-becomes ice you cannot turn on.
+**Played 2026-11-07, and it is out.** *"Honestly it doesn't feel good, i think the change should be
+just increasing the jump pad strength."* So the window goes and `LaunchSpeed` goes up instead,
+which reverses *A jump pad takes the drag away rather than raising your ceiling* in `CLAUDE.md`.
+**Not yet done in code** - see *The window is coming out* below.
+
+The reasoning that lost is worth keeping, because none of it was wrong. Source friction really does
+eat a whole launch on the first touchdown, and 0.3 for 3 s really does stop that. What it cost was
+the thing a pad is *for*: a launch is a moment you aim at, and a friction window is three seconds
+of the floor behaving differently afterwards, which you did not ask for and cannot see. The pad
+stopped being a kick and became a surface condition. Compare the speed ring, which gets away with a
+three-second effect because a raised ceiling is something you **spend** - on the jump or the
+wallrun you pick next - where low friction is something that merely happens to you.
 
 **Known duplication:** the host-binding half of this (`Host`, `BindToHost`, `OnHostBroken`,
 `SetPresent` and the replication that goes with it) is copied from `AGetawaySpikes`, about forty
 lines. Pulling both onto a shared surface-mounted base class is the obvious cleanup, and was
 deliberately left out of this pass rather than reparenting a piece that has already been played.
 
-**Not played yet.** Built clean. What is unproven is all feel: whether 1400 is the right launch,
-whether 0.35 is the right ground lift, whether a pad should straighten your path (`SideSpeedKept`
-below 1), whether a 200 cm plate is a fair target at speed, and whether a wall pad reads as a
-kicker or as a surprise.
+**Played 2026-11-07.** The pad itself works and **`LaunchSpeed` is the lever** - the verdict on the
+low-friction window (above) was that the pad should simply be stronger, so 1400 is the number to
+raise rather than a number to defend. Still not reported on, because nothing in the play-test
+turned on them: whether 0.35 is the right ground lift, whether a pad should straighten your path
+(`SideSpeedKept` below 1), whether a 200 cm plate is a fair target at speed, and whether a wall pad
+reads as a kicker or as a surprise.
+
+#### The window is coming out (decided 2026-11-07, not yet written)
+
+What the play-test asked for, in one line: **delete the low-friction window and raise
+`LaunchSpeed`.** Recorded here rather than done, because it is a feel change to the one piece most
+likely to break `SmashSpeed` balance and it deserves its own pass.
+
+What it will touch when it is written:
+
+- `UGetawayMovementComponent::AddLowFriction` and the `LowFrictionScale` / `LowFrictionTime` state
+  it drives, plus the two places that read it (`GroundFrictionSource` and `SlideFriction`). The pad
+  is the only caller, so the whole mechanism goes with it unless something else wants it.
+- `FrictionScale` and `FrictionTime` on `AGetawayJumpPad`, which become dead properties.
+- `LaunchSpeed`, up from 1400. **Check it against `SmashSpeed` 1100 before picking a number**: per
+  *Breaking is granted by the level* a pad is already one of only four things that can burst a
+  breakable, and a much bigger launch widens the window in which it does.
+- `docs/sound.md`'s jump pad sting is unaffected, and so is the ring - `GetBoostedRunSpeed` is a
+  separate lever and it survived its play-test.
 
 ### The anti-gravity vortex (added 2026-10-31)
 
@@ -615,14 +644,17 @@ it above the threshold and confirm it bursts, then hit it below and confirm you 
 ### Still unverified (placement and pieces)
 
 The placement loop itself is confirmed working: place a piece, Enter to run, and the character moves
-(that last part only after the Enhanced Input context fix above). Not yet played: the ramp, the
-bridge, and how any of it feels. What *was*
+(that last part only after the Enhanced Input context fix above). **The ramp and the collapsing
+bridge were played 2026-11-07 and both feel correct** - which closes the two open numbers below,
+the bridge's 0.45 s hold and whether its tip impulse reads as a collapse rather than a shrug.
+What *was*
 checked without playing, by script against the running engine: the catalog deals eight pieces with
 the right sizes and flags, the wedge builds with the same triangle winding the engine's own
 `GenerateBoxMesh` uses (so it is not inside out), traces onto the slope land exactly where the maths
-says with a constant normal, and the bridge's collapse and restore flip its state. **Not** checked:
-how any of it feels, whether 0.45 s is the right hold, whether the tip impulse reads as a collapse
-or as a shrug, and whether the debug-line ghost is legible for a wedge.
+says with a constant normal, and the bridge's collapse and restore flip its state. What is **still**
+not checked, now that the ramp and the bridge have been played: whether the ghost is legible for a
+wedge, which is a question about the ghost rather than the piece and is open under *Still
+unverified* for the ghost below.
 
 The build clock (2026-10-17) was **played and signed off the same day** - see *Played and signed
 off* at the end of this file. It was written wondering whether 30 s is enough to fly out, pick a
@@ -968,7 +1000,11 @@ what the breakable `OnBroken` / `OnRestored` binding needs.
   different decision - a floor placed on a plate would become part of the wheel - and it was not
   asked for.
 
-Built clean. **Not played.**
+**Played 2026-11-07: it works as intended.** Spikes and a jump pad stuck to a plate ride round with
+it. So attaching a surface-mounted piece to the **component** it was placed on, rather than to the
+host actor's root, was the right call and needs no follow-up - and the bet that nothing in the
+movement component had to change for a rider on a moving plate has now been collected twice, once
+for the plate itself and once for what is bolted to it.
 
 ### Still unverified
 
@@ -1226,6 +1262,10 @@ without finding F.
 - **The C4 pickup now teaches the button**, since the run's HUD lists no keys any more: "Picked up
   C4. Left click to throw, again to set off", or the RB/RT wording on a pad.
 
+**Played 2026-11-07 and signed off** - *"works"*. Both of the questions it was written with are
+answered: detonate-before-throw is right, and `C4 live` in the hand slot reads clearly enough to
+click next to. Committed as `5cd97af`.
+
 ### A pickup comes back when you die
 
 Changed 2026-11-05, straight after playing the 8 s timer, and it applies to **both** pickups - C4's
@@ -1245,9 +1285,12 @@ to and start being a thing you spend.
   nothing has to be told, and it falls out for free that every pickup frees itself between rounds,
   where all the characters are thrown away anyway. `IsDead()` is checked as well as validity, so the
   pad is ready by the time you are back at the start rather than a beat after it.
-- **The loop it opens, and it is not played yet:** dying is free since 2026-10-31 - you go back to
-  the start and keep your run - so deliberately running off the course is now a way to restock. That
-  may be fine (it costs you the whole run-up, which in a race is expensive) or it may want a rule.
+- ~~**The loop it opens, and it is not played yet:**~~ **Played 2026-11-07, and it is not a loop at
+  all.** Returning on death works, and *"theres never a reason to intentionally die since you want
+  to go fast."* The cost was priced correctly by accident: a death hands back the whole run-up, and
+  in a race that is more than a charge is worth. **No rule needed**, and worth remembering as the
+  general case - in a game scored on finishing, anything that costs you time polices itself, so a
+  resource does not also need a cooldown.
 
 ### Both pads are per player, and always were
 
@@ -1269,18 +1312,29 @@ Tools > Execute Python Script... once. That rebuilds the Blueprint's catalog fro
 `BP_Piece_GrapplePickup` with the pad in `MI_VB_Dark` and the hook in `MI_VB_Pickup` - cyan, by the
 colour rule, because it helps you.
 
+### Played 2026-11-07 (the grapple pickup)
+
+- **It works, and the pad is not clear enough.** *"The grapple pickup isn't very clear but neither
+  is the c4, they will be edited later."* So this is **not a grapple problem** - the two pads share
+  it, and the C4's has been in the game since 2026-10-15 without the complaint surfacing, which
+  suggests it took a second pad to make it visible: two cyan-and-dark discs on the floor that mean
+  different things. Logged as one job on both pieces rather than a fix to this one, and deferred
+  deliberately. The levers are the pad's own material and the thing turning over it (a hook here, a
+  brick there), both in the Details panel of the piece's Blueprint, and neither is load-bearing to
+  anything else.
+- **The one-item hand is signed off.** *"One c4 was intentional and feels good."* Losing the double
+  rocket jump cost nothing anybody misses, and `ItemCapacity` 1 stands - which also means
+  *One button for the whole hand* rests on a rule that has now been played, not just reasoned about.
+- **Coming back on death works**, on both pads, and it closes the loop it was thought to open - see
+  *A pickup comes back when you die* above.
+
 ### Still unverified (the grapple pickup)
 
-- **Nothing about it has been played**, including whether the hook reads as a hook at 800 cm/s and
-  whether the pad is wide enough to collect from without aiming.
-- **The one-item hand has not been played either.** The question it raises is whether losing the
-  second C4 charge is felt: a double rocket jump is no longer possible, and nobody has tried to miss
-  it yet.
 - **Two machines.** The grant runs on the machine that owns the character, exactly like the C4
   pickup's, so it is inherited rather than new - but it has not been watched.
-- **Coming back on death has not been played**, on either pickup: not the restock itself, not what
-  it does to the C4 pads that were tuned around an 8 s clock, and not whether running off the
-  course on purpose to restock turns out to be worth doing.
+- **Whether the pickup's own HUD line lands.** `AddGrappleShots` does notify - "Grapple hook. Left
+  click to fire" - and the play-test still asked for a notification on pickup, so the line exists
+  and did not register. See *A pickup that tells you nothing* in `docs/hud.md`.
 
 ## The void, and why it was scrapped (2026-11-06)
 

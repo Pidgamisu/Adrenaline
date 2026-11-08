@@ -132,8 +132,11 @@ award was removed outright - see *Scoring*. Killing somebody still pays indirect
 it stops them finishing, which is what turns a round from nobody-scores into two points for you.
 
 Spikes themselves were play-tested on 2026-10-19 and work - killing, dying and the round carrying
-on without you. Everything added after that play-test is **not played**: the attachment to a host,
-the overhang trim, and the rebuilt point layout that goes with it.
+on without you. Of what was added after that play-test, **the attachment to a host was played
+2026-11-07 and works** - spikes stuck to a windmill plate ride round with it, which is the hardest
+case the attachment has, since the host both moves and rotates. See *Spikes and pads ride a plate*
+in `docs/placement.md`. Still not played: the **overhang trim** and the rebuilt point layout that
+goes with it.
 
 ### Breakables are solid until they break (2026-10-19)
 

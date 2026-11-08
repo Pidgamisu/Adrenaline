@@ -513,9 +513,9 @@ off* in `docs/itch.md`. What is actually left:
 - ~~**No two separate machines have connected through the menu.**~~ **Two did, on 2026-11-03,
   from two different states, and it worked.** See *Two machines, two states* at the end of this
   file for what that proves and the details nobody wrote down at the time.
-- **The Cancel button has not been clicked**, only the give-up clock it shares a code path with.
-  A failed join was played on 2026-11-03 and reports properly, so the path is exercised; the button
-  is not.
+- ~~**The Cancel button has not been clicked**, only the give-up clock it shares a code path with.~~
+  **Clicked 2026-11-07 and it works.** The smallest open item in the front end is closed, and with
+  the host-leaves path played the same day, **every button in the front end has now been pressed.**
 - **Travel from Play-in-Editor into a listen server.** PIE is not the real thing here; a packaged
   build is the test.
 - **Whether the auto-framed camera picks a flattering shot.** The menu has been seen now and nobody
@@ -840,5 +840,10 @@ All reported working, with nothing singled out as wrong:
   itself is local and unreplicated - deliberately, so a rider has the platform under them
   immediately rather than a frame late. That note says the two copies "will not land identically,
   which does not matter". At inter-state latency, nobody could tell.
-- **Nobody left mid-game**, so the host-leaves path is still unplayed - see *What the front end
-  does not do* above for what it is supposed to do.
+- ~~**Nobody left mid-game**, so the host-leaves path is still unplayed.~~ **Played 2026-11-07 and
+  it works.** So the behaviour described under *What the front end does not do* - a host leaving
+  drops everybody, the client's failure handler catches it and puts them back at their own menu
+  with a message - is now observed rather than reasoned. That path was the one most likely to hang,
+  because it is the net driver going down underneath a live world, and it is the same handler that
+  rescues a failed join; the engine not bringing you back from a connection failure by itself is the
+  trap recorded at the end of this file, and this is the other half of that fix proving out.

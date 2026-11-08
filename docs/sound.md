@@ -42,9 +42,11 @@ sound.
 
 ### The order
 
-0. **Listen to the C4 blast.** The only sound left wired, and still unheard by anybody. Not a build
-   task - press Play, throw a charge, click again. It also confirms the audio chain works at all, which
-   everything below assumes.
+0. ~~**Listen to the C4 blast.**~~ **Done 2026-11-07, and it sounds great.** The audio chain works
+   end to end - a wave in a slot, with `ATT_World` on it, reaching the speakers in play - so
+   everything below can stop assuming that. **Item 3 is now the cheapest thing on this list**: the
+   devices are the same pattern as the blast, one property and one `PlaySoundAtLocation`, against a
+   chain that is now known to work.
 
 1. **Music: one track per phase.** The backbone now, not the garnish. Swapped off the replicated
    `Phase` on `AGetawayGameState`, so every machine switches by itself with no RPC. **The trap is
@@ -619,16 +621,23 @@ something that can be scripted: a Sound Submix and an effect preset are both `.u
   cleared by the music-led decision before anybody played them. So the entire movement half of this
   file is built, tuned, documented and unproven, which is fine while the decision is to have none
   of it, and worth knowing the day that reverses.
-- **The C4 blast is the only sound wired, and it has not been heard either.** Item zero.
+- ~~**The C4 blast is the only sound wired, and it has not been heard either.** Item zero.~~
+  **Heard 2026-11-07, and it is good** - *"c4 blast sounds great."* So item zero is done and the
+  audio chain is proved end to end for the first time: a wave in `BP_C4`'s Explosion Sound slot
+  reaches the speakers in play, with `ATT_World` on it. The library boom was the right pick over
+  the three synthesised bangs, and **it stays** - nothing about it wants revisiting. What was *not*
+  separately judged is the attenuation (see below): a blast you set off yourself is a blast at
+  nought centimetres, so the falloff never came into it.
 - All ten movement slots are empty.
 - The **looping** slots have never had a looping asset in them: the fade-out, the slide loop's pitch
   ramp, and `bStopWhenAttachedToDestroyed` taking a loop away on death are all untested.
 - **None of the three synthesised C4 bangs has been heard**, by me or by anyone. They are measured
-  as being different from each other, which is not the same as any of them being good. The library
-  boom that was chosen over them is the one that is actually wired, and that has not been heard
-  either.
-- **`ATT_World`'s distances have not been heard**, only set. 1000 cm held at full volume and 7000 of
-  falloff is a guess suited to the size of the test course.
+  as being different from each other, which is not the same as any of them being good. Academic
+  now: the library boom that was chosen over them has been heard and is staying.
+- **`ATT_World`'s distances still have not been judged.** The blast was heard at your own feet,
+  which tells you nothing about falloff. 1000 cm held at full volume and 7000 of falloff remains a
+  guess suited to the size of the test course, and the test for it is a charge going off across the
+  course or on another machine.
 - **The reverb submix has not been built**, so "everything echoes" is a verified plan and nothing
   more. In particular the claim that a wet master submix reaches 2D sounds is read off the engine
   source, not observed.

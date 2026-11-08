@@ -180,10 +180,38 @@ both the jump action) and an Enhanced Input handler is not told which key fired 
 
 The flag is local to each machine and does not replicate; it is only ever used for drawing text.
 
+## Played 2026-11-07, and it feels bad
+
+*"Feels bad, will change later."* So the map is right - nothing in the play-test said a button was
+in the wrong place - and **the tuning is wrong**, which is what this file said to expect: every
+look value in it was a starting point written without a pad in hand.
+
+No specifics came back, so nothing has been changed. When it gets its pass, the order to try, from
+the most likely culprit - and note what the defaults actually are, because two of the knobs are
+**off**, so three of these four are additions rather than corrections:
+
+1. **`StickLookYawSpeed` 230 / `StickLookPitchSpeed` 180 deg/s** - raw speed, and the first suspect.
+   A pad that cannot turn as fast as the course arrives reads as bad immediately, and this game runs
+   at 800 cm/s with a mouse player's reflexes assumed. A mouse here is unbounded; 230 deg/s is a
+   second and a half for a full turn.
+2. **`StickLookExponent` 1** - which is **linear**, so there is no curve at all right now. A linear
+   stick is the classic cause of "I can either aim or turn, not both": raising this to 1.5-2 buys
+   fine control near the centre while keeping the top speed at full tilt, and is usually what makes
+   a pad camera feel considered rather than twitchy.
+3. **`StickLookRampTime` 0** - acceleration, also **off**. With it at 0 the stick is at full rate
+   the instant it leaves the dead zone, which is what makes a small flick overshoot.
+   `StickLookRampStartScale` 0.5 is the speed it would start from.
+4. **`StickLookDeadZone` 0.05**, last, because a wrong dead zone reads as drift or a dead patch
+   rather than as bad feel in general.
+
+Every one of those is a `UPROPERTY` in **Getaway|Look (Pad)** on the character, so this is a
+Details-panel pass with a pad in hand, not a build - and per `docs/blueprint-tuning.md` that round
+trip was itself played on 2026-11-07, so the values can be dialled in live.
+
 ## Still unverified
 
-- **Everything about feel.** The look speeds, the curve and the ramp are starting points, not tuned
-  values. A pad has been in hand far enough to catch the inverted pitch, and no further.
+- **The specifics of the feel complaint.** The verdict above is the whole of it: which of the four
+  values above is wrong, and in which direction, is unknown.
 - **Air strafing on a stick.** `MoveStickFullTilt` is the right idea in theory. Whether 0.9 is the
   right threshold, and whether a pad can actually hold a Source air strafe, is a play test.
 - **Two players, one PC, one pad.** Unreal's editor play-in-editor gives both windows the same

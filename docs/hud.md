@@ -267,22 +267,30 @@ editor open.
 
 ## Still unverified
 
-- **Nobody has played it.** Both passes were checked by the screenshot trick above, which proves
-  what is on screen and nothing about what it is like to read at 800 cm/s.
-- **Seen in a run, not in a build phase.** The placement HUD - the hand list, the status line, the
-  build clock, the two key lists it keeps - uses the same `Face`/`Bent`/`Glow` path and nothing
-  specific to it has been looked at. Nor has a banner, a scoreboard with two names in it, or the
-  effect announcement. The build phase is now where almost all the HUD's remaining text lives, so
-  it is also where a layout mistake would show up.
+- ~~**Nobody has played it.**~~ **Played 2026-11-07: it is readable** at speed, which was the whole
+  question the cut-back passes were trying to answer. The flattening worked.
+- ~~**Seen in a run, not in a build phase.**~~ **Played 2026-11-07: the build phase is "a little
+  cluttered, might change later but feels okay for now."** Not a fault to fix today, and recorded
+  rather than acted on - but note that it is the *same verdict the run's HUD got* before it was cut
+  back twice, and the cut-backs are what made the run readable. The build phase still carries
+  almost all the HUD's text: the hand list, the status line, the build clock and **two** key lists.
+  If it does get a pass, the run is the worked example - take things out rather than shrink them,
+  and remember *a curve needs something straight to argue with* from the same day.
 - ~~**Whether the curve still reads as a curve.**~~ Settled by taking it out - see *And then the
   curve came out too*. What is left to verify there is only that nothing looks oddly placed now
   that every line is level again; the running HUD was screenshotted flat and looks right.
 - **Whether the glow is too much over bright geometry.** The halo is translucent, and the world is
   additive pink: text over a wall is text over something already bright, so a glow that reads well
   against black may read as mush against a lit face.
-- **Cost.** A worst-case frame is a few hundred canvas text draws rather than a dozen. It is well
-  within what a canvas handles, but it has not been measured with `stat unit`, and this is a game
-  that cares about frame time. `GlowRings 1` halves it; `TextBend 0` roughly halves it again.
+- **Cost: looked at 2026-11-07 and nothing showed.** *"I dont see a frame cost."* Which is the
+  expected answer and not quite a measurement - the only way a few hundred text draws announce
+  themselves is on the **Draw** line of `stat unit` (the game thread's render-command cost), and on
+  a machine that runs this game at hundreds of frames a second nothing is the bottleneck, so the
+  cost is real and simply too small to notice. Taken as closed: the HUD is not a performance
+  problem. **What was not done** is the comparison that would put a number on it - `stat unit` with
+  the HUD drawing against `GlowRings 1` or `TextBend 0`, which is the only form of this test that
+  means anything. Worth re-running only if a frame-time problem ever appears, and then the knobs
+  above are where to look first.
 - **Small windows.** The message stack is lifted off the speedometer when a full stack of four
   would reach it. Worked out on paper, and the strip gave it more room than it needs.
 - **A pad cannot drive any of it**, same as before - this pass changed nothing about input.
@@ -297,3 +305,42 @@ editor open.
 - **The menu.** `UGetawayMenuWidget` is Slate and untouched by any of this. The in-game Escape panel
   is the menu, so it does not glow or curve either.
 - **Colours.** Every readout kept the colour it had.
+
+## A pickup that tells you nothing (asked for 2026-11-07)
+
+Out of the play-test, alongside "readable": *"i think there should be a notification for picking
+up."*
+
+**The notification already exists**, on both pads, and that is the whole finding:
+
+| Pad | The line it fires | Hold | Key |
+|---|---|---|---|
+| C4 | "Picked up C4. Left click to throw, again to set off" | 1.2 s | 7003 |
+| Grapple | "Grapple hook. Left click to fire" | 1.4 s | 7006 |
+
+Both are real `Notify` calls in `AGetawayCharacter::AddCharges` and `AddGrappleShots`, both were
+firing, and neither registered. **So this is a prominence job, not a missing-feature job** - and it
+is worth writing down that way, because "add a notification" would have been built on top of two
+notifications that are already there. It is the same mistake `docs/sound.md` warns about in its own
+first draft: read the code before believing something is absent.
+
+Why they are easy to miss, in likely order:
+
+- **They land in the message stack, which is small, grey-weight text and off to one side** - the
+  same channel as every routine message. A pickup is not routine; it changes what your hand can do.
+- **A second or so is nothing** when you are moving at 800 cm/s and reading the course ahead. The
+  moment you run over a pad is the moment you are least able to look anywhere.
+- **The hand readout top left does change** - to `C4` or `GRAPPLE` - but it is a steady-state
+  display, so it has no transition to catch the eye.
+
+What a fix probably is, and it is its own small job: **make the pickup a beat rather than a line.**
+Options, cheapest first - a flash or a pop on the hand readout itself, so the thing that changed is
+the thing that moves; a brief centre-screen card like the effect banner, which already exists and
+already travels; or the sting that `docs/sound.md` lists for pickups under *the devices you
+trigger*, which would carry it without using any screen at all. Sound is arguably the right answer
+here, since a pickup is exactly the kind of rare, deliberate event that decision reserves effects
+for.
+
+Note it pairs with the other half of the same complaint, in `docs/placement.md`: the **pads
+themselves** are not clear enough either, on both pieces. One is a HUD job and one is an art job,
+and doing either would help.
