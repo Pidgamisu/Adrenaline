@@ -195,11 +195,16 @@ void AGetawayJumpPad::LaunchLocal(AGetawayCharacter* Who)
 		// when the kick points away from it, so the pad is expressed as the change it wants.
 		GMove->ApplyBlast(Target - V);
 
-		// And the window, which is what makes the launch last past the landing. Handed over here
-		// rather than ticked at you, because the pad is behind you a frame later; the character's
-		// own clock runs it from now on. It is not a push and does nothing to your velocity - see
-		// AddLowFriction.
-		GMove->AddLowFriction(FrictionScale, FrictionTime);
+		// The low-friction window, which is **off** by default (FrictionScale 1, FrictionTime 0)
+		// since it was played on 2026-11-07 and the launch was raised instead. AddLowFriction
+		// already refuses a scale of 1 or more and a duration of 0, so this branch changes no
+		// behaviour - it is here so the off state is readable at the call site rather than two
+		// files away. Set both properties on the pad to put the old behaviour back, no build
+		// needed; the header says why it went.
+		if (FrictionScale < 1.f && FrictionTime > 0.f)
+		{
+			GMove->AddLowFriction(FrictionScale, FrictionTime);
+		}
 	}
 	else
 	{

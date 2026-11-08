@@ -31,11 +31,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FGetawayLaunchedSignature, AGetaway
  * A pad that fires along the ground you are standing on is tilted up by `GroundLift` first, so a
  * wall pad throws you off the floor instead of being eaten by friction.
  *
- * It also hands you a **low-friction window** for `FrictionTime` seconds (`FrictionScale`), which
- * is what makes a pad worth more than its height. `LaunchSpeed` is far above running speed, and
- * Source friction would eat all of it on the first touchdown; with the drag down you keep it, so
- * the pad throws you *and* the landing goes somewhere. The window outlives the piece on the
- * character's own clock, like the speed ring's boost, and covers sliding as well as running.
+ * **The launch is the whole piece.** It used to hand you a low-friction window as well, so that
+ * Source friction did not eat the launch on your first touchdown - played 2026-11-07 and taken
+ * back out, because three seconds of the floor behaving differently is not something you can see
+ * or aim, and it turned a kick into a surface condition. `LaunchSpeed` went up instead. The window
+ * is still here as `FrictionScale` / `FrictionTime` and it is **off** (1 and 0); see
+ * *The window is coming out* in `docs/placement.md`.
  *
  * Works with no assets (engine BasicShapes).
  */
@@ -62,11 +63,26 @@ public:
 	/* ---------------- The launch ---------------- */
 
 	/**
-	 * How hard it throws you, in cm/s along the pad's own +Z. 1400 is about 4.9 m of height off a
-	 * floor pad against the character's 1.4 m jump - just over the test course's 500 cm ledge.
+	 * How hard it throws you, in cm/s along the pad's own +Z - **the whole of what a pad gives you**
+	 * since the low-friction window came out on 2026-11-07.
+	 *
+	 * Raised from 1400 to 1800 in that change. Height off a **floor** pad is `LaunchSpeed^2 / 2g`
+	 * with g = 1999 cm/s² (`GravityScale` 2.04), against the character's own 1.4 m jump:
+	 *
+	 *   1400 -> 4.9 m   1600 -> 6.4 m   **1800 -> 8.1 m**   2000 -> 10.0 m
+	 *
+	 * A **wall** pad spends the same number sideways instead, so it is also how far a wall throws
+	 * you - at 1800, about 1690 cm/s across and 630 up once `GroundLift` has tilted it.
+	 *
+	 * Note what it does *not* change: your speed **across** the pad is untouched, so a floor pad
+	 * never makes you faster along the ground, it buys you air - and air in this game is lossless
+	 * (`FallingLateralFriction` is 0), which is why more height is itself the answer to friction
+	 * eating your landing. It also keeps a pad above `SmashSpeed` 1100 by a wider margin than
+	 * before, which is intended: per *Breaking is granted by the level* a pad is meant to be one of
+	 * the few things that can burst a breakable.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Jump Pad", meta = (ClampMin = "0"))
-	float LaunchSpeed = 1400.f;
+	float LaunchSpeed = 1800.f;
 
 	/**
 	 * Off: the pad decides the launch, so it is the same height every time (it still never *slows*
@@ -100,29 +116,34 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Jump Pad", meta = (ClampMin = "0"))
 	float Retrigger = 0.25f;
 
-	/* ---------------- The low-friction window ---------------- */
+	/* ---------------- The low-friction window, which is OFF ---------------- */
 
 	/**
-	 * How much friction survives for `FrictionTime` seconds after the pad throws you. 0.3 leaves
-	 * under a third of the drag, so you keep most of what the pad gave you when you land instead of
-	 * being dragged back to a jog inside a second; 1 turns the window off and 0 is frictionless ice.
+	 * **Off. Leave it off unless you are deliberately re-trying the idea.**
 	 *
-	 * This is why the pad is worth more than its height. `LaunchSpeed` 1400 is well above anything
-	 * you can run at, and without the window Source friction - which always pulls you back toward
-	 * `StopSpeed` - eats all of it on the first touchdown. It covers sliding as well as running, so
-	 * landing out of a pad into a slide is the fast line.
+	 * How much friction would survive for `FrictionTime` seconds after the pad throws you: 1 is no
+	 * change at all, 0.3 was the value that was played, 0 is frictionless ice. The pad only calls
+	 * into the movement component at all when this is below 1 *and* `FrictionTime` is above 0, so
+	 * at these defaults nothing happens and there is no window.
 	 *
-	 * Note that it is a different lever from the speed ring's, on purpose: a ring raises your
-	 * ceiling and lets you climb to a new speed, a pad hands you a speed and this lets you keep it.
-	 * Windows refresh rather than stack, and one can never make you faster than you landed.
+	 * **Why it is off** (played 2026-11-07, *"honestly it doesn't feel good"*): the reasoning was
+	 * sound - `LaunchSpeed` is far above running speed and Source friction really does pull you
+	 * back toward `StopSpeed` the moment you touch down - but it fixed that on the wrong axis. A
+	 * launch is a moment you aim at; a window is three seconds of the floor behaving differently
+	 * afterwards, which you did not ask for and cannot see. `LaunchSpeed` went up instead. The
+	 * speed ring's boost survives the same test because a raised ceiling is something you *spend*.
+	 *
+	 * Setting both back (0.3 and 3) restores the old behaviour exactly, with no build - it covers
+	 * sliding as well as running, windows refresh rather than stack, and one can never make you
+	 * faster than you landed.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Jump Pad",
 		meta = (ClampMin = "0", ClampMax = "1"))
-	float FrictionScale = 0.3f;
+	float FrictionScale = 1.f;
 
-	/** How long the low-friction window lasts after the launch, in seconds. */
+	/** How long the low-friction window lasts after the launch, in seconds. **0 = off.** */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Jump Pad", meta = (ClampMin = "0"))
-	float FrictionTime = 3.f;
+	float FrictionTime = 0.f;
 
 	/** Camera kick on launch, in degrees and in shake units. Matches the C4 blast's. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Getaway|Jump Pad", meta = (ClampMin = "0"))

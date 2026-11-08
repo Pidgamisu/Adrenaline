@@ -17,16 +17,6 @@ Tick an item by playing it and either signing it off or saying what to change.
 
 ## 1. Decided and not yet written
 
-Both of these are verdicts from the play-test, so they are not open questions - they are jobs.
-
-- [ ] **Take the jump pad's low-friction window out and raise `LaunchSpeed` instead.** *"Honestly it
-      doesn't feel good, i think the change should be just increasing the jump pad strength."* This
-      reverses *A jump pad takes the drag away rather than raising your ceiling* in `CLAUDE.md`.
-      Touches `AddLowFriction` and the `LowFrictionScale`/`LowFrictionTime` state (the pad is its
-      only caller, so the whole mechanism goes), `FrictionScale` and `FrictionTime` on the pad, and
-      `LaunchSpeed`. **Check the new launch against `SmashSpeed` 1100 before picking it** - a pad is
-      already one of only four things that can burst a breakable. See *The window is coming out* in
-      `docs/placement.md`.
 - [ ] **Retune the pad camera.** *"Feels bad, will change later."* No specifics came back, so this
       is a Details-panel pass with a pad in hand, not a build. The order to try, with what the
       defaults actually are: `StickLookYawSpeed` 230 / `StickLookPitchSpeed` 180, then
@@ -149,12 +139,14 @@ on this list rather than a leap of faith. All ten movement slots stay deliberate
 - [ ] **Pad support for the menus.** A controller cannot drive the front end or the HUD at all - and
       with the pad camera needing a pass anyway, these two are the same afternoon.
 
-## 8. Signed off 2026-11-07
+## 8. Signed off
 
-Here so none of it gets re-opened. Each one is written up where it lives.
+Here so none of it gets re-opened. Each one is written up where it lives. Everything is from
+2026-11-07 except the jump pad, which was played on the 8th.
 
 | What | Verdict |
 |---|---|
+| **The jump pad, stronger** (2026-11-08) | *"The pad feels much better, this was definitely the better fix."* `LaunchSpeed` 1800, window off, no retune |
 | One button for the whole hand | *"Works."* Committed `5cd97af` |
 | The grapple hook | *"Plays very well and feels like a slingshot, which is the intended effect."* No retune |
 | The one-item hand | *"One c4 was intentional and feels good."* `ItemCapacity` 1 stands |

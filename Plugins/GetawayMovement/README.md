@@ -123,8 +123,8 @@ still on the small grey line underneath, for comparing feel against `Reference/g
 | Speed ring boost | - | BoostScale / BoostTime (speed ring) | 1.5x for 3 s |
 | Speed ring snap | - | bSnapToSpeed / SnapMinSpeed (speed ring) | on / 300 |
 | Speed boost FOV | - | BoostFOV (character) | 9 deg |
-| Jump pad launch | - | LaunchSpeed (jump pad) | 1400 |
-| Jump pad low friction | - | FrictionScale / FrictionTime (jump pad) | 0.3x for 3 s |
+| Jump pad launch | - | LaunchSpeed (jump pad) | 1800 (was 1400 before 2026-11-07) |
+| Jump pad low friction | - | FrictionScale / FrictionTime (jump pad) | **off** - 1x for 0 s (was 0.3x for 3 s) |
 
 ## Strafing: where speed is allowed to come from (2026-11-06)
 
@@ -132,7 +132,7 @@ Two switches, both **off** by default, both new. They share one helper,
 `UGetawayMovementComponent::RatchetSpeed`, which runs straight after an acceleration step and
 refuses to let it have made you *faster*, while leaving the direction it chose alone. The ceiling is
 `Max(speed before, wish speed)`, and that `Max` is the whole subtlety: it only ever blocks a **gain**
-and never trims speed you already had, so a jump pad landing at 1400 or a slide out of a run at 1050
+and never trims speed you already had, so a jump pad landing at 1800 or a slide out of a run at 1050
 is untouched and decays by friction exactly as before.
 
 **`bGroundStrafeGain` off - a bug fix.** Holding forward and turning the camera settled at about

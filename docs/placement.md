@@ -223,17 +223,22 @@ panel or on a Blueprint child:
 
 | Value | Default | What it does |
 |---|---|---|
-| `LaunchSpeed` | 1400 cm/s | The launch, along the pad's +Z. About 4.9 m of height off a floor pad against the character's 1.4 m jump, so just over the test course's 500 cm rocket ledge |
+| `LaunchSpeed` | **1800 cm/s** | The launch, along the pad's +Z, and since 2026-11-07 the whole of what a pad gives you. About **8.1 m** of height off a floor pad against the character's 1.4 m jump. Was 1400 (4.9 m) while the friction window existed |
 | `bAddToIncoming` | off | Off: the pad decides, so every launch is the same. On: added to what you arrive with, so pads stack and jumping into one goes much higher |
 | `SideSpeedKept` | 1.0 | How much of your speed *across* the pad survives. 1 keeps the whole arc; lower values straighten your path towards the pad's facing |
 | `GroundLift` | 0.35 | The least upward tilt a launch gets while you are standing on the ground, so a wall pad throws you off the floor instead of along it. 0 turns it off; it never applies in the air or to a pad firing steeply down |
 | `Retrigger` | 0.25 s | Per player, so one pass through a pad is one launch |
-| `FrictionScale` | 0.3 | How much friction survives the window. 1 turns it off, 0 is frictionless ice |
-| `FrictionTime` | 3 s | How long the window lasts after the launch |
+| `FrictionScale` | **1 (off)** | How much friction would survive the window. 1 is no change at all, 0.3 is what was played, 0 is frictionless ice |
+| `FrictionTime` | **0 (off)** | How long the window would last after the launch. Set these two to 0.3 and 3 to put the old behaviour back, no build needed |
 | `LaunchViewPunch` / `LaunchShake` | 1.2 deg / 0.35 | The camera kick, matching the C4 blast's |
 | `PistonWidth` / `PistonHeight` | 120 / 30 cm | The disc, held at a constant world size and kept inside a trimmed plate |
 
-#### The low-friction window (added 2026-11-06)
+#### The low-friction window (added 2026-11-06, off since 2026-11-07)
+
+> **It is off.** It was played and taken back out the next day - read *The window came out* below
+> for what happened and what the code looks like now. What follows is the design as it was built,
+> kept because the reasoning is still the clearest statement of the difference between this lever
+> and the speed ring's, and because two properties on the pad put it back.
 
 A pad used to throw you 1400 cm/s and then watch Source friction take all of it back on the first
 touchdown. `GroundFrictionSource` always drags you toward `StopSpeed`, so the height was the only
@@ -293,29 +298,71 @@ lines. Pulling both onto a shared surface-mounted base class is the obvious clea
 deliberately left out of this pass rather than reparenting a piece that has already been played.
 
 **Played 2026-11-07.** The pad itself works and **`LaunchSpeed` is the lever** - the verdict on the
-low-friction window (above) was that the pad should simply be stronger, so 1400 is the number to
-raise rather than a number to defend. Still not reported on, because nothing in the play-test
-turned on them: whether 0.35 is the right ground lift, whether a pad should straighten your path
+low-friction window (above) was that the pad should simply be stronger, so it was 1400 that wanted
+raising rather than defending. Still not reported on, because nothing in the play-test turned on
+them: whether 0.35 is the right ground lift, whether a pad should straighten your path
 (`SideSpeedKept` below 1), whether a 200 cm plate is a fair target at speed, and whether a wall pad
 reads as a kicker or as a surprise.
 
-#### The window is coming out (decided 2026-11-07, not yet written)
+#### The window came out (2026-11-07, written the next day)
 
-What the play-test asked for, in one line: **delete the low-friction window and raise
-`LaunchSpeed`.** Recorded here rather than done, because it is a feel change to the one piece most
-likely to break `SmashSpeed` balance and it deserves its own pass.
+What the play-test asked for, in one line: **take the low-friction window out and raise
+`LaunchSpeed`.** Done, and it is a small change - three edits and no new code.
 
-What it will touch when it is written:
+**`LaunchSpeed` 1400 -> 1800.** Height off a floor pad is `LaunchSpeed² / 2g`, with
+g = 980 x `GravityScale` 2.04 = 1999 cm/s²:
 
-- `UGetawayMovementComponent::AddLowFriction` and the `LowFrictionScale` / `LowFrictionTime` state
-  it drives, plus the two places that read it (`GroundFrictionSource` and `SlideFriction`). The pad
-  is the only caller, so the whole mechanism goes with it unless something else wants it.
-- `FrictionScale` and `FrictionTime` on `AGetawayJumpPad`, which become dead properties.
-- `LaunchSpeed`, up from 1400. **Check it against `SmashSpeed` 1100 before picking a number**: per
-  *Breaking is granted by the level* a pad is already one of only four things that can burst a
-  breakable, and a much bigger launch widens the window in which it does.
-- `docs/sound.md`'s jump pad sting is unaffected, and so is the ring - `GetBoostedRunSpeed` is a
-  separate lever and it survived its play-test.
+| `LaunchSpeed` | Height off a floor pad |
+|---|---|
+| 1400 (was) | 4.9 m |
+| 1600 | 6.4 m |
+| **1800 (is)** | **8.1 m** |
+| 2000 | 10.0 m |
+
+1800 was picked rather than something larger because 8.1 m already doubles the old throw and the
+test course's tallest intended climb is the 500 cm rocket ledge. It is one field in the Details
+panel, under **Getaway|Jump Pad** on the pad, and nothing in `BP_Piece_JumpPad` overrides it
+(checked - the Blueprint's name table holds none of the pad's tuning properties), so the C++ value
+is what plays and changing it there needs no build.
+
+**Why raising the launch answers the friction complaint at all**, which is worth stating because it
+is not obvious: a pad never touches your speed *across* its face, so a floor pad does not make you
+faster along the ground - it buys you **air**. And air in this game is lossless
+(`FallingLateralFriction` is 0, and `CalcVelocity` applies no drag while airborne), so a bigger
+launch means longer spent in the one place friction cannot reach you, carrying the run-up you
+arrived with. The window tried to protect the landing; height avoids needing to.
+
+**What the code looks like now:**
+
+- **The window is off, not deleted.** `FrictionScale` is **1** and `FrictionTime` is **0** on
+  `AGetawayJumpPad`, and the call site is wrapped in `if (FrictionScale < 1.f && FrictionTime > 0.f)`
+  so the off state reads at the call site rather than two files away. `AddLowFriction` already
+  refused a scale of 1 or a duration of 0, so that branch changes no behaviour.
+- **`UGetawayMovementComponent::AddLowFriction` and its state stay**, now with **no caller in the
+  project**. That is a deliberate change of mind from the plan written here on 2026-11-07, which
+  said the whole mechanism should go. Two reasons: putting the old behaviour back is then two
+  numbers in the Details panel instead of a build, which is how every other reversed decision in
+  this project is kept (`bSlantOnSlopes`, `bMantleOverSmash`, `SlideCooldown` 0); and the lever may
+  suit some later piece better than it suited a pad - it is only *a pad* that it was wrong for,
+  because a pad is a moment. Its header comment now says plainly that nothing calls it.
+- **`SmashSpeed` 1100 is unaffected in kind.** A pad was already past it - a floor pad at 1400 with
+  a run-up is `sqrt(800² + 1400²)` = 1612 cm/s - and at 1800 it is 1970. Wider margin, same rule,
+  and per *Breaking is granted by the level* a pad being one of the few things that can burst a
+  breakable is the intent.
+- **Nothing else moved.** `docs/sound.md`'s jump pad sting is unaffected, and so is the ring:
+  `GetBoostedRunSpeed` is a separate lever and it survived its own play-test.
+
+**Played 2026-11-08 and signed off at 1800** - *"the pad feels much better, this was definitely the
+better fix."* No retune: 8.1 m of air is the right amount, and nothing about the landing wanted the
+window back. So the number that was pure arithmetic a day earlier held, and **the reversal is
+settled rather than provisional.**
+
+Worth keeping for the next piece that goes wrong, because this is now a worked example of a
+specific kind of mistake: the window was not a bad mechanism, it was **a correct fix aimed at the
+wrong axis**. Source friction really does eat a launch - that observation was right, the way the
+void's prompting observation was right - and the instinct was to go after the friction. The fix was
+to go after the *launch*, which is the thing the piece actually is. When a piece feels weak, raise
+what it does at the moment you touch it before changing what the world does afterwards.
 
 ### The anti-gravity vortex (added 2026-10-31)
 

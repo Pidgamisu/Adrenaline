@@ -206,7 +206,7 @@ show it. **Everything you can do on your own feet is below the line:**
 | Wallrun (capped at `RunSpeed * 1.15`) | 920 | no |
 | Slide out of a full run (800 + 250) | 1050 | **no, and only just** |
 | Through a speed ring (1.5 x `RunSpeed`) | up to 1200 | **yes** |
-| Off a jump pad (`LaunchSpeed`) | 1400 | **yes** |
+| Off a jump pad (`LaunchSpeed`) | 1800 since 2026-11-07, 1400 before | **yes** |
 | Slide down a ramp | gravity carries you past it | **yes** |
 | C4 | - | yes, always |
 

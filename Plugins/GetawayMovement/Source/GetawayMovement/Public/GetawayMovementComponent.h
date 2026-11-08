@@ -550,8 +550,8 @@ public:
 	 * It is the **opposite lever to a speed boost**, and the two are worth keeping straight. A
 	 * speed ring raises the ceiling (`RunSpeed`) and lets you climb to a speed you could not
 	 * otherwise hold; a window lowers the drag and lets you **keep the speed you were already
-	 * given**. That is what a jump pad wants: it throws you at `LaunchSpeed`, which is far above
-	 * anything you can run at, and without this Source friction eats the landing in about a second.
+	 * given**. That is what the jump pad was given one for: it throws you at `LaunchSpeed`, which is
+	 * far above anything you can run at, and Source friction eats the landing in about a second.
 	 * Neither one pushes you, and a window can never make you faster than you arrived.
 	 *
 	 * Scale multiplies `GroundFrictionSource` and `SlideFriction` together, so it covers running
@@ -563,6 +563,14 @@ public:
 	 *
 	 * Windows do not stack: the lower Scale wins and the longer clock wins, so two pads in a row
 	 * refresh the window rather than compounding into ice.
+	 *
+	 * **Nothing calls this at the moment.** The jump pad was its only caller and the window was
+	 * turned off on 2026-11-07 after playing it - *"honestly it doesn't feel good"* - because it
+	 * changed the rules for three seconds after you touched a piece instead of changing what you
+	 * could do at the moment you touched it; `LaunchSpeed` went up instead. It is kept because the
+	 * pad's `FrictionScale` / `FrictionTime` restore it from the Details panel with no build, and
+	 * because the lever itself may suit some later piece better than it suited a pad. See *The
+	 * window is coming out* in `docs/placement.md` before reaching for it.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Getaway")
 	void AddLowFriction(float Scale, float Duration);

@@ -252,7 +252,7 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   `SmashSpeed` is **1100**, one rule for every way of moving, and it is deliberately **out of reach
   on foot**: a full sprint is 800, a slide out of that run is 1050, a wallrun is capped at 920, and
   with `bAirStrafeGain` off there is no strafing past any of them. So the only things that break a
-  breakable are a **jump pad** (1400), a **speed ring** (1200), a **slide down a ramp** where
+  breakable are a **jump pad** (1800 since 2026-11-07, 1400 before), a **speed ring** (1200), a **slide down a ramp** where
   gravity carries you past it, and **C4**. You have to be going exceptionally fast, and only the
   pieces make you that fast - the same thought as *Speed comes from the pieces* above, applied to
   destruction.
@@ -365,16 +365,22 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **A jump pad just launches you harder** (decided 2026-11-07, reversing *a jump pad takes the drag
   away rather than raising your ceiling* of 2026-11-06 after playing it - *"honestly it doesn't feel
   good, i think the change should be just increasing the jump pad strength"*). The low-friction
-  window goes and `LaunchSpeed` goes up. **The code still does the old thing** - see *The window is
-  coming out* in `docs/placement.md` for what it touches, including the warning to check the new
-  launch against `SmashSpeed` 1100. What follows is the reasoning that lost, kept because none of it
+  window goes and `LaunchSpeed` goes up. **Written and played 2026-11-08, signed off with no
+  retune** - *"the pad feels much better, this was definitely the better fix."* `LaunchSpeed`
+  is **1800** (8.1 m of height off a floor pad, against 4.9 m at the old 1400), and the window is
+  **off rather than deleted** - `FrictionScale` 1 and `FrictionTime` 0 on the pad put it back from
+  the Details panel with no build, and `AddLowFriction` stays in the movement component with no
+  caller, because it was wrong *for a pad*, which is a moment, rather than wrong in itself. Raising
+  the launch answers the friction complaint because a pad never touches your speed across its face:
+  it buys **air**, and air here is lossless, so height is time that friction cannot reach. See
+  *The window came out* in `docs/placement.md`. What follows is the reasoning that lost, kept because none of it
   was wrong - only on the wrong axis, which is the void's lesson at a smaller scale: **a piece
   should change what you can do at the moment you touch it, not change the rules for a while
   afterwards.** A launch is a moment you aim at; a friction window is three seconds of the floor
   behaving differently, which you did not ask for and cannot see. The speed ring survives the same
   test because a raised ceiling is something you *spend*, on the jump or wallrun you pick next. The
   other half of the decision above, and the opposite lever. A ring raises `RunSpeed` so you can
-  *climb* to a speed you could not hold; a pad already throws you at `LaunchSpeed` 1400, far above
+  *climb* to a speed you could not hold; a pad already threw you at `LaunchSpeed` 1400, far above
   anything you can run at, and the problem is **keeping** it - Source friction eats the whole launch
   on the first touchdown. So the pad hands you a low-friction window instead: `FrictionScale` 0.3
   for `FrictionTime` 3 s, multiplying `GroundFrictionSource` *and* `SlideFriction`
