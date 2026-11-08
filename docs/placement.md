@@ -515,6 +515,32 @@ Play-tested 2026-10-16: reaching it ends the run and returns to placement as int
 camera rather than dropping you straight into the run. Press Enter to run immediately, or untick it
 to restore the old behaviour for pure movement testing.
 
+### Pieces that have been thought of but not built
+
+Ideas with a reason behind them, so they are not re-invented from scratch. Check any of them
+against *Every piece must grant ability or test precision* and *a piece may not rescale what you
+have learned* in `CLAUDE.md` before writing code.
+
+- **A double jump pad or pickup** (raised 2026-11-08, when effects were removed). **An idea for
+  later, not a job** - *"no air jumps for now. just an idea for later."* The game is deliberately
+  playing with no double jump at all, `AirJumps` 0, and that is a decision in `CLAUDE.md` rather
+  than a gap waiting to be filled. Don't build this unasked.
+  When it is wanted, it is cheap: **the ability is finished and tuned**, one air jump that redirects
+  your momentum toward the keys you are holding without losing speed.
+  `UGetawayMovementComponent::SetAirJumps` grants it and
+  `AGetawayCharacter::ApplyRoundEffect` is a worked example of granting it for a round, so the piece
+  is a pad and a catalog row, not new movement code. What needs deciding first is **for how long** -
+  the rest of the round, this life, or one jump like a C4 charge - and whether it sits in your hand,
+  which would collide with *your hand holds one item*: a jump that is spent and gone fits the hand,
+  a jump you keep for the round does not need to be in it at all.
+- **Low gravity: no.** Raised at the same time and ruled out the same day by a play-test -
+  *"low gravity mode felt awful cause it takes away the feeling you get of the game (like how far
+  jumps get you and such)."* It rescales the calibration the whole game is built on, and the rule
+  that came out of it is in `CLAUDE.md`. **The bounded version is already built**: the anti-gravity
+  vortex is a column you enter on purpose and leave when you like, which grants a climb instead of
+  changing what your legs do everywhere. If low gravity is ever wanted again, it is the vortex, or
+  a volume shaped like one - never the round.
+
 ### Fixed after the placement play-test (2026-10-16)
 
 - **The ghost did not show rotation.** Pressing R turned the piece but the ghost box looked

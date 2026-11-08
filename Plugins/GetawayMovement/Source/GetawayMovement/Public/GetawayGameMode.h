@@ -74,15 +74,26 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Round")
 	TSubclassOf<AGetawayPlacementPawn> PlacementPawnClass;
 
-	/* ---------------- The round's effect ---------------- */
+	/* ---------------- The round's effect, which is OFF ---------------- */
 
 	/**
-	 * Every other round, both players are given the same effect before anybody builds: a double
-	 * jump, a charge of C4, low gravity. One at a time, the same for everybody, and gone at the end
-	 * of the round. Off plays the game as it was before effects existed.
+	 * **Off since 2026-11-08, and that is the decision rather than a default anybody should flip
+	 * back casually.** Read *Effects are gone* in `CLAUDE.md` and the note at the top of
+	 * `docs/effects.md` first.
+	 *
+	 * On: every other round, both players are given the same effect before anybody builds - a
+	 * double jump, a charge of C4, low gravity, a grapple hook. One at a time, the same for
+	 * everybody, gone at the end of the round. All of that machinery still works exactly as
+	 * documented; nothing was deleted, it simply is not dealt.
+	 *
+	 * Two reasons it went. **Abilities belong to pieces**, because since *Speed comes from the
+	 * pieces* everything else you can do comes from what somebody chose to place, and an effect
+	 * dealt by the game mode was the last ability the level did not grant. And **low gravity was
+	 * actively bad** - it took away the calibration the whole game is built on, which is a piece of
+	 * feedback worth more than the feature was.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Getaway|Effects")
-	bool bRoundEffects = true;
+	bool bRoundEffects = false;
 
 	/**
 	 * An effect lands on every Nth round, so 2 leaves round 1 plain, gives round 2 an effect, round

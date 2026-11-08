@@ -1,5 +1,14 @@
 # Round effects
 
+> # THE LAYER IS OFF
+>
+> **Decided 2026-11-08: effects are gone.** `bRoundEffects` defaults to **false**, so no effect is
+> ever dealt and no banner is ever shown. Nothing was deleted - every word below still describes
+> working code - but none of it runs. Read *Effects are gone* at the end of this file before
+> turning it back on or building anything on it.
+>
+> The short version: abilities belong to **pieces**, and low gravity was actively bad.
+
 > The first three were built and **played 2026-11-03 - all three work.** The fourth, the **grapple
 > hook**, was played 2026-11-07 and **signed off at its first-pass numbers** - *"plays very well and
 > feels like a slingshot, which is the intended effect."* Read this before touching anything that
@@ -223,11 +232,90 @@ child of `AGetawayHUD` and point `HUDClass` at it if you want to tune them in th
   to the server on the frame the rope goes out or comes in, which should be enough for something
   cosmetic, but no second machine has watched one.
 
-## Effects may become pieces (open question, 2026-11-07)
+## Effects are gone (decided 2026-11-08)
 
-Said after playing the grapple: *"honestly I think i should get rid of effects and just have
-objects that give you that effect, might change in the future."* **Not a decision** - written down
-so it is not re-discovered, and so nothing new gets built on the round layer in the meantime.
+*"Lets remove effects."* Settled the day after it was raised, and with a second reason that arrived
+with it from a play-test: *"the feedback i got from my playtest was that low gravity mode felt awful
+cause it takes away the feeling you get of the game (like how far jumps get you and such)."*
+
+`bRoundEffects` is **false** by default. One line, and the switch was already there because the
+layer was built with it from the start. What follows is the open question as it was written on the
+7th, kept because the argument is the record of why.
+
+### Why the layer went
+
+Two reasons, and they are different in kind - one is design tidiness, the other is a play-test
+telling you the feature was bad.
+
+**1. Abilities belong to pieces.** Since *Speed comes from the pieces, not from strafing*
+(2026-11-06) everything you can do in this game comes from what somebody chose to place. An effect
+dealt by the game mode was the last ability the level did not grant, so it had become the odd one
+out rather than the norm. And *A hand is one normal piece and one special one* (2026-11-06) made the
+hand the place a round is decided - where an effect arrived before anybody built, applied to both
+players equally, and was therefore never something you chose. That is the opposite of the Ultimate
+Chicken Horse bargain the rest of the catalog runs on.
+
+**2. Low gravity broke the calibration the game is built on**, which is the more interesting half,
+because it is the one that could not have been reasoned out from a design rule. See *A piece may not
+rescale what you have learned* below.
+
+### What the game actually loses
+
+| Effect | Covered by | Lost? |
+|---|---|---|
+| One C4 (`Loaded`) | `AGetawayC4Pickup`, which grants exactly this | No |
+| Grapple hook | `AGetawayGrapplePickup`, built 2026-11-05 | No |
+| Double jump | nothing | **Yes, entirely** |
+| Low gravity | nothing, deliberately | **Yes, and good** |
+
+Two of the four already had their piece, which is what made the removal cheap. **Double jump is now
+nowhere in the game**: `BP_Character` plays `AirJumps` **0**, so the effect was the only way anyone
+ever got one, and *Double jump: 1 air jump* in `CLAUDE.md` currently describes something you cannot
+do. That is either a piece to build or a 0 to change to a 1 on `BP_Character`, and it is a feel
+question rather than a code one.
+
+### A piece may not rescale what you have learned
+
+The rule already on the list is *every piece must grant ability or test precision; none may take
+ability away*. **Low gravity passes that rule and was still awful**, so the rule was not finished.
+
+Low gravity does not reduce your control - you can jump higher and go further, which is strictly
+more. What it does is **invalidate everything you know about your own movement**. This game's
+pleasure is a learned calibration: how far a jump carries, how much a slide out of a run adds,
+where a wallrun runs out, whether that gap is yours. You build that up over hours. Low gravity
+rescales all of it at once, so for one round you are a beginner again - and being handed a new body
+is not the same as being handed a new ability.
+
+So, the wider rule: **a piece may extend the calibration but may not rescale it.** A jump pad, a
+speed ring, a grapple and a C4 jump all take you further *in the units you already know* - the
+ground still pulls the same way, your jump is still your jump, and the piece adds to it. Gravity is
+the unit itself.
+
+Note what this does **not** condemn:
+
+- **The anti-gravity vortex** (`AGetawayVortex`) is low gravity done as a piece, and it is fine. It
+  is bounded in space, you enter it on purpose, you can leave it whenever you like, and it *grants
+  a climb* rather than changing what your legs do everywhere. The lesson is not "gravity is
+  off-limits", it is "not for the whole round, not everywhere, and not without being asked for".
+- **The grapple hook holds all of gravity up** while the rope is out, and played as a slingshot. Same
+  defence: you fired it, it is bounded by the rope, and you let go when you want.
+
+Which means **low gravity as a piece is already built**, and the round-wide version was simply the
+broken form of it. That is worth knowing before anybody designs a low-gravity volume.
+
+### If it is ever turned back on
+
+`bRoundEffects` true is the whole switch; `BP_GetawayGameMode` holds no override for it or for any
+other effect property (checked in the asset), so the C++ default is what plays. Drop
+`EGetawayEffect::LowGravity` out of `EffectPool` if it comes back - that is the one the play-test
+condemned, and the pool is an array on the game mode exactly so a single effect can be retired.
+
+### The argument as it stood on 2026-11-07
+
+Kept verbatim below, because it is the reasoning the decision was made on - and because its cost
+estimate is what the next person will want if abilities do become pieces. One correction with
+hindsight: where it says "something placed for low gravity", the rule above says don't, and the
+vortex is already the bounded version.
 
 What it would mean: no dealt effect, no every-other-round rhythm and no banner. Instead a **piece**
 hands out each ability, the way the C4 pickup and the grapple pickup already do - a pad you run
@@ -270,3 +358,5 @@ double-jump pad decides whether anybody gets one - which is more interesting and
 
 If this goes ahead, `bRoundEffects` off is already the switch that turns the layer off, so the two
 can be played against each other without deleting anything.
+
+*(That is what happened: the switch is off, nothing was deleted.)*

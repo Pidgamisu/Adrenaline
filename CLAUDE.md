@@ -85,7 +85,11 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   `docs/archive/scrapped-void/`. Read *The void, and why it was scrapped* in `docs/placement.md`
   before building anything like it; the short version is that it moved you instead of letting you
   move, and no amount of tuning or payoff rescued that.
-- **Effects:** a layer on top of the round, built and **played 2026-11-03 - all three work**.
+- **Effects: removed 2026-11-08.** `bRoundEffects` is off, so nothing is dealt. The code all still
+  works and nothing was deleted - see *Effects are gone* in *Decisions already made* for the two
+  reasons and for what the game loses (double jump, which now exists nowhere). What follows
+  describes the layer as it was.
+  A layer on top of the round, built and **played 2026-11-03 - all three work**.
   Every other round (1 plain, 2 with, 3 plain) both players are given the same effect before
   anybody builds: double jump, one C4, or 60% gravity. One at a time, gone at the end of the round.
   The fourth is the **grapple hook** (added 2026-11-05): one hook, left click to throw it at what
@@ -95,10 +99,9 @@ Engine: **Unreal Engine 5.8 (C++)**. Everything lives in the `GetawayMovement` p
   a row to need no retune, after the speed ring.
   The effect lands big in the middle of the screen as the build phase opens, holds 2 s and then
   travels to the top left corner, where it stays for the round; **that part is not played.**
-  **The whole layer is now in question**: the leaning after that play-test is to stop dealing
-  effects per round and let *pieces* hand out the same abilities, which two of the four already have
-  (the C4 pad and the grapple pad). Not a decision - read *Effects may become pieces* in
-  `docs/effects.md` before building anything on the round layer. See `docs/effects.md`.
+  **The layer was removed the next day** (2026-11-08) - see *Effects are gone* in *Decisions already
+  made*. The hook itself is untouched and still in the game, because `AGetawayGrapplePickup` grants
+  one, so what the removal cost was the *dealt* hook rather than the ability. See `docs/effects.md`.
 - **Art:** an art direction, not assets. Unlit pink on black, each face see-through with a solid
   band round its rim. Three passes 2026-11-02, **played and signed off at speed**. See
   `docs/look.md`. The point of it is that greybox *is* the look, so meshes stop being a blocker -
@@ -192,8 +195,10 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
 - **Some of the values below are overridden in `BP_Character` and `BP_GetawayGameMode`, and the
   Blueprint is what you play** (read out of the assets and confirmed deliberate 2026-11-05).
   Twenty-one differ from the C++ defaults quoted here. Most are tuning, but three turn documented
-  behaviour *off*: `AirJumps` **0** (no double jump) and `GoalPoints` 0 with
-  `bNoPointsIfAllFinish` **false** (no Ultimate Chicken Horse scoring). `SlideCooldown` plays at
+  behaviour *off*: `AirJumps` **0** - **which stopped being a surprise on 2026-11-08 and became the
+  decision**, see *No double jump* below - and `GoalPoints` 0 with
+  `bNoPointsIfAllFinish` **false** (no Ultimate Chicken Horse scoring, still a surprise and still
+  worth a look). `SlideCooldown` plays at
   0.5 rather than 1.5, `WallAttachRange` at 50 rather than 60, `AirSpeedCap` at 35 rather than 75.
   The full list is *What the Blueprints actually play at* in `Plugins/GetawayMovement/README.md`,
   and `Content/Python/export_tuning.py` dumps it again at any time. Clearing an override in the
@@ -222,7 +227,18 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   steers you freely but cannot raise your speed past what you are asking for. Faithful Source
   behaviour either way (the same formulas with Source's constants give a 1.30x overspeed against our
   1.29x), just far easier to exploit with a mouse here.
-- **Double jump:** 1 air jump. It redirects your momentum toward the keys you're holding, without losing speed. It is not spent by a jump pressed just before landing (that press is kept for a bunny hop).
+- **No double jump, and that is deliberate** (decided 2026-11-08, settling what removing effects
+  exposed: *"no air jumps for now. just an idea for later."*). `AirJumps` is **0** on
+  `BP_Character` and stays there. It had been 0 since long before, but the round effect handed one
+  out every few rounds, so the game *did* have a double jump some of the time; with effects gone it
+  has none at all, and that was asked for rather than merely allowed. It also follows *speed comes
+  from the pieces*: an air jump is the kind of free ability the level is supposed to grant.
+  **The ability is finished, tuned and kept**: 1 air jump that redirects your momentum toward the
+  keys you are holding without losing speed, and is not spent by a jump pressed just before landing
+  (that press is kept for a bunny hop). `UGetawayMovementComponent::SetAirJumps` grants it, and
+  `AirJumps` 1 on `BP_Character` turns it on for everybody at any time. A **pad or pickup that hands
+  one out** is an idea for later, not a job - see *Pieces that have been thought of but not built*
+  in `docs/placement.md`.
 - **Slide:** crouch at speed. Entry boost on a 1 s cooldown, very low friction, speeds up on slopes.
   **Slides are on a cooldown** (decided 2026-10-31): once a slide ends, for whatever reason - crouch
   released, slowed below `SlideStopSpeed`, jumped out of it, slid off a ledge - you can't start
@@ -347,10 +363,38 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   better wallrun surface - and this game is about wallrunning in a way the browser prototype was
   not. Reversing it would be a swap of X and Y on the `wall` and `break` catalog entries. See
   `docs/placement.md`.
-- **Effects are an every-other-round layer** (decided 2026-11-03, played the same day). Both
-  players always get the *same* effect, it is dealt and shown before anybody builds so it changes
-  what you place, only one is live at a time, and it dies with the round. Round 1 is always plain.
-  `bRoundEffects` off plays the game as it was. See `docs/effects.md`.
+- **Effects are gone** (decided 2026-11-08, reversing *effects are an every-other-round layer* of
+  2026-11-03). *"Lets remove effects."* `bRoundEffects` defaults to **false**, so nothing is ever
+  dealt and no banner is shown. **Nothing was deleted** - the enum, the pool, the banner and
+  `ApplyRoundEffect` all still work exactly as `docs/effects.md` describes, they simply never run -
+  so this is one line and reversible, and the effect pool is still the place to retire a single
+  effect if it ever comes back.
+  Two reasons, of different kinds. **Abilities belong to pieces**: since *Speed comes from the
+  pieces* everything you can do comes from what somebody chose to place, and a dealt effect was the
+  last ability the level did not grant - it arrived before anybody built, applied to both players
+  equally, and so was never something you *chose*, which is the opposite of the bargain the catalog
+  runs on. And **low gravity was bad**, which is the half that could not have been reasoned out -
+  see the next decision.
+  **Two of the four effects already had their piece** (the C4 pad and the grapple pad), which is
+  what made this cheap. **Double jump now exists nowhere, which was then confirmed as the intent** -
+  see *No double jump* above. See *Effects are gone* in `docs/effects.md`.
+- **A piece may extend the calibration but may not rescale it** (decided 2026-11-08, from a
+  play-test: *"low gravity mode felt awful cause it takes away the feeling you get of the game
+  (like how far jumps get you and such)"*). The companion to *every piece must grant ability or
+  test precision* below, and it exists because **low gravity passed that rule and was still
+  awful.** It does not reduce your control - you jump higher and go further, which is strictly more
+  - but it invalidates everything you know about your own movement. This game's pleasure is a
+  learned calibration: how far a jump carries, how much a slide out of a run adds, where a wallrun
+  runs out, whether that gap is yours. Low gravity rescales all of it at once, so for a round you
+  are a beginner again, and **being handed a new body is not the same as being handed a new
+  ability.** A pad, a ring, a grapple and a C4 jump all take you further *in the units you already
+  know*; gravity is the unit itself.
+  It does **not** mean gravity is off limits. The **anti-gravity vortex** is low gravity done
+  correctly - bounded in space, entered on purpose, left whenever you like, and it grants a climb
+  rather than changing what your legs do everywhere - and the **grapple** holds all of gravity up
+  while the rope is out and played as a slingshot. So *not for the whole round, not everywhere, and
+  not without being asked for*. Which also means **low gravity as a piece is already built**, and
+  the round-wide version was the broken form of it. See `docs/effects.md`.
 - **A speed boost raises your ceiling, it does not shove you** (decided and played 2026-11-05, with
   the speed ring). Source friction always drags you back toward `StopSpeed`, so a velocity kick is
   eaten in about a second and a boost "for three seconds" would mean nothing. So the speed ring
@@ -392,7 +436,9 @@ Each pack goes in its own folder, `Content/ThirdParty/<PackName>/`, and is never
   lossless and the window has nothing to do until you touch down.
 - **Every piece must grant ability or test precision. None may take ability away** (decided
   2026-11-06, after building the void wrong and playing it three times). This is the most useful
-  thing the void taught, and it is about the whole catalog rather than one piece. The pad, ring,
+  thing the void taught, and it is about the whole catalog rather than one piece. **Read it with
+  *a piece may extend the calibration but may not rescale it* above**, which was added after low
+  gravity passed this rule and was still awful. The pad, ring,
   vortex, grapple and windmill all *grant* you movement; the spikes and the panel *test your
   precision* - you can wallrun straight past a spiked wall if you keep off it. The first void did
   neither: it pulled you in, lifted you off the floor and damped your input to 0.45 of normal, so

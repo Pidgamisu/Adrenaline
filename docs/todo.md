@@ -11,6 +11,11 @@ slopes, the ramp, the bridge, the HUD, the controller, the front end's last butt
 have all now been on screen. Two came back as work - the jump pad's friction window and the pad
 camera - one came back as an open design question, and one was not tested at all.
 
+**Since then:** the jump pad was rewritten and signed off (2026-11-08), and the open design question
+was settled the same day - **effects are gone**, which closed a section and opened two smaller
+items in its place. The one thing that was never tested, finishing and the watch camera, is still
+the largest unplayed thing in the game.
+
 Tick an item by playing it and either signing it off or saying what to change.
 
 ---
@@ -26,14 +31,12 @@ Tick an item by playing it and either signing it off or saying what to change.
 
 ## 2. Open questions
 
-- [ ] **Should effects become pieces?** *"Honestly I think i should get rid of effects and just have
-      objects that give you that effect, might change in the future."* Not a decision, and nothing
-      should be built on the round layer until it is settled. Two of the four effects already have
-      their piece (the C4 pad and the grapple pad), and the other two are one property each -
-      `AirJumps` and `GravityScale` - so the work is the catalog, the hand and the balance, not the
-      abilities. What would be lost is that both players currently get the same thing without
-      anybody spending a piece on it. `bRoundEffects` off already lets the two be played against
-      each other. See *Effects may become pieces* in `docs/effects.md`.
+- [ ] **Decide whether the effects code gets deleted.** It is off, not gone: the enum, the pool,
+      `PickEffectForRound`, the replicated `ActiveEffect`, `ApplyRoundEffect` and the HUD banner all
+      still compile and none of them runs. Keeping it costs nothing and makes the decision
+      reversible; deleting it would tidy roughly 250 lines and a doc. **The banner is the part worth
+      keeping either way** - big text that lands centre screen and travels to a corner is exactly
+      what the pickup job below wants, and nothing else in the game does it.
 - [ ] **Make a pickup land.** Asked for as "a notification for picking up" - and **both pads already
       notify**, so this is prominence, not a missing feature: the lines fire for a second or so into
       the message stack at the exact moment you are least able to read anything. Cheapest fix first:
@@ -67,8 +70,9 @@ Tick an item by playing it and either signing it off or saying what to change.
       bridge sign-off left open: whether a see-through box reads against a level made of the same
       additive pink panes, and whether cyan and red still work now that it is a surface rather than
       a 3 px line. `docs/placement.md`.
-- [ ] **The effect banner in its build-phase home** - the 2 s hold and the travel to the corner. No
-      verdict, and no point tuning it until the question above is settled. `docs/effects.md`.
+- ~~**The effect banner in its build-phase home.**~~ Moot since 2026-11-08: with effects off it
+      never shows, so it can never be played as it stands. It survives as **code worth reusing**
+      rather than something to verify - see the deletion question above.
 - [ ] **A material on a piece in play**, the ramp's procedural-mesh slot especially, since its timing
       is the only one that could be wrong. `docs/blueprint-tuning.md`.
 - [ ] **The spikes' overhang trim** and the rebuilt point layout. The attachment half of that work
@@ -128,10 +132,17 @@ on this list rather than a leap of faith. All ten movement slots stay deliberate
 
 ## 7. Features
 
-- [ ] **More traps.** Check any new piece against *Every piece must grant ability or test precision*
-      in `CLAUDE.md` **before** writing code. The jump pad's friction window is the newest worked
-      example of getting it wrong in a smaller way than the void did: it changed the rules for three
-      seconds after you touched it instead of changing what you could do at the moment you did.
+- [ ] **More traps.** Check any new piece against **both** *every piece must grant ability or test
+      precision* and *a piece may extend the calibration but may not rescale it* in `CLAUDE.md`
+      **before** writing code. Two worked examples of getting it wrong, in increasing subtlety: the
+      void took control away; the jump pad's friction window changed the rules for three seconds
+      after you touched it instead of changing what you could do at the moment you did; and low
+      gravity passed the first rule entirely and was still awful, which is what the second rule is
+      for.
+- [ ] **A double jump pad** - *an idea, explicitly not a job.* The game plays with `AirJumps` 0 on
+      purpose (2026-11-08), so don't build this unasked. The ability is finished and tuned if it is
+      ever wanted; what needs deciding is how long it lasts and whether it occupies your hand. See
+      *Pieces that have been thought of but not built* in `docs/placement.md`.
 - [ ] **A per-round deck** for the party box. One normal and one special landed 2026-11-06; drawing
       from a deck rather than at random is what is left.
 - [ ] **A lobby, and a settings page.** Neither exists, and a lobby has never been the thing that
